@@ -33,6 +33,25 @@
   letter-spacing: 1px;
 }
 
+.footer-socials {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.footer-socials a {
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-socials a:hover {
+  color: var(--accent-gold);
+  transform: scale(1.1);
+}
+
 .footer-links {
   display: flex;
   gap: 1.5rem;
@@ -42,12 +61,13 @@
   color: var(--text-secondary);
 }
 
-.footer-links span {
-  cursor: pointer;
+.footer-links a {
+  color: inherit;
+  text-decoration: none;
   transition: color 0.3s;
 }
 
-.footer-links span:hover {
+.footer-links a:hover {
   color: var(--accent-turquoise);
 }
 

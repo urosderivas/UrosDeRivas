@@ -1,0 +1,116 @@
+.policy-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 3rem 1rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.policy-content {
+  background-color: var(--secondary-bg);
+  padding: 3rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.policy-content h1 {
+  color: var(--accent-gold);
+  margin-bottom: 2rem;
+  text-align: center;
+  font-size: 2rem;
+  text-transform: uppercase;
+}
+
+.policy-content h2 {
+  color: var(--accent-turquoise);
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+  border-bottom: 1px solid #444;
+  padding-bottom: 0.5rem;
+}
+
+.policy-content p {
+  margin-bottom: 1.2rem;
+  color: var(--text-secondary);
+}
+
+.policy-content ul, .policy-content ol {
+  margin-left: 2rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.policy-content li {
+  margin-bottom: 0.5rem;
+}
+
+.policy-content strong {
+  color: #fff;
+}
+
+.policy-content a {
+  color: var(--accent-gold);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-gold);
+  transition: all 0.3s ease;
+}
+
+.policy-content a:hover {
+  color: #fff;
+  border-bottom-color: #fff;
+}
+
+/* Tabla de cookies */
+.cookies-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 2rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cookies-table th, .cookies-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.cookies-table th {
+  background-color: #222;
+  color: var(--accent-turquoise);
+  font-weight: bold;
+}
+
+.cookies-table code {
+  color: var(--accent-gold);
+  background: rgba(255, 215, 0, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  .policy-content {
+    padding: 1.5rem;
+  }
+  .cookies-table, .cookies-table tbody, .cookies-table tr, .cookies-table td, .cookies-table th {
+    display: block;
+  }
+  .cookies-table th {
+    display: none;
+  }
+  .cookies-table td {
+    padding: 0.5rem;
+    padding-left: 50%;
+    position: relative;
+  }
+  .cookies-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0.5rem;
+    width: 45%;
+    font-weight: bold;
+    color: var(--accent-turquoise);
+  }
+}

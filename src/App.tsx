@@ -9,6 +9,10 @@ import { Market } from './presentation/Market';
 import { Events } from './presentation/Events';
 import { Clasificaciones } from './presentation/Clasificaciones';
 import { AdminPanel } from './presentation/AdminPanel';
+import { PrivacyPolicy } from './presentation/PrivacyPolicy';
+import { LegalNotice } from './presentation/LegalNotice';
+import { CookiesPolicy } from './presentation/CookiesPolicy';
+import { CookieBanner } from './presentation/CookieBanner';
 
 function TelemetryTracker() {
   const { logActivity } = useStore();
@@ -41,12 +45,16 @@ function App() {
             <Route path="/clasificaciones" element={<Clasificaciones />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/legal" element={<LegalNotice />} />
+            <Route path="/cookies" element={<CookiesPolicy />} />
           </Routes>
         </main>
         <Footer />
+        <CookieBanner />
       </div>
     </BrowserRouter>
   );
+  );
 }
-
 export default App;
