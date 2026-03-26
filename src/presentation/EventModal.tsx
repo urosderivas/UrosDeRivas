@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, CalendarDays } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import { Event } from '../domain/entities';
-import './MarketItemModal.css'; // Shared modal base styles
+import { Modal } from './components/Modal';
+import './MarketItemModal.css'; // Shared internal form styles
 
 interface Props {
   isOpen: boolean;
@@ -56,75 +57,73 @@ export function EventModal({ isOpen, onClose, onSave, initial }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-panel animate-scale-in">
-        <div className="modal-header">
-          <span className="modal-icon"><CalendarDays size={22} /></span>
-          <h2>{initial ? 'Editar Evento' : 'Nuevo Evento'}</h2>
-          <button className="modal-close" onClick={onClose}><X size={20} /></button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={initial ? 'Editar Evento' : 'Nuevo Evento'}
+      icon={<CalendarDays size={22} />}
+      maxWidth="680px"
+    >
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Type Selector */}
+        <div className="form-group">
+          <label>Tipo de Evento</label>
+          <div className="event-type-selector">
+            {EVENT_TYPES.map(et => (
+              <button key={et.value} type="button"
+                className={`event-type-chip ${type === et.value ? 'active' : ''}`}
+                onClick={() => setType(et.value)}>
+                <span>{et.icon}</span> {et.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="modal-body">
-          {/* Type Selector */}
-          <div className="form-group">
-            <label>Tipo de Evento</label>
-            <div className="event-type-selector">
-              {EVENT_TYPES.map(et => (
-                <button key={et.value} type="button"
-                  className={`event-type-chip ${type === et.value ? 'active' : ''}`}
-                  onClick={() => setType(et.value)}>
-                  <span>{et.icon}</span> {et.label}
-                </button>
-              ))}
-            </div>
+        <div className="modal-preview-row">
+          <div className="modal-image-preview">
+            {imageUrl
+              ? <img src={imageUrl} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
+              : <div className="preview-placeholder"><CalendarDays size={40} /></div>
+            }
           </div>
-
-          <div className="modal-preview-row">
-            <div className="modal-image-preview">
-              {imageUrl
-                ? <img src={imageUrl} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
-                : <div className="preview-placeholder"><CalendarDays size={40} /></div>
-              }
+          <div className="modal-main-fields">
+            <div className="form-group">
+              <label>Título *</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej. Campus de Junio 2025" />
             </div>
-            <div className="modal-main-fields">
+            <div className="form-row">
               <div className="form-group">
-                <label>Título *</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej. Campus de Junio 2025" />
+                <label>Fecha *</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} />
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Fecha *</label>
-                  <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label>Lugar *</label>
-                  <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Pabellón de Los Almendros" />
-                </div>
+              <div className="form-group">
+                <label>Lugar *</label>
+                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Pabellón de Los Almendros" />
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="form-group">
-            <label>URL de Imagen / Cartel</label>
-            <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-          </div>
+        <div className="form-group">
+          <label>URL de Imagen / Cartel</label>
+          <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
+        </div>
 
-          <div className="form-group">
-            <label>Información / Descripción</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
-              placeholder="Fechas, horarios, precios de inscripción, número de cuenta bancaria, contacto..." />
-          </div>
+        <div className="form-group">
+          <label>Información / Descripción</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
+            placeholder="Fechas, horarios, precios de inscripción, número de cuenta bancaria, contacto..." />
+        </div>
 
-          {error && <p className="modal-error">{error}</p>}
+        {error && <p className="modal-error">{error}</p>}
 
-          <div className="modal-actions">
-            <button type="button" onClick={onClose} className="btn-modal-cancel">Cancelar</button>
-            <button type="submit" className="btn-modal-save" disabled={saving}>
-              {saving ? 'Guardando...' : initial ? 'Guardar Cambios' : 'Crear Evento'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose} className="btn-modal-cancel">Cancelar</button>
+          <button type="submit" className="btn-modal-save" disabled={saving}>
+            {saving ? 'Guardando...' : initial ? 'Guardar Cambios' : 'Crear Evento'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

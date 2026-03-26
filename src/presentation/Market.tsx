@@ -6,6 +6,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { StripeAdapter } from '../infrastructure/StripeAdapter';
 import { MarketItemModal } from './MarketItemModal';
 import { MyOrdersModal } from './MyOrdersModal';
+import { MessageModal } from './components/MessageModal';
 import { MarketItem } from '../domain/entities';
 import './Market.css';
 
@@ -20,12 +21,17 @@ export function Market() {
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<MarketItem | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
+
+  const showMessage = (title: string, message: string) => {
+    setMessageAlert({ open: true, title, message });
+  };
 
   useEffect(() => {
     fetchItems();
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
-      alert('¡Pago completado con éxito! Recibirás un correo de confirmación.');
+      showMessage('Pago Completado', '¡Pago completado con éxito! Recibirás un correo de confirmación pronto.');
       // Auto-mark order as completed using session_id from Stripe return URL
       const sessionId = params.get('session_id');
       if (sessionId) {
@@ -37,7 +43,9 @@ export function Market() {
         }).catch(console.error);
       }
     }
-    if (params.get('canceled')) alert('Pago cancelado. Puedes volver a intentarlo cuando quieras.');
+    if (params.get('canceled')) {
+      showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.');
+    }
   }, [fetchItems, location.search]);
 
   const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
@@ -55,7 +63,7 @@ export function Market() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Seguro que quieres borrar este producto?')) return;
     try { await adapter.deleteItem(id); fetchItems(); }
-    catch (e: any) { alert('Error: ' + e.message); }
+    catch (e: any) { showMessage('Error', e.message); }
   };
 
   const handleBuy = async (itemId: string) => {
@@ -126,6 +134,12 @@ export function Market() {
 
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
+      <MessageModal 
+        isOpen={messageAlert.open} 
+        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} 
+        title={messageAlert.title} 
+        message={messageAlert.message} 
+      />
     </>
   );
 }
