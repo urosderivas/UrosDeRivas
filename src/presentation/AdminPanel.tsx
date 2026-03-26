@@ -21,6 +21,8 @@ export function AdminPanel() {
   const [attendees, setAttendees] = useState<Record<string, any[]>>({});
   const [loadingAttendees, setLoadingAttendees] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [stripeStatuses, setStripeStatuses] = useState<Record<string, string>>({});
+  const [syncingStripe, setSyncingStripe] = useState(false);
   
   // Market Item Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -178,8 +180,39 @@ export function AdminPanel() {
     </>
   );
 
+  const handleSyncAllStripe = async () => {
+    setSyncingStripe(true);
+    const newStatuses: Record<string, string> = {};
+    for (const order of orders) {
+      if (order.stripe_session_id) {
+        try {
+          const result = await adapter.checkStripePayment(order.stripe_session_id);
+          newStatuses[order.id] = result.payment_status; // 'paid' | 'unpaid'
+          // Auto-update DB if Stripe says paid but our DB says pending
+          if (result.payment_status === 'paid' && order.status === 'pending') {
+            await adapter.updateOrderStatus(order.id, 'completed');
+          }
+        } catch {
+          newStatuses[order.id] = 'error';
+        }
+      } else {
+        newStatuses[order.id] = 'no_session';
+      }
+    }
+    setStripeStatuses(newStatuses);
+    setSyncingStripe(false);
+    // Refresh orders to reflect auto-updated statuses
+    const freshOrders = await adapter.getOrders();
+    setOrders(freshOrders);
+  };
+
   const renderOrders = () => (
     <div className="admin-table-container">
+      <div className="table-toolbar">
+        <button className="btn-primary" onClick={handleSyncAllStripe} disabled={syncingStripe}>
+          {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar con Stripe'}
+        </button>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
@@ -188,13 +221,14 @@ export function AdminPanel() {
             <th>Email</th>
             <th>Producto (ID)</th>
             <th>Importe</th>
-            <th>Estado</th>
+            <th>Estado DB</th>
+            <th>Pago Stripe</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={7} className="table-empty">Cargando...</td></tr> : 
-           orders.length === 0 ? <tr><td colSpan={7} className="table-empty">Sin pedidos registrados.</td></tr> :
+          {loading ? <tr><td colSpan={8} className="table-empty">Cargando...</td></tr> : 
+           orders.length === 0 ? <tr><td colSpan={8} className="table-empty">Sin pedidos registrados.</td></tr> :
            orders.map(order => (
             <tr key={order.id}>
               <td>{new Date(order.created_at).toLocaleString('es-ES')}</td>
@@ -207,6 +241,17 @@ export function AdminPanel() {
                   {order.status === 'completed' ? <CheckCircle size={14} /> : order.status === 'processing' ? <RefreshCw size={14} className="spin" /> : order.status === 'cancelled' ? <XCircle size={14} /> : <Clock size={14} />}
                   {order.status}
                 </span>
+              </td>
+              <td>
+                {stripeStatuses[order.id] === 'paid' ? (
+                  <span className="status-badge completed"><CheckCircle size={14} /> Pagado</span>
+                ) : stripeStatuses[order.id] === 'unpaid' ? (
+                  <span className="status-badge cancelled"><XCircle size={14} /> No pagado</span>
+                ) : stripeStatuses[order.id] === 'error' ? (
+                  <span className="status-badge cancelled">⚠️ Error</span>
+                ) : (
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>— Pulsa Sincronizar</span>
+                )}
               </td>
               <td>
                 <select 

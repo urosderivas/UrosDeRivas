@@ -178,6 +178,14 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data?.status === 'completed';
   }
 
+  async checkStripePayment(sessionId: string): Promise<{ payment_status: string; status: string }> {
+    const { data, error } = await supabase.functions.invoke('verify-payment', {
+      body: { sessionId }
+    });
+    if (error) throw error;
+    return data;
+  }
+
   // ============================================
   // USER MANAGEMENT (RPCs)
   // ============================================
