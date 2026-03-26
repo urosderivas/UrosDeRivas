@@ -104,7 +104,7 @@ export function Events() {
       setLoadingClupik(true);
       try {
         const res = await fetch(
-          `https://api.clupik.com/clubs/${CLUB_ID}/publications?expand=user&languageId=709&languageCode=es&limit=15&exclude=text`
+          `https://api.clupik.com/clubs/${CLUB_ID}/publications?expand=user&languageId=709&languageCode=es&limit=15`
         );
         if (!res.ok) throw new Error('Clupik publications failed');
         const data = await res.json();
