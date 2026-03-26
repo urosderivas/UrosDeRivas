@@ -5,6 +5,7 @@ import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { StripeAdapter } from '../infrastructure/StripeAdapter';
 import { MarketItemModal } from './MarketItemModal';
+import { MyOrdersModal } from './MyOrdersModal';
 import { MarketItem } from '../domain/entities';
 import './Market.css';
 
@@ -16,6 +17,7 @@ export function Market() {
   const navigate = useNavigate();
   const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<MarketItem | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
@@ -67,9 +69,12 @@ export function Market() {
       <div className="market-container">
         <div className="market-header">
           <h1>Tienda Oficial</h1>
-          <AdminGuard>
-            <button className="btn-admin-add" onClick={handleOpenCreate}>+ Añadir Producto</button>
-          </AdminGuard>
+          <div className="market-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {user && <button className="btn-secondary" onClick={() => setOrdersModalOpen(true)}>📌 Mis Pedidos</button>}
+            <AdminGuard>
+              <button className="btn-admin-add" onClick={handleOpenCreate}>+ Añadir Producto</button>
+            </AdminGuard>
+          </div>
         </div>
 
         <div className="products-grid">
@@ -107,12 +112,8 @@ export function Market() {
         </div>
       </div>
 
-      <MarketItemModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSaveItem}
-        initial={editItem}
-      />
+      {modalOpen && <MarketItemModal item={editItem} onClose={() => setModalOpen(false)} onSave={handleSaveItem} />}
+      {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
     </>
   );
 }

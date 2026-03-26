@@ -37,21 +37,27 @@ serve(async (req: Request) => {
 
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { itemId, userEmail } = await req.json();
+    const { itemId, userEmail, returnUrl } = await req.json();
 
     // Fetch the real price securely from DB to prevent frontend tampering
     const { data: item, error: itemError } = await supabaseClient
       .from('market_items')
-      .select('name, price, image_url')
+      .select('*')
       .eq('id', itemId)
       .single();
 
-    if (itemError || !item) throw new Error("Item no encontrado");
+    if (itemError || !item) {
+      throw new Error(`Item not found: ${itemError?.message}`);
+    }
+
+    const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
+    // If the client sent their explicit browser window URL, we use it directly;
+    // else we fallback to standard origin (which breaks in gh-pages subfolders).
+    const safeReturnUrl = returnUrl || `${origin}/market`;
 
     // Initialize Stripe Checkout
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      customer_email: userEmail,
       line_items: [
         {
           price_data: {
@@ -66,8 +72,8 @@ serve(async (req: Request) => {
         },
       ],
       mode: 'payment',
-      success_url: `${req.headers.get('origin')}/market?success=true`,
-      cancel_url: `${req.headers.get('origin')}/market?canceled=true`,
+      success_url: `${safeReturnUrl}?success=true`,
+      cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {
         userId: user.id,
         itemId: itemId,
