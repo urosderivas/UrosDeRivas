@@ -1,0 +1,118 @@
+import { useEffect, useState } from 'react';
+import { useStore } from './store';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { AdminGuard } from './AdminGuard';
+import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
+import { StripeAdapter } from '../infrastructure/StripeAdapter';
+import { MarketItemModal } from './MarketItemModal';
+import { MarketItem } from '../domain/entities';
+import './Market.css';
+
+const adapter = new SupabaseAdapter();
+const stripeAdapter = new StripeAdapter();
+
+export function Market() {
+  const { user, items, loading, fetchItems } = useStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState<MarketItem | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchItems();
+    const params = new URLSearchParams(location.search);
+    if (params.get('success')) alert('¡Pago completado con éxito! Recibirás un correo de confirmación.');
+    if (params.get('canceled')) alert('Pago cancelado. Puedes volver a intentarlo cuando quieras.');
+  }, [fetchItems, location.search]);
+
+  const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
+    if (editItem) {
+      await adapter.updateItem(editItem.id, itemData);
+    } else {
+      await adapter.createItem(itemData);
+    }
+    fetchItems();
+  };
+
+  const handleOpenCreate = () => { setEditItem(null); setModalOpen(true); };
+  const handleOpenEdit = (item: MarketItem) => { setEditItem(item); setModalOpen(true); };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('¿Seguro que quieres borrar este producto?')) return;
+    try { await adapter.deleteItem(id); fetchItems(); }
+    catch (e: any) { alert('Error: ' + e.message); }
+  };
+
+  const handleBuy = async (itemId: string) => {
+    if (!user) {
+      alert('⚠️ Debes iniciar sesión para comprar merchandise del club.');
+      navigate('/login');
+      return;
+    }
+    setCheckoutLoading(itemId);
+    try {
+      const url = await stripeAdapter.createCheckoutSession(itemId, user.email);
+      window.location.href = url;
+    } catch (e: any) {
+      alert('Error procesando pago: ' + e.message);
+      setCheckoutLoading(null);
+    }
+  };
+
+  if (loading && items.length === 0) return <div className="loading-state">Cargando productos...</div>;
+
+  return (
+    <>
+      <div className="market-container">
+        <div className="market-header">
+          <h1>Tienda Oficial</h1>
+          <AdminGuard>
+            <button className="btn-admin-add" onClick={handleOpenCreate}>+ Añadir Producto</button>
+          </AdminGuard>
+        </div>
+
+        <div className="products-grid">
+          {items.length === 0 ? (
+            <p className="no-items">Próximamente disponible.</p>
+          ) : (
+            items.map(item => (
+              <div key={item.id} className="product-card">
+                <AdminGuard>
+                  <div className="admin-card-actions">
+                    <button className="btn-admin-edit" onClick={() => handleOpenEdit(item)} title="Editar">✏️</button>
+                    <button className="btn-admin-delete" onClick={() => handleDelete(item.id)} title="Borrar">X</button>
+                  </div>
+                </AdminGuard>
+                <div className="product-image-wrap">
+                  <img src={item.imageUrl} alt={item.name} className="product-img" loading="lazy" />
+                </div>
+                <div className="product-info">
+                  <h3 className="product-name">{item.name}</h3>
+                  {item.sizes && item.sizes.length > 0 && (
+                    <div className="product-sizes">
+                      {item.sizes.map(s => <span key={s} className="size-tag">{s}</span>)}
+                    </div>
+                  )}
+                  <div className="product-footer">
+                    <span className="product-price">{item.price.toFixed(2)} €</span>
+                    <button className="btn-buy" onClick={() => handleBuy(item.id)} disabled={checkoutLoading === item.id}>
+                      {checkoutLoading === item.id ? 'Redirigiendo...' : 'Comprar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <MarketItemModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSave={handleSaveItem}
+        initial={editItem}
+      />
+    </>
+  );
+}
