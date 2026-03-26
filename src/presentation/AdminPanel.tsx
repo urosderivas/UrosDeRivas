@@ -40,6 +40,8 @@ export function AdminPanel() {
       } else if (activeTab === 'orders' && user?.role === 'admin') {
         const data = await adapter.getOrders();
         setOrders(data);
+        // Auto-sync Stripe statuses on load
+        setTimeout(() => handleSyncAllStripe(data), 100);
       } else if (activeTab === 'market' && user?.role === 'admin') {
         const data = await adapter.getItems();
         setItems(data);
@@ -180,17 +182,20 @@ export function AdminPanel() {
     </>
   );
 
-  const handleSyncAllStripe = async () => {
+  const handleSyncAllStripe = async (ordersList?: Order[]) => {
     setSyncingStripe(true);
+    const target = ordersList || orders;
     const newStatuses: Record<string, string> = {};
-    for (const order of orders) {
+    for (const order of target) {
       if (order.stripe_session_id) {
         try {
           const result = await adapter.checkStripePayment(order.stripe_session_id);
           newStatuses[order.id] = result.payment_status; // 'paid' | 'unpaid'
-          // Auto-update DB if Stripe says paid but our DB says pending
+          // Auto-update DB based on Stripe status (only if still pending)
           if (result.payment_status === 'paid' && order.status === 'pending') {
-            await adapter.updateOrderStatus(order.id, 'completed');
+            await adapter.updateOrderStatus(order.id, 'processing');
+          } else if (result.payment_status === 'unpaid' && order.status === 'pending') {
+            await adapter.updateOrderStatus(order.id, 'cancelled');
           }
         } catch {
           newStatuses[order.id] = 'error';
@@ -209,7 +214,7 @@ export function AdminPanel() {
   const renderOrders = () => (
     <div className="admin-table-container">
       <div className="table-toolbar">
-        <button className="btn-primary" onClick={handleSyncAllStripe} disabled={syncingStripe}>
+        <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
           {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar con Stripe'}
         </button>
       </div>
