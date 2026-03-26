@@ -53,16 +53,16 @@ export function CookiesPolicy() {
           </thead>
           <tbody>
             <tr>
-              <td><code>sb-osekoolekqyzbpepyxze-auth-token</code></td>
-              <td>Tercero (Supabase)</td>
-              <td>Cookie técnica necesaria para la autenticación de usuarios inscritos en el club.</td>
-              <td>Sesión / Persistente</td>
+              <td data-label="Nombre de la Cookie"><code>sb-osekoolekqyzbpepyxze-auth-token</code></td>
+              <td data-label="Propietario">Tercero (Supabase)</td>
+              <td data-label="Finalidad">Cookie técnica necesaria para la autenticación de usuarios inscritos en el club.</td>
+              <td data-label="Retención">Sesión / Persistente</td>
             </tr>
             <tr>
-              <td><code>cookie_banner_accepted</code></td>
-              <td>Propia</td>
-              <td>Cookie técnica para recordar si el usuario ha aceptado el aviso de cookies, evitando mostrarlo repetidamente.</td>
-              <td>1 año</td>
+              <td data-label="Nombre de la Cookie"><code>cookie_banner_accepted</code></td>
+              <td data-label="Propietario">Propia</td>
+              <td data-label="Finalidad">Cookie técnica para recordar si el usuario ha aceptado el aviso de cookies, evitando mostrarlo repetidamente.</td>
+              <td data-label="Retención">1 año</td>
             </tr>
           </tbody>
         </table>
