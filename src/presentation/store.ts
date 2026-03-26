@@ -21,7 +21,7 @@ interface AppState {
   logActivity: (actionType: string, metadata?: any) => Promise<void>;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   user: null,
   items: [],
   events: [],
@@ -76,7 +76,8 @@ export const useStore = create<AppState>((set) => ({
 
   logActivity: async (actionType, metadata) => {
     try {
-      await adapter.createLog(actionType, metadata);
+      const userEmail = get().user?.email;
+      await adapter.createLog(actionType, metadata, userEmail);
     } catch (e) {
       // Intentionally swallow errors for telemetry to avoid crashing UI
     }

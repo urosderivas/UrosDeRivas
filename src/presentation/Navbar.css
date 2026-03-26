@@ -96,6 +96,22 @@
   color: var(--primary-bg);
 }
 
+.btn-cart {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--accent-turquoise);
+  padding: 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.btn-cart:hover {
+  background: var(--accent-turquoise);
+  color: var(--primary-bg);
+}
+
 .mobile-toggle {
   display: none;
   background: none;

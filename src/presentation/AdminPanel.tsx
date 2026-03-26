@@ -11,7 +11,7 @@ const adapter = new SupabaseAdapter();
 
 export function AdminPanel() {
   const { user } = useStore();
-  const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>(user?.role === 'coach' ? 'stats' : 'users');
   
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -168,7 +168,7 @@ export function AdminPanel() {
              logs.slice(0, 50).map(log => (
               <tr key={log.id}>
                 <td>{new Date(log.created_at).toLocaleString('es-ES')}</td>
-                <td className="monospace">{log.user_id?.substring(0,8) || 'Anon'}</td>
+                <td className="monospace">{log.user_email || log.user_id?.substring(0,8) || 'Anon'}</td>
                 <td><span className="badge-action">{log.action_type}</span></td>
                 <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
                 <td>

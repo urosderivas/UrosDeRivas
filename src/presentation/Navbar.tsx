@@ -1,14 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useStore } from './store';
-import { Menu, X, User } from 'lucide-react';
+import { Menu, X, User, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
+import { MyOrdersModal } from './MyOrdersModal';
 import './Navbar.css';
 
 export function Navbar() {
   const { user, signOut } = useStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
 
   return (
+    <>
     <nav className="navbar">
       <div className="nav-container">
         <Link to="/" className="nav-brand">
@@ -32,6 +35,9 @@ export function Navbar() {
                   {user.role === 'admin' ? 'Admin' : 'Entrenador'}
                 </span>
               )}
+              <button onClick={() => setOrdersOpen(true)} className="btn-cart" title="Mis Pedidos">
+                <ShoppingBag size={18} />
+              </button>
               <button onClick={() => { signOut(); setIsOpen(false); }} className="btn-logout">Salir</button>
             </div>
           ) : (
@@ -46,5 +52,7 @@ export function Navbar() {
         </button>
       </div>
     </nav>
+    {ordersOpen && <MyOrdersModal onClose={() => setOrdersOpen(false)} />}
+    </>
   );
 }

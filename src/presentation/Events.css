@@ -52,6 +52,17 @@
   min-height: 200px;
 }
 
+.event-image-placeholder {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.placeholder-icon {
+  font-size: 4rem;
+  opacity: 0.3;
+}
+
 .event-type-badge {
   position: absolute;
   top: 1rem;

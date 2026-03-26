@@ -246,10 +246,15 @@ export function Events() {
                     onClick={() => handleExpand(ev)}
                     style={{ cursor: 'pointer' }}
                   >
-                    {ev.imageUrl && (
+                    {ev.imageUrl ? (
                       <div className="event-image" style={{ backgroundImage: `url(${ev.imageUrl})` }}>
                         <div className={`event-type-badge ${badge.cls}`}>{badge.label}</div>
                         {ev.source === 'clupik' && <div className="source-badge">🌐 Clupik</div>}
+                      </div>
+                    ) : (
+                      <div className="event-image event-image-placeholder">
+                        <div className={`event-type-badge ${badge.cls}`}>{badge.label}</div>
+                        <span className="placeholder-icon">🏀</span>
                       </div>
                     )}
                     <div className="event-info">
