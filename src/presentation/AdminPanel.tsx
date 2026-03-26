@@ -297,11 +297,31 @@ export function AdminPanel() {
                <tr className="attendees-row">
                  <td colSpan={4}>
                    <div className="attendees-list">
-                     <strong>Usuarios Inscritos ({attendees[ev.id].length}): </strong>
-                     {attendees[ev.id].length === 0 ? 'Nadie inscrito todavía.' :
-                      attendees[ev.id].map(att => (
-                        <span key={att.user_id} className="attendee-pill">{att.user_email}</span>
-                      ))}
+                     <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Usuarios Inscritos ({attendees[ev.id].length}):</strong>
+                     {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito todavía.</p> : (
+                       <table className="admin-table" style={{ marginTop: '0.5rem' }}>
+                         <thead><tr><th>Email</th><th>Fecha Inscripción</th><th>Acciones</th></tr></thead>
+                         <tbody>
+                           {attendees[ev.id].map((att: any) => (
+                             <tr key={att.user_id}>
+                               <td className="monospace">{att.user_email}</td>
+                               <td>{new Date(att.created_at).toLocaleString('es-ES')}</td>
+                               <td>
+                                 <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
+                                   if (!window.confirm(`¿Eliminar a ${att.user_email} de este evento?`)) return;
+                                   try {
+                                     await adapter.removeEventRegistration(ev.id, att.user_id);
+                                     handleLoadAttendees(ev.id);
+                                   } catch (err: any) { alert('Error: ' + err.message); }
+                                 }}>
+                                   <XCircle size={16} />
+                                 </button>
+                               </td>
+                             </tr>
+                           ))}
+                         </tbody>
+                       </table>
+                     )}
                    </div>
                  </td>
                </tr>
@@ -312,6 +332,8 @@ export function AdminPanel() {
       </table>
     </div>
   );
+
+
 
   const renderMarket = () => (
     <div className="admin-table-container">

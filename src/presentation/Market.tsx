@@ -24,7 +24,19 @@ export function Market() {
   useEffect(() => {
     fetchItems();
     const params = new URLSearchParams(location.search);
-    if (params.get('success')) alert('¡Pago completado con éxito! Recibirás un correo de confirmación.');
+    if (params.get('success')) {
+      alert('¡Pago completado con éxito! Recibirás un correo de confirmación.');
+      // Auto-mark order as completed using session_id from Stripe return URL
+      const sessionId = params.get('session_id');
+      if (sessionId) {
+        adapter.getOrders().then(orders => {
+          const match = orders.find((o: any) => o.stripe_session_id === sessionId);
+          if (match && match.status === 'pending') {
+            adapter.updateOrderStatus(match.id, 'completed').catch(console.error);
+          }
+        }).catch(console.error);
+      }
+    }
     if (params.get('canceled')) alert('Pago cancelado. Puedes volver a intentarlo cuando quieras.');
   }, [fetchItems, location.search]);
 
@@ -112,7 +124,7 @@ export function Market() {
         </div>
       </div>
 
-      {modalOpen && <MarketItemModal item={editItem} onClose={() => setModalOpen(false)} onSave={handleSaveItem} />}
+      <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
     </>
   );

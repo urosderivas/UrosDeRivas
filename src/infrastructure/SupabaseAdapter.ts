@@ -168,6 +168,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data || [];
   }
 
+  async removeEventRegistration(eventId: string, userId: string): Promise<void> {
+    const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
+    if (error) throw error;
+  }
+
   async verifyPayment(sessionId: string): Promise<boolean> {
     const { data } = await supabase.from('orders').select('status').eq('stripe_session_id', sessionId).single();
     return data?.status === 'completed';

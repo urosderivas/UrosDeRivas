@@ -57,6 +57,7 @@ serve(async (req: Request) => {
 
     // Initialize Stripe Checkout
     const session = await stripe.checkout.sessions.create({
+      customer_email: userEmail,
       payment_method_types: ['card'],
       line_items: [
         {
@@ -72,7 +73,7 @@ serve(async (req: Request) => {
         },
       ],
       mode: 'payment',
-      success_url: `${safeReturnUrl}?success=true`,
+      success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {
         userId: user.id,
