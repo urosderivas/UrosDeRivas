@@ -211,9 +211,13 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
   }
 
-  async createLog(actionType: string, metadata?: any, userEmail?: string): Promise<void> {
-    const { error } = await supabase.from('system_logs').insert({ action_type: actionType, metadata, user_email: userEmail });
-    // Silently fail for telemetry if needed, but here we throw so dev can see
+  async createLog(actionType: string, metadata?: any): Promise<void> {
+    const user = await this.getUser();
+    const payload: any = { action_type: actionType, metadata };
+    if (user) payload.user_id = user.id;
+
+    const { error } = await supabase.from('system_logs').insert(payload);
+    // Silently fail for telemetry if needed, but log to console
     if (error) console.error("Telemetry error", error);
   }
 

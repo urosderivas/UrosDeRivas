@@ -31,14 +31,8 @@ serve(async (req: Request) => {
     );
 
     const authHeader = req.headers.get('Authorization')!;
-    // Use the anon client we create on the fly to auth the user securely
-    const supabaseAnonClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    
-    const { data: { user }, error: authError } = await supabaseAnonClient.auth.getUser();
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdminClient.auth.getUser(token);
 
     if (authError || !user) throw new Error("Unauthorized");
 
@@ -88,7 +82,7 @@ serve(async (req: Request) => {
     });
 
     // Create a pending Order in our DB tracker logically linked to Stripe Session using Admin Rights bypassing RLS
-    await supabaseAdminClient.from('orders').insert({
+    const { error: insertError } = await supabaseAdminClient.from('orders').insert({
       user_id: user.id,
       buyer_name: user.email?.split('@')[0] || 'Unknown',
       buyer_email: userEmail,
@@ -98,6 +92,11 @@ serve(async (req: Request) => {
       status: 'pending',
       stripe_session_id: session.id
     });
+
+    if (insertError) {
+      console.error("Failed creating shadow order in DB: ", insertError);
+      throw new Error("Order creation failed locally before stripe redirect");
+    }
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
