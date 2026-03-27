@@ -23,6 +23,8 @@ export function Market() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
 
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
   };
@@ -66,18 +68,28 @@ export function Market() {
     catch (e: any) { showMessage('Error', e.message); }
   };
 
-  const handleBuy = async (itemId: string) => {
+  const handleBuy = async (item: MarketItem) => {
     if (!user) {
       alert('⚠️ Debes iniciar sesión para comprar merchandise del club.');
       navigate('/login');
       return;
     }
-    setCheckoutLoading(itemId);
+    
+    let sizeToPass: string | undefined = undefined;
+    if (item.sizes && item.sizes.length > 0) {
+      sizeToPass = selectedSizes[item.id];
+      if (!sizeToPass) {
+        showMessage('Atención', 'Por favor, selecciona una talla antes de comprar.');
+        return;
+      }
+    }
+
+    setCheckoutLoading(item.id);
     try {
-      const url = await stripeAdapter.createCheckoutSession(itemId, user.email);
+      const url = await stripeAdapter.createCheckoutSession(item.id, user.email, sizeToPass);
       window.location.href = url;
     } catch (e: any) {
-      alert('Error procesando pago: ' + e.message);
+      showMessage('Error procesando pago', e.message);
       setCheckoutLoading(null);
     }
   };
@@ -115,13 +127,20 @@ export function Market() {
                 <div className="product-info">
                   <h3 className="product-name">{item.name}</h3>
                   {item.sizes && item.sizes.length > 0 && (
-                    <div className="product-sizes">
-                      {item.sizes.map(s => <span key={s} className="size-tag">{s}</span>)}
+                    <div className="product-size-selection" style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                      <select 
+                        value={selectedSizes[item.id] || ''} 
+                        onChange={(e) => setSelectedSizes(prev => ({...prev, [item.id]: e.target.value}))}
+                        style={{ padding: '0.4rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', width: '100%', outline: 'none' }}
+                      >
+                        <option value="" disabled>Seleccionar Talla...</option>
+                        {item.sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
                     </div>
                   )}
                   <div className="product-footer">
                     <span className="product-price">{item.price.toFixed(2)} €</span>
-                    <button className="btn-buy" onClick={() => handleBuy(item.id)} disabled={checkoutLoading === item.id}>
+                    <button className="btn-buy" onClick={() => handleBuy(item)} disabled={checkoutLoading === item.id}>
                       {checkoutLoading === item.id ? 'Redirigiendo...' : 'Comprar'}
                     </button>
                   </div>

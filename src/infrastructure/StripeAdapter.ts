@@ -6,10 +6,10 @@ export class StripeAdapter implements PaymentPort {
    * Invokes a secure Supabase Edge Function to generate a Stripe Checkout URL.
    * This ensures the Stripe Secret Key is never exposed to the frontend.
    */
-  async createCheckoutSession(itemId: string, userEmail: string): Promise<string> {
+  async createCheckoutSession(itemId: string, userEmail: string, size?: string): Promise<string> {
     const returnUrl = window.location.href.split('?')[0]; // Remove existing query params
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-      body: { itemId, userEmail, returnUrl }
+      body: { itemId, userEmail, returnUrl, size }
     });
 
     if (error) {

@@ -35,10 +35,12 @@ export interface SystemLog {
 
 export interface Order {
   id: string;
-  user_id?: string;
+  user_id: string;
   buyer_name: string;
   buyer_email: string;
   item_id: string;
+  item_name?: string;
+  size?: string;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   amount: number;
   stripe_session_id?: string;

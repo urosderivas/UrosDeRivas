@@ -25,22 +25,27 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabaseClient = createClient(
+    const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const authHeader = req.headers.get('Authorization')!;
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(
-      authHeader.replace('Bearer ', '')
+    // Use the anon client we create on the fly to auth the user securely
+    const supabaseAnonClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
     );
+    
+    const { data: { user }, error: authError } = await supabaseAnonClient.auth.getUser();
 
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { itemId, userEmail, returnUrl } = await req.json();
+    const { itemId, userEmail, returnUrl, size } = await req.json();
 
     // Fetch the real price securely from DB to prevent frontend tampering
-    const { data: item, error: itemError } = await supabaseClient
+    const { data: item, error: itemError } = await supabaseAdminClient
       .from('market_items')
       .select('*')
       .eq('id', itemId)
@@ -64,7 +69,7 @@ serve(async (req: Request) => {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: item.name,
+              name: size ? `${item.name} (Talla: ${size})` : item.name,
               images: (item.image_url && item.image_url.startsWith('http')) ? [item.image_url] : undefined,
             },
             unit_amount: Math.round(item.price * 100), // Stripe uses cents
@@ -78,15 +83,17 @@ serve(async (req: Request) => {
       metadata: {
         userId: user.id,
         itemId: itemId,
+        size: size || null,
       }
     });
 
-    // Create a pending Order in our DB tracker logically linked to Stripe Session
-    await supabaseClient.from('orders').insert({
+    // Create a pending Order in our DB tracker logically linked to Stripe Session using Admin Rights bypassing RLS
+    await supabaseAdminClient.from('orders').insert({
       user_id: user.id,
       buyer_name: user.email?.split('@')[0] || 'Unknown',
       buyer_email: userEmail,
       item_id: itemId,
+      size: size || null,
       amount: item.price,
       status: 'pending',
       stripe_session_id: session.id

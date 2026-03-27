@@ -239,7 +239,10 @@ export function AdminPanel() {
               <td>{new Date(order.created_at).toLocaleString('es-ES')}</td>
               <td>{order.buyer_name}</td>
               <td className="monospace">{order.buyer_email}</td>
-              <td className="monospace" title={order.item_id}>{order.item_id.substring(0, 8)}...</td>
+              <td title={order.item_id}>
+                <strong>{order.item_name}</strong>
+                {order.size && <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Talla: {order.size}</div>}
+              </td>
               <td style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>€{order.amount}</td>
               <td>
                 <span className={`status-badge ${order.status}`}>

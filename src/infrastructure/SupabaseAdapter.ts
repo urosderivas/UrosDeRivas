@@ -218,10 +218,25 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async getOrders(): Promise<Order[]> {
-    const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('orders').select(`
+      *,
+      market_items ( name )
+    `).order('created_at', { ascending: false });
     if (error) throw error;
-    // Map db names to entities securely if needed, but db names match exactly here thanks to TypeScript
-    return data;
+    
+    return data.map((o: any) => ({
+      id: o.id,
+      user_id: o.user_id,
+      buyer_name: o.buyer_name,
+      buyer_email: o.buyer_email,
+      item_id: o.item_id,
+      item_name: o.market_items?.name || 'Producto Eliminado',
+      size: o.size,
+      status: o.status,
+      amount: o.amount,
+      stripe_session_id: o.stripe_session_id,
+      created_at: o.created_at
+    }));
   }
 
   async updateOrderStatus(id: string, status: string): Promise<Order> {

@@ -49,9 +49,12 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
               borderRadius: '8px',
               borderLeft: o.status === 'completed' ? '4px solid #10b981' : '4px solid #f59e0b' 
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 'bold' }}>{o.buyer_name}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                <span style={{ fontWeight: 'bold' }}>{o.item_name} {o.size ? `(Talla: ${o.size})` : ''}</span>
                 <span className={`status-badge ${o.status}`}>{o.status.toUpperCase()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                <span>Realizado por: {o.buyer_name}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                 <span>{new Date(o.created_at).toLocaleDateString()}</span>
