@@ -15,19 +15,6 @@ interface AppState {
   signIn: (email: string, pass: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  
-  fetchItems: () => Promise<void>;
-  fetchEvents: () => Promise<void>;
-  logActivity: (actionType: string, metadata?: any) => Promise<void>;
-}
-
-export const useStore = create<AppState>((set, get) => ({
-  user: null,
-  items: [],
-  events: [],
-  loading: false,
-
-  initAuth: async () => {
     try {
       const user = await adapter.getUser();
       set({ user });
@@ -76,8 +63,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   logActivity: async (actionType, metadata) => {
     try {
-      const userEmail = get().user?.email;
-      await adapter.createLog(actionType, metadata, userEmail);
+      await adapter.createLog(actionType, metadata);
     } catch (e) {
       // Intentionally swallow errors for telemetry to avoid crashing UI
     }

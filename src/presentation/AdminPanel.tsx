@@ -1,9 +1,10 @@
 import { useEffect, useState, Fragment } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
-import { SystemLog, Order, MarketItem } from '../domain/entities';
+import { Order, MarketItem, User as DomainUser, SystemLog, Event } from '../domain/entities';
 import { AdminGuard } from './AdminGuard';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
+import { MessageModal } from './components/MessageModal';
 import { Trash2, RefreshCw, Pencil, CheckCircle, Clock, XCircle } from 'lucide-react';
 import './AdminPanel.css';
 
@@ -17,8 +18,13 @@ export function AdminPanel() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<MarketItem[]>([]);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
-  const [events, setEvents] = useState<import('../domain/entities').Event[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [attendees, setAttendees] = useState<Record<string, any[]>>({});
+  const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
+
+  const showMessage = (title: string, message: string) => {
+    setMessageAlert({ open: true, title, message });
+  };
   const [loadingAttendees, setLoadingAttendees] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [stripeStatuses, setStripeStatuses] = useState<Record<string, string>>({});
@@ -127,7 +133,7 @@ export function AdminPanel() {
     try {
       await adapter.deleteItem(id);
       setItems(items.filter(i => i.id !== id));
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showMessage('Error al borrar', e.message); }
   };
 
   const handleDeleteUser = async (id: string) => {
@@ -135,7 +141,7 @@ export function AdminPanel() {
     try {
       await adapter.deleteUser(id);
       setSystemUsers(systemUsers.filter(u => u.id !== id));
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showMessage('Error al borrar usuario', e.message); }
   };
 
   const renderStats = () => (
@@ -315,7 +321,7 @@ export function AdminPanel() {
     try {
       const data = await adapter.getEventAttendees(eventId);
       setAttendees({ ...attendees, [eventId]: data });
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showMessage('Error', e.message); }
     setLoadingAttendees(null);
   };
 
@@ -365,7 +371,7 @@ export function AdminPanel() {
                                    try {
                                      await adapter.removeEventRegistration(ev.id, att.user_id);
                                      handleLoadAttendees(ev.id);
-                                   } catch (err: any) { alert('Error: ' + err.message); }
+                                   } catch (err: any) { showMessage('Error', err.message); }
                                  }}>
                                    <XCircle size={16} />
                                  </button>
@@ -471,11 +477,12 @@ export function AdminPanel() {
       </div>
       </div>
 
-      <MarketItemModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSaveItem}
-        initial={editItem}
+      <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
+      <MessageModal 
+        isOpen={messageAlert.open} 
+        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} 
+        title={messageAlert.title} 
+        message={messageAlert.message} 
       />
     </AdminGuard>
   );

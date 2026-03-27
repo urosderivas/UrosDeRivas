@@ -4,6 +4,7 @@ import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { EventModal } from './EventModal';
 import { Event } from '../domain/entities';
+import { MessageModal } from './components/MessageModal';
 import './Events.css';
 
 const adapter = new SupabaseAdapter();
@@ -75,6 +76,11 @@ export function Events() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<Event | null>(null);
+  const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
+
+  const showMessage = (title: string, message: string) => {
+    setMessageAlert({ open: true, title, message });
+  };
   const [userRegistrations, setUserRegistrations] = useState<string[]>([]);
 
   const loadSupabaseEvents = async () => {
@@ -185,17 +191,20 @@ export function Events() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Seguro que quieres borrar este evento?')) return;
     try { await adapter.deleteEvent(id); loadSupabaseEvents(); }
-    catch (e: any) { alert('Error: ' + e.message); }
+    catch (e: any) { showMessage('Error al borrar', e.message); }
   };
 
   const handleToggleRegistration = async (eventId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!user) return alert('Debes iniciar sesión para apuntarte.');
+    if (!user) {
+      showMessage('Atención', 'Debes iniciar sesión para apuntarte a un evento.');
+      return;
+    }
     const isRegistered = userRegistrations.includes(eventId);
     try {
       await adapter.toggleEventRegistration(eventId, user.id, isRegistered);
       setUserRegistrations(prev => isRegistered ? prev.filter(id => id !== eventId) : [...prev, eventId]);
-    } catch (e: any) { alert('Error interno: ' + e.message); }
+    } catch (e: any) { showMessage('Error interno', e.message); }
   };
 
   const isLoading = loading && loadingClupik && allEvents.length === 0;
@@ -335,11 +344,12 @@ export function Events() {
         </div>
       </div>
 
-      <EventModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSaveEvent}
-        initial={editEvent}
+      {modalOpen && <EventModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveEvent} initial={editEvent} />}
+      <MessageModal
+        isOpen={messageAlert.open}
+        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))}
+        title={messageAlert.title}
+        message={messageAlert.message}
       />
     </>
   );
