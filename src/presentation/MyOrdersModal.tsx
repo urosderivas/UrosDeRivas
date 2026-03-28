@@ -3,11 +3,10 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
 import { ShoppingBag, FileText } from 'lucide-react';
-import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
+import { InvoiceGenerator, InvoiceData } from '../application/services/InvoiceGenerator';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
-const invoiceGen = new InvoiceGenerator();
 
 export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -44,7 +43,14 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
       if (isStripe && allCompleted) paymentStatus = 'paid_stripe';
       else if (!isStripe && allCompleted) paymentStatus = 'paid_hand';
 
-      await invoiceGen.generatePdfFactura(groupOrders, paymentStatus, isStripe ? groupId : undefined);
+      const invoiceData: InvoiceData = {
+        orderGroupId: groupId,
+        clientName: groupOrders[0].buyer_name,
+        clientEmail: groupOrders[0].buyer_email,
+        orders: groupOrders,
+        paymentStatus,
+      };
+      await InvoiceGenerator.generatePdfFactura(invoiceData);
     } catch (e) {
       console.error("Error generating invoice", e);
     }
