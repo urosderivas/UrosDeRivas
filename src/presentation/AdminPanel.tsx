@@ -312,16 +312,22 @@ export function AdminPanel() {
   };
 
   const exportOrdersExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(orders.map(o => ({
-      'Reserva ID / Sesión': o.stripe_session_id || o.id,
-      'Fecha': new Date(o.created_at).toLocaleString('es-ES'),
-      'Comprador': o.buyer_name,
-      'Email': o.buyer_email,
-      'Producto': o.item_name,
-      'Especificaciones': o.size || '-',
-      'Importe Pagado': o.amount,
-      'Estado': o.status
-    })));
+    const ws = XLSX.utils.json_to_sheet(orders.map(o => {
+      const qty = o.quantity || 1;
+      const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
+      return {
+        'Reserva ID / Sesión': o.stripe_session_id || o.id,
+        'Fecha': new Date(o.created_at).toLocaleString('es-ES'),
+        'Comprador': o.buyer_name,
+        'Email': o.buyer_email,
+        'Producto': o.item_name,
+        'Especificaciones': o.size || '-',
+        'Cantidad': qty,
+        'Precio Unitario': unitPrice,
+        'Importe Total': o.amount,
+        'Estado': o.status
+      };
+    }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
     XLSX.writeFile(wb, "Reporte_Tienda_Uros.xlsx");
