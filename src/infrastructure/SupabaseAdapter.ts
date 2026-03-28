@@ -239,6 +239,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       item_id: o.item_id,
       item_name: o.market_items?.name || 'Producto Eliminado',
       size: o.size,
+      quantity: o.quantity || 1,
       status: o.status,
       amount: o.amount,
       stripe_session_id: o.stripe_session_id,
@@ -270,7 +271,8 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         buyer_email: userEmail,
         item_id: ci.itemId,
         size: textOptionsStr || null,
-        amount: 0, // Will be resolved from item price
+        quantity: ci.quantity,
+        amount: 0,
         status: 'pending',
         stripe_session_id: sessionId
       };

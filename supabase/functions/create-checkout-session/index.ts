@@ -106,14 +106,14 @@ serve(async (req: Request) => {
         });
       }
 
-      // DB order row — only columns that exist in the orders table schema:
-      // id, user_id, buyer_name, buyer_email, item_id, size, status, amount, stripe_session_id, created_at
+      // DB order row — only columns that exist in the orders table schema
       orderInserts.push({
         user_id: user.id,
         buyer_name: user?.email?.split('@')[0] || 'Unknown',
         buyer_email: userEmail,
         item_id: dbItem.id,
         size: textOptionsStr || null,
+        quantity: cartItem.quantity,
         amount: rawPrice * cartItem.quantity,
         status: 'pending'
       });

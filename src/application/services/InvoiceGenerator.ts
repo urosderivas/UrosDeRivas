@@ -91,8 +91,10 @@ export class InvoiceGenerator {
 
     // -- Table Data --
     const tableData = orders.map(o => {
+      const qty = o.quantity || 1;
+      const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
       const desc = o.size ? `${o.item_name || 'Producto'} [${o.size}]` : (o.item_name || 'Producto');
-      return [desc, '1', `${o.amount.toFixed(2)} €`, `${o.amount.toFixed(2)} €`];
+      return [desc, String(qty), `${unitPrice.toFixed(2)} €`, `${o.amount.toFixed(2)} €`];
     });
 
     autoTable(doc, {

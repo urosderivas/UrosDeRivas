@@ -8,31 +8,37 @@ import { useState } from 'react';
 interface CartSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  showMessage?: (title: string, message: string) => void;
 }
 
 const stripeAdapter = new StripeAdapter();
 const supabaseAdapter = new SupabaseAdapter();
 
-export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
+export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) {
   const { cart, removeFromCart, updateCartQuantity, clearCart, user } = useStore();
   const [loading, setLoading] = useState(false);
 
   const total = cart.reduce((acc, current) => acc + current.product.price * current.quantity, 0);
 
+  const notify = (title: string, message: string) => {
+    if (showMessage) showMessage(title, message);
+    else alert(message);
+  };
+
   const handleCheckout = async () => {
-    if(!user) return alert("Inicia sesión para pagar.");
+    if(!user) return notify("Atención", "Inicia sesión para pagar.");
     setLoading(true);
     try {
       const url = await stripeAdapter.createCheckoutSessionFromCart(cart, user.email);
       window.location.href = url;
     } catch(e: any) {
-      alert("Error procesando carrito: " + e.message);
+      notify("Error procesando pago", e.message);
       setLoading(false);
     }
   };
 
   const handleClickCollect = async () => {
-    if(!user) return alert("Inicia sesión para reservar.");
+    if(!user) return notify("Atención", "Inicia sesión para reservar.");
     setLoading(true);
     try {
       const items = cart.map(c => ({
@@ -43,9 +49,9 @@ export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
       await supabaseAdapter.createOrderLocal(items, user.email);
       clearCart();
       onClose();
-      alert("✅ Pedido reservado correctamente. Pasa por la tienda para recogerlo y pagarlo.");
+      notify("Pedido Reservado", "✅ Pedido reservado correctamente. Pasa por la tienda para recogerlo y pagarlo.");
     } catch(e: any) {
-      alert("Error creando reserva: " + e.message);
+      notify("Error", "Error creando reserva: " + e.message);
     }
     setLoading(false);
   };

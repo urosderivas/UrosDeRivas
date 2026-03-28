@@ -240,7 +240,7 @@ export function Market() {
         </div>
       </div>
 
-      <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} />
+      <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
       <MessageModal 

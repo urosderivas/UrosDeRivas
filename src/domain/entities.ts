@@ -56,6 +56,7 @@ export interface Order {
   item_id: string;
   item_name?: string;
   size?: string;
+  quantity: number;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   amount: number;
   stripe_session_id?: string;

@@ -364,13 +364,16 @@ export function AdminPanel() {
                const first = groupOrders[0];
                const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
                const allCompleted = groupOrders.every(o => o.status === 'completed');
+               const isStripeOrder = groupId.startsWith('cs_');
                const isPaidStripe = stripeStatuses[first.id] === 'paid';
+               const stripeChecked = stripeStatuses[first.id] !== undefined;
                
                return (
                 <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
                   <td className="monospace" style={{ fontSize: '0.8rem' }}>
                     {groupId.substring(0,12)}...
-                    {isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                    {isStripeOrder && isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                    {isStripeOrder && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize:'0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
                   </td>
                   <td>
                     <strong>{first.buyer_name}</strong><br/>
@@ -381,9 +384,14 @@ export function AdminPanel() {
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                       {groupOrders.map(o => (
                         <li key={o.id} style={{ marginBottom: '6px' }}>
-                          • <strong>{o.item_name}</strong> 
+                          • <strong>{o.item_name}</strong>
+                          {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
                           {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
-                          <span style={{ marginLeft: '6px', color: '#0e70ab' }}>(€{o.amount.toFixed(2)})</span>
+                          <span style={{ marginLeft: '6px', color: '#0e70ab' }}>
+                            {(o.quantity || 1) > 1 
+                              ? `(€${(o.amount / o.quantity).toFixed(2)} c/u = €${o.amount.toFixed(2)})`
+                              : `(€${o.amount.toFixed(2)})`}
+                          </span>
                         </li>
                       ))}
                     </ul>
@@ -404,8 +412,10 @@ export function AdminPanel() {
                     </select>
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    {isPaidStripe ? (
-                      <span style={{ fontSize: '0.75rem', color: '#888' }}>Online</span>
+                    {isStripeOrder ? (
+                      <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
+                        {isPaidStripe ? '✅ Online' : 'Online'}
+                      </span>
                     ) : (
                       <input
                         type="checkbox"
