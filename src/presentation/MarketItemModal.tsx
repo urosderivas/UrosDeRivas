@@ -144,48 +144,48 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
             <div style={{ display: 'flex', gap: '2rem' }}>
               <div className="form-group" style={{ flex: 1 }}>
                 <label>Variables del Producto (Campos Dinámicos)</label>
-                <div style={{ background: '#f9f9f9', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '1rem' }}>
-                  {customFields.length === 0 ? <p style={{ fontSize: '0.85rem', color: '#888' }}>No hay variables mapeadas.</p> : (
+                <div style={{ background: 'rgba(255,255,255,0.06)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', marginBottom: '1rem' }}>
+                  {customFields.length === 0 ? <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>No hay variables mapeadas.</p> : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {customFields.map((field, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '8px', borderRadius: '4px', border: '1px solid #eee' }}>
-                          <span style={{ fontSize: '0.85rem' }}>
-                            <strong>{field.name}</strong> {field.required ? '*' : ''} 
-                            <span style={{ color: '#aaa', marginLeft: '6px' }}>({field.type === 'text' ? 'Texto' : 'Opciones'})</span>
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.08)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          <span style={{ fontSize: '0.85rem', color: '#ddd' }}>
+                            <strong style={{ color: '#fff' }}>{field.name}</strong> {field.required ? '*' : ''} 
+                            <span style={{ color: 'rgba(255,255,255,0.4)', marginLeft: '6px' }}>({field.type === 'text' ? 'Texto' : 'Opciones'})</span>
                           </span>
-                          <button type="button" onClick={() => setCustomFields(prev => prev.filter((_, idx) => idx !== i))} style={{ color: 'red', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                          <button type="button" onClick={() => setCustomFields(prev => prev.filter((_, idx) => idx !== i))} style={{ color: '#ff6b6b', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <div style={{ marginTop: '1rem', borderTop: '1px solid #ccc', paddingTop: '1rem' }}>
-                    <h5 style={{ marginBottom: '8px', fontSize: '0.85rem' }}>Añadir Propiedad (ej. Talla, Jugador...)</h5>
-                    <input type="text" placeholder="Nombre (Ej. Talla)" style={{ width: '100%', marginBottom: '8px', padding: '6px', fontSize: '0.85rem' }} value={newFieldName} onChange={e => setNewFieldName(e.target.value)} />
+                  <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
+                    <h5 style={{ marginBottom: '8px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>Añadir Propiedad (ej. Talla, Jugador...)</h5>
+                    <input type="text" placeholder="Nombre (Ej. Talla)" style={{ width: '100%', marginBottom: '8px', padding: '8px 12px', fontSize: '0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} value={newFieldName} onChange={e => setNewFieldName(e.target.value)} />
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                      <select value={newFieldType} onChange={e => setNewFieldType(e.target.value as any)} style={{ padding: '6px', fontSize: '0.85rem', flex: 1 }}>
+                      <select value={newFieldType} onChange={e => setNewFieldType(e.target.value as any)} style={{ padding: '8px', fontSize: '0.85rem', flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}>
                         <option value="text">Input de Texto (Libre)</option>
                         <option value="categorical">Opciones (Selectores)</option>
                       </select>
-                      <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', gap: '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', fontSize: '0.8rem', gap: '4px', color: 'rgba(255,255,255,0.6)' }}>
                         <input type="checkbox" checked={newFieldReq} onChange={e => setNewFieldReq(e.target.checked)} />
                         Requerido
                       </label>
                     </div>
 
                     {newFieldType === 'categorical' && (
-                      <div style={{ marginBottom: '8px', padding: '8px', background: '#eef', borderRadius: '4px' }}>
+                      <div style={{ marginBottom: '8px', padding: '10px', background: 'rgba(212,175,55,0.08)', borderRadius: '6px', border: '1px solid rgba(212,175,55,0.2)' }}>
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                          {newFieldOptions.map(opt => <span key={opt} style={{ background: '#fff', padding: '2px 6px', borderRadius: '12px', fontSize: '0.75rem', border: '1px solid #aaa' }}>{opt}</span>)}
+                          {newFieldOptions.map(opt => <span key={opt} style={{ background: 'rgba(212,175,55,0.15)', padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37' }}>{opt}</span>)}
                         </div>
                         <div style={{ display: 'flex', gap: '4px' }}>
-                          <input type="text" placeholder="Ej. L" value={newFieldOptionText} onChange={e=>setNewFieldOptionText(e.target.value)} style={{ padding: '4px', fontSize: '0.8rem', flex: 1 }} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomFieldOption())}/>
-                          <button type="button" onClick={addCustomFieldOption} style={{ padding: '4px 8px' }}>+</button>
+                          <input type="text" placeholder="Ej. L" value={newFieldOptionText} onChange={e=>setNewFieldOptionText(e.target.value)} style={{ padding: '6px 10px', fontSize: '0.8rem', flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: '#fff' }} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomFieldOption())}/>
+                          <button type="button" onClick={addCustomFieldOption} style={{ padding: '6px 12px', background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '6px', color: '#d4af37', cursor: 'pointer' }}>+</button>
                         </div>
                       </div>
                     )}
                     
-                    <button type="button" onClick={commitNewField} disabled={!newFieldName} className="btn-secondary" style={{ width: '100%', fontSize: '0.8rem', padding: '6px' }}>
+                    <button type="button" onClick={commitNewField} disabled={!newFieldName} style={{ width: '100%', fontSize: '0.8rem', padding: '8px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#d4af37', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s' }}>
                       Añadir Campo
                     </button>
                   </div>

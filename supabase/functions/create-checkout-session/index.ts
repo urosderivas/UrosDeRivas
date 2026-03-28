@@ -9,6 +9,19 @@ const corsHeaders = {
 
 let stripe: Stripe;
 
+interface CartItemPayload {
+  itemId: string;
+  quantity: number;
+  options?: Record<string, string>;
+}
+
+interface DbItem {
+  id: string;
+  name: string;
+  price: number;
+  image_url?: string;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -44,7 +57,7 @@ serve(async (req: Request) => {
     }
 
     // Fetch all required items from database securely
-    const itemIds = cartItems.map((c: any) => c.itemId);
+    const itemIds = (cartItems as CartItemPayload[]).map((c) => c.itemId);
     const { data: dbItems, error: itemsError } = await supabaseAdminClient
       .from('market_items')
       .select('*')
@@ -54,45 +67,68 @@ serve(async (req: Request) => {
       throw new Error(`Failed to fetch items: ${itemsError?.message}`);
     }
 
-    const dbItemsMap = new Map(dbItems.map(i => [i.id, i]));
+    const dbItemsMap = new Map<string, DbItem>(dbItems.map((i: DbItem) => [i.id, i]));
     const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
-    const safeReturnUrl = returnUrl || `${origin}/market`;
+    const safeReturnUrl = returnUrl || `${origin}/UrosDeRivas/market`;
 
     const line_items: any[] = [];
     const orderInserts: any[] = [];
 
     // Validation & Stripe object construction
-    for (const cartItem of cartItems) {
+    for (const cartItem of cartItems as CartItemPayload[]) {
       const dbItem = dbItemsMap.get(cartItem.itemId);
       if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
 
-      const finalPrice = Math.round(dbItem.price * 100);
+      // Stripe requires unit_amount >= 1 (minimum 0.01€ = 1 cent)
+      const rawPrice = dbItem.price || 0;
+      const finalPrice = Math.max(Math.round(rawPrice * 100), 1);
+      
       const textOptionsList = Object.entries(cartItem.options || {}).map(([k,v]) => `${k}: ${v}`);
       const textOptionsStr = textOptionsList.join(' | ');
 
-      line_items.push({
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: dbItem.name,
-            description: textOptionsStr || undefined,
-            images: (dbItem.image_url && dbItem.image_url.startsWith('http')) ? [dbItem.image_url] : undefined,
+      // Only add as Stripe line item if price > 0 (skip free items from Stripe but still record in DB)
+      if (rawPrice > 0) {
+        line_items.push({
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: dbItem.name,
+              description: textOptionsStr || undefined,
+              images: (dbItem.image_url && dbItem.image_url.startsWith('http')) ? [dbItem.image_url] : undefined,
+            },
+            unit_amount: finalPrice, 
           },
-          unit_amount: finalPrice, 
-        },
-        quantity: cartItem.quantity,
-      });
+          quantity: cartItem.quantity,
+        });
+      }
 
-      // Prepare DB insert rows (Stripe session id will be injected after session creation)
+      // Prepare DB insert rows
       orderInserts.push({
         user_id: user.id,
         buyer_name: user?.email?.split('@')[0] || 'Unknown',
         buyer_email: userEmail,
         item_id: dbItem.id,
         item_name: dbItem.name,
-        size: textOptionsStr || null, // Saving variables here seamlessly matching existing Admin Panel bindings
-        amount: (finalPrice / 100) * cartItem.quantity,
+        size: textOptionsStr || null,
+        amount: rawPrice * cartItem.quantity,
         status: 'pending'
+      });
+    }
+
+    // If ALL items are free, we can't create a Stripe session — just record orders directly
+    if (line_items.length === 0) {
+      // No payable items - just insert orders as pending (click & collect / free items)
+      for (const order of orderInserts) {
+        order.stripe_session_id = `free_${crypto.randomUUID().substring(0,8)}`;
+      }
+      const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
+      if (insertError) {
+        throw new Error("Error guardando pedido gratuito: " + insertError.message);
+      }
+      // Return a special response that tells the frontend to show success directly
+      return new Response(JSON.stringify({ url: null, freeOrder: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
       });
     }
 
@@ -105,12 +141,11 @@ serve(async (req: Request) => {
       cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {
         userId: user.id,
-        // Short metadata representation to avoid 500chars limit. The true metadata resides safely in Supabase `orders` table.
         cartSummary: `Cart with ${cartItems.length} configurations.`
       }
     });
 
-    // Write all cart rows simultaneously sharing the exact same stripe_session_id natively bridging grouped UI tracking.
+    // Write all cart rows sharing the same stripe_session_id
     for (const order of orderInserts) {
       order.stripe_session_id = session.id;
     }
@@ -118,7 +153,7 @@ serve(async (req: Request) => {
     const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
     if (insertError) {
       console.error("Failed creating shadow orders in DB: ", insertError);
-      throw new Error("Order creation failed locally before stripe redirect. Error: " + insertError.message);
+      throw new Error("Order creation failed: " + insertError.message);
     }
 
     return new Response(JSON.stringify({ url: session.url }), {
@@ -126,6 +161,7 @@ serve(async (req: Request) => {
       status: 200,
     });
   } catch (error: any) {
+    console.error("Edge Function Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,

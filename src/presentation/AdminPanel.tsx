@@ -292,12 +292,21 @@ export function AdminPanel() {
   };
 
   const generateFactura = (groupKey: string, groupOrders: Order[]) => {
+    const first = groupOrders[0];
+    const isPaidStripe = stripeStatuses[first.id] === 'paid';
+    const allCompleted = groupOrders.every(o => o.status === 'completed');
+    
+    let paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending' = 'pending';
+    if (isPaidStripe) paymentStatus = 'paid_stripe';
+    else if (allCompleted) paymentStatus = 'paid_hand';
+    
     InvoiceGenerator.generatePdfFactura({
       orderGroupId: groupKey,
-      clientName: groupOrders[0].buyer_name,
-      clientEmail: groupOrders[0].buyer_email,
+      clientName: first.buyer_name,
+      clientEmail: first.buyer_email,
       orders: groupOrders,
-      date: new Date(groupOrders[0].created_at)
+      date: new Date(first.created_at),
+      paymentStatus
     });
   };
 
@@ -342,23 +351,25 @@ export function AdminPanel() {
               <th>Comprador / Fecha</th>
               <th>Desglose Pedido</th>
               <th>Total (€)</th>
-              <th>Estado Envío</th>
+              <th>Estado</th>
+              <th>Pago en mano</th>
               <th>Factura</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={6} className="table-empty">Cargando...</td></tr> : 
-             orders.length === 0 ? <tr><td colSpan={6} className="table-empty">Sin pedidos registrados.</td></tr> :
+            {loading ? <tr><td colSpan={7} className="table-empty">Cargando...</td></tr> : 
+             orders.length === 0 ? <tr><td colSpan={7} className="table-empty">Sin pedidos registrados.</td></tr> :
              Object.entries(grouped).map(([groupId, groupOrders]) => {
                const first = groupOrders[0];
                const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
                const allCompleted = groupOrders.every(o => o.status === 'completed');
+               const isPaidStripe = stripeStatuses[first.id] === 'paid';
                
                return (
                 <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
-                  <td className="monospace">
+                  <td className="monospace" style={{ fontSize: '0.8rem' }}>
                     {groupId.substring(0,12)}...
-                    {stripeStatuses[first.id] === 'paid' && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                    {isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
                   </td>
                   <td>
                     <strong>{first.buyer_name}</strong><br/>
@@ -382,7 +393,6 @@ export function AdminPanel() {
                       className="status-dropdown" 
                       value={allCompleted ? 'completed' : first.status} 
                       onChange={(e) => {
-                        // Bulk update the entire group
                         groupOrders.forEach(o => handleUpdateOrderStatus(o.id, e.target.value as Order['status']));
                       }}
                     >
@@ -391,6 +401,22 @@ export function AdminPanel() {
                       <option value="completed">Completado</option>
                       <option value="cancelled">Cancelado</option>
                     </select>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    {isPaidStripe ? (
+                      <span style={{ fontSize: '0.75rem', color: '#888' }}>Online</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={allCompleted}
+                        title="Marcar como pagado en mano"
+                        onChange={(e) => {
+                          const newStatus = e.target.checked ? 'completed' : 'pending';
+                          groupOrders.forEach(o => handleUpdateOrderStatus(o.id, newStatus as Order['status']));
+                        }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                    )}
                   </td>
                   <td>
                     <button className="btn-secondary" onClick={() => generateFactura(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>

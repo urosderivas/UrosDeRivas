@@ -44,6 +44,11 @@ export class StripeAdapter implements PaymentPort {
       throw new Error(errMsg);
     }
 
+    // Handle free order (all items at price 0)
+    if (data?.freeOrder) {
+      return `${returnUrl}?success=true&session_id=free`;
+    }
+
     if (!data?.url) throw new Error("Url de Stripe inválida.");
     return data.url;
   }
