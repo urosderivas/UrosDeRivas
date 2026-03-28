@@ -256,4 +256,37 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { error } = await supabase.rpc('delete_admin_order', { target_order_id: id });
     if (error) throw error;
   }
+
+  async createOrderLocal(items: { itemId: string; quantity: number; options: Record<string, string> }[], userEmail: string): Promise<void> {
+    const user = await this.getUser();
+    if (!user) throw new Error("Debes iniciar sesión.");
+
+    const sessionId = `local_${crypto.randomUUID().substring(0, 8)}`;
+    const rows = items.map(ci => {
+      const textOptionsStr = Object.entries(ci.options || {}).map(([k,v]) => `${k}: ${v}`).join(' | ');
+      return {
+        user_id: user.id,
+        buyer_name: user.email.split('@')[0],
+        buyer_email: userEmail,
+        item_id: ci.itemId,
+        size: textOptionsStr || null,
+        amount: 0, // Will be resolved from item price
+        status: 'pending',
+        stripe_session_id: sessionId
+      };
+    });
+
+    // Fetch actual prices from DB for security
+    const itemIds = items.map(i => i.itemId);
+    const { data: dbItems } = await supabase.from('market_items').select('id, price').in('id', itemIds);
+    if (dbItems) {
+      const priceMap = new Map(dbItems.map((i: any) => [i.id, i.price]));
+      for (let i = 0; i < rows.length; i++) {
+        rows[i].amount = (priceMap.get(items[i].itemId) || 0) * items[i].quantity;
+      }
+    }
+
+    const { error } = await supabase.from('orders').insert(rows);
+    if (error) throw new Error("Error creando pedido: " + error.message);
+  }
 }

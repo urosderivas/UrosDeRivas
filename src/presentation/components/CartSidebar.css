@@ -244,6 +244,28 @@
   cursor: not-allowed;
 }
 
+.collect-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: transparent;
+  color: #111;
+  border: 2px solid #d4af37;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+.collect-btn:hover {
+  background: rgba(212, 175, 55, 0.1);
+}
+.collect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 480px) {
   .cart-panel {
     width: 100%;

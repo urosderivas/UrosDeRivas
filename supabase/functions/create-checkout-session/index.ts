@@ -29,7 +29,7 @@ serve(async (req: Request) => {
 
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("La clave secreta de Stripe no está configurada en la Edge Function.");
+    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured.");
     
     if (!stripe) {
       stripe = new Stripe(stripeKey, {
@@ -48,9 +48,10 @@ serve(async (req: Request) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseAdminClient.auth.getUser(token);
 
-    if (authError || !user) throw new Error("Unauthorized");
+    if (authError || !user) throw new Error("Unauthorized: " + (authError?.message || "no user"));
 
-    const { cartItems, userEmail, returnUrl } = await req.json();
+    const body = await req.json();
+    const { cartItems, userEmail, returnUrl } = body;
 
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
       throw new Error("Cart is empty");
@@ -67,6 +68,10 @@ serve(async (req: Request) => {
       throw new Error(`Failed to fetch items: ${itemsError?.message}`);
     }
 
+    if (dbItems.length === 0) {
+      throw new Error(`No items found for IDs: ${itemIds.join(', ')}`);
+    }
+
     const dbItemsMap = new Map<string, DbItem>(dbItems.map((i: DbItem) => [i.id, i]));
     const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
     const safeReturnUrl = returnUrl || `${origin}/UrosDeRivas/market`;
@@ -79,14 +84,13 @@ serve(async (req: Request) => {
       const dbItem = dbItemsMap.get(cartItem.itemId);
       if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
 
-      // Stripe requires unit_amount >= 1 (minimum 0.01€ = 1 cent)
       const rawPrice = dbItem.price || 0;
       const finalPrice = Math.max(Math.round(rawPrice * 100), 1);
       
       const textOptionsList = Object.entries(cartItem.options || {}).map(([k,v]) => `${k}: ${v}`);
       const textOptionsStr = textOptionsList.join(' | ');
 
-      // Only add as Stripe line item if price > 0 (skip free items from Stripe but still record in DB)
+      // Only create Stripe line item for items with real prices
       if (rawPrice > 0) {
         line_items.push({
           price_data: {
@@ -102,30 +106,29 @@ serve(async (req: Request) => {
         });
       }
 
-      // Prepare DB insert rows
+      // DB order row — only columns that exist in the orders table schema:
+      // id, user_id, buyer_name, buyer_email, item_id, size, status, amount, stripe_session_id, created_at
       orderInserts.push({
         user_id: user.id,
         buyer_name: user?.email?.split('@')[0] || 'Unknown',
         buyer_email: userEmail,
         item_id: dbItem.id,
-        item_name: dbItem.name,
         size: textOptionsStr || null,
         amount: rawPrice * cartItem.quantity,
         status: 'pending'
       });
     }
 
-    // If ALL items are free, we can't create a Stripe session — just record orders directly
+    // If ALL items are free, record orders directly without Stripe
     if (line_items.length === 0) {
-      // No payable items - just insert orders as pending (click & collect / free items)
+      const freeSessionId = `free_${crypto.randomUUID().substring(0, 8)}`;
       for (const order of orderInserts) {
-        order.stripe_session_id = `free_${crypto.randomUUID().substring(0,8)}`;
+        order.stripe_session_id = freeSessionId;
       }
       const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
       if (insertError) {
-        throw new Error("Error guardando pedido gratuito: " + insertError.message);
+        throw new Error("Error saving free order: " + insertError.message);
       }
-      // Return a special response that tells the frontend to show success directly
       return new Response(JSON.stringify({ url: null, freeOrder: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -141,19 +144,18 @@ serve(async (req: Request) => {
       cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {
         userId: user.id,
-        cartSummary: `Cart with ${cartItems.length} configurations.`
+        cartSummary: `Cart: ${cartItems.length} items`
       }
     });
 
-    // Write all cart rows sharing the same stripe_session_id
+    // Attach stripe session ID to all orders
     for (const order of orderInserts) {
       order.stripe_session_id = session.id;
     }
 
     const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
     if (insertError) {
-      console.error("Failed creating shadow orders in DB: ", insertError);
-      throw new Error("Order creation failed: " + insertError.message);
+      throw new Error("DB insert failed: " + insertError.message);
     }
 
     return new Response(JSON.stringify({ url: session.url }), {

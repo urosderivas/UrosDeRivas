@@ -90,9 +90,10 @@ export function AdminPanel() {
         } catch(e) {}
         
         const rawId = cItem.id.toString().replace('clupik_', '');
-        const price = detailData.minPrice ? detailData.minPrice / 100 : 0;
+        const price = detailData.minPrice ? detailData.minPrice / 100 : (detailData.price ? detailData.price / 100 : 0);
         const imageUrl = `https://api.clupik.com/clubs/67/shop/image/${rawId}?format=large`;
         const name = detailData.title || cItem.title;
+        const desc = detailData.description || '';
         
         const customFields = [];
         let sizes: string[] = [];
@@ -120,7 +121,7 @@ export function AdminPanel() {
             name,
             price,
             imageUrl,
-            description: detailData.description || 'Producto importado de Clupik.',
+            description: desc,
             sizes: sizes,
             custom_fields: customFields
           } as any);

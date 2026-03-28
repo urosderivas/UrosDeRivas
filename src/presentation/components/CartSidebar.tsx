@@ -2,6 +2,7 @@ import { useStore } from '../store';
 import { X, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 import './CartSidebar.css';
 import { StripeAdapter } from '../../infrastructure/StripeAdapter';
+import { SupabaseAdapter } from '../../infrastructure/SupabaseAdapter';
 import { useState } from 'react';
 
 interface CartSidebarProps {
@@ -9,8 +10,11 @@ interface CartSidebarProps {
   onClose: () => void;
 }
 
+const stripeAdapter = new StripeAdapter();
+const supabaseAdapter = new SupabaseAdapter();
+
 export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
-  const { cart, removeFromCart, updateCartQuantity, user } = useStore();
+  const { cart, removeFromCart, updateCartQuantity, clearCart, user } = useStore();
   const [loading, setLoading] = useState(false);
 
   const total = cart.reduce((acc, current) => acc + current.product.price * current.quantity, 0);
@@ -18,7 +22,6 @@ export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
   const handleCheckout = async () => {
     if(!user) return alert("Inicia sesión para pagar.");
     setLoading(true);
-    const stripeAdapter = new StripeAdapter();
     try {
       const url = await stripeAdapter.createCheckoutSessionFromCart(cart, user.email);
       window.location.href = url;
@@ -26,6 +29,25 @@ export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
       alert("Error procesando carrito: " + e.message);
       setLoading(false);
     }
+  };
+
+  const handleClickCollect = async () => {
+    if(!user) return alert("Inicia sesión para reservar.");
+    setLoading(true);
+    try {
+      const items = cart.map(c => ({
+        itemId: c.product.id,
+        quantity: c.quantity,
+        options: c.selectedVariables || {}
+      }));
+      await supabaseAdapter.createOrderLocal(items, user.email);
+      clearCart();
+      onClose();
+      alert("✅ Pedido reservado correctamente. Pasa por la tienda para recogerlo y pagarlo.");
+    } catch(e: any) {
+      alert("Error creando reserva: " + e.message);
+    }
+    setLoading(false);
   };
 
   return (
@@ -81,8 +103,11 @@ export function CartSidebar({ isOpen, onClose }: CartSidebarProps) {
               <span>Total</span>
               <span>€{total.toFixed(2)}</span>
             </div>
-            <button className="btn-primary checkout-btn" onClick={handleCheckout} disabled={loading}>
-              {loading ? 'Procesando...' : 'Proceder al Pago Seguro'}
+            <button className="checkout-btn" onClick={handleCheckout} disabled={loading}>
+              {loading ? 'Procesando...' : 'Pagar Online (Stripe)'}
+            </button>
+            <button className="collect-btn" onClick={handleClickCollect} disabled={loading}>
+              🏪 Recoger y Pagar en Tienda
             </button>
           </div>
         )}
