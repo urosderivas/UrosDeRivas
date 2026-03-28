@@ -245,6 +245,28 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data.map(r => r.event_id);
   }
 
+  async getUserFullRegistrations(userId: string): Promise<any[]> {
+    const { data, error } = await supabase.from('event_registrations')
+      .select('*, events(title)')
+      .eq('user_id', userId);
+    if (error) return [];
+    // map to match 'order' interface for the modal
+    return data.map(r => ({
+      id: r.event_id + '_' + userId,
+      event_id: r.event_id,
+      buyer_name: r.attendee_names?.join(', ') || 'Desconocido',
+      buyer_email: r.user_email || '', 
+      item_name: r.events?.title || 'Campus',
+      size: `${r.num_attendees} asist. | ${r.selected_days?.length} días`,
+      quantity: 1,
+      amount: r.amount,
+      status: r.status,
+      stripe_session_id: r.stripe_session_id,
+      created_at: r.created_at,
+      type: 'campus'
+    }));
+  }
+
   async getEventAttendees(eventId: string): Promise<any[]> {
     return this.getCampusRegistrations(eventId);
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useStore } from './store';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
@@ -9,6 +10,7 @@ import './Market.css';
 const adapter = new SupabaseAdapter();
 
 export function MyOrdersModal({ onClose }: { onClose: () => void }) {
+  const { user } = useStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
@@ -17,14 +19,22 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
     const fetchOrders = async () => {
       try {
         const data = await adapter.getOrders();
-        setOrders(data || []);
+        let allOrders = data || [];
+        
+        if (user) {
+          const campusRegs = await adapter.getUserFullRegistrations(user.id);
+          allOrders = [...allOrders, ...campusRegs];
+          allOrders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        }
+        
+        setOrders(allOrders);
       } catch (e) {
         console.error("No se pudieron cargar los pedidos", e);
       }
       setLoading(false);
     };
     fetchOrders();
-  }, []);
+  }, [user]);
 
   // Group orders by stripe_session_id
   const grouped = orders.reduce((acc, order) => {

@@ -537,19 +537,33 @@ export function AdminPanel() {
     } catch (e: any) { showMessage('Error', e.message); }
   };
 
-  const exportEventsExcel = () => {
+  const exportEventsExcel = async () => {
+    setLoadingAttendees('export'); // show loading state
+
+    // Resolve any missing attendees for accurate report
+    const updatedAttendees = { ...attendees };
+    for (const ev of events) {
+      if (!updatedAttendees[ev.id]) {
+        try {
+          updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
+        } catch (e) { console.error(e); }
+      }
+    }
+    setAttendees(updatedAttendees);
+    setLoadingAttendees(null);
+
     const wb = XLSX.utils.book_new();
     const eventsSummary = events.map(e => ({
       'Campus': e.title,
       'Fechas': (e.dates || []).join(', ') || new Date(e.date).toLocaleDateString(),
       'Ubicación': e.location,
       'Precio/Día': e.price_per_day,
-      'Inscritos': attendees[e.id]?.length || 0
+      'Inscritos': updatedAttendees[e.id]?.length || 0
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), 'Resumen');
 
     events.forEach(e => {
-       const atts = attendees[e.id] || [];
+       const atts = updatedAttendees[e.id] || [];
        if (atts.length > 0) {
          const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => ({
            'Email': a.user_email,
@@ -575,8 +589,8 @@ export function AdminPanel() {
           <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
             📥 Importar Eventos Clupik
           </button>
-          <button className="btn-primary" onClick={exportEventsExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
-            📊 Exportar Excel
+          <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+            {loadingAttendees === 'export' ? 'Generando...' : '📊 Exportar Excel'}
           </button>
         </div>
       </div>

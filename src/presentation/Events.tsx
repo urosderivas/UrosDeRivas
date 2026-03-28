@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
+import { StripeAdapter } from '../infrastructure/StripeAdapter';
 import { EventModal } from './EventModal';
 import { Event, CustomField } from '../domain/entities';
 import { MessageModal } from './components/MessageModal';
@@ -9,6 +10,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import './Events.css';
 
 const adapter = new SupabaseAdapter();
+const stripeAdapter = new StripeAdapter();
 
 // Price calculation helper
 function calcCampusPrice(
@@ -128,6 +130,21 @@ export function Events() {
 
     setRegSubmitting(true);
     try {
+      if (!payLocal) {
+        // Stripe flow
+        const url = await stripeAdapter.createCampusCheckoutSession({
+          eventId: ev.id,
+          title: ev.title,
+          selectedDays: regSelectedDays,
+          numAttendees: regNumAttendees,
+          attendeeNames: names,
+          amount: pricing.total,
+          customData: regCustomData
+        }, user.email || '');
+        window.location.href = url;
+        return;
+      }
+
       await adapter.createCampusRegistration({
         eventId: ev.id,
         selectedDays: regSelectedDays,
@@ -135,15 +152,10 @@ export function Events() {
         attendeeNames: names,
         amount: pricing.total,
         customData: regCustomData,
-        status: payLocal ? 'pending' : 'pending',
+        status: 'pending',
       });
       setUserRegistrations(prev => [...prev, ev.id]);
-      showMessage(
-        payLocal ? 'Reserva Confirmada' : 'Inscripción Registrada',
-        payLocal
-          ? `✅ Inscripción reservada por €${pricing.total.toFixed(2)}. Paga en el campus.`
-          : `✅ Inscripción registrada por €${pricing.total.toFixed(2)}.`
-      );
+      showMessage('Reserva Confirmada', `✅ Inscripción reservada por €${pricing.total.toFixed(2)}. Paga en el campus.`);
       setExpandedId(null);
     } catch (e: any) {
       showMessage('Error', e.message);
@@ -307,15 +319,15 @@ export function Events() {
                             )}
 
                             {/* Price calculation */}
-                            {regSelectedDays.length > 0 && (
-                              <div style={{
-                                background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: '10px',
-                                padding: '16px', marginBottom: '16px',
-                              }}>
-                                {(() => {
-                                  const p = calcCampusPrice(ev, regSelectedDays.length, regNumAttendees);
-                                  return (
-                                    <>
+                            {(() => {
+                              const p = calcCampusPrice(ev, regSelectedDays.length, regNumAttendees);
+                              return (
+                                <>
+                                  {regSelectedDays.length > 0 && (
+                                    <div style={{
+                                      background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: '10px',
+                                      padding: '16px', marginBottom: '16px',
+                                    }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '4px' }}>
                                         <span>{regSelectedDays.length} días × {regNumAttendees} asist. × {p.pricePerDay.toFixed(2)}€/día</span>
                                         <span>{p.subtotal.toFixed(2)}€</span>
@@ -330,23 +342,33 @@ export function Events() {
                                         <span>Total</span>
                                         <span>{p.total.toFixed(2)}€</span>
                                       </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            )}
+                                    </div>
+                                  )}
 
-                            {/* Action buttons */}
-                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                              <button onClick={() => handleRegister(ev, true)} disabled={regSubmitting}
-                                style={{
-                                  flex: 1, padding: '12px', fontWeight: 700, fontSize: '0.95rem',
-                                  background: 'transparent', color: '#d4af37', border: '2px solid #d4af37',
-                                  borderRadius: '10px', cursor: 'pointer', minWidth: '200px',
-                                }}>
-                                {regSubmitting ? 'Procesando...' : '🏪 Reservar y Pagar en Campus'}
-                              </button>
-                            </div>
+                                  {/* Action buttons */}
+                                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                    {p.total > 0 && (
+                                      <button onClick={() => handleRegister(ev, false)} disabled={regSubmitting}
+                                        style={{
+                                          flex: 1, padding: '12px', fontWeight: 700, fontSize: '0.95rem',
+                                          background: '#635bff', color: '#fff', border: 'none',
+                                          borderRadius: '10px', cursor: 'pointer', minWidth: '200px',
+                                        }}>
+                                        {regSubmitting ? 'Procesando...' : '💳 Pagar Online con Stripe'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => handleRegister(ev, true)} disabled={regSubmitting}
+                                      style={{
+                                        flex: 1, padding: '12px', fontWeight: 700, fontSize: '0.95rem',
+                                        background: 'transparent', color: '#d4af37', border: '2px solid #d4af37',
+                                        borderRadius: '10px', cursor: 'pointer', minWidth: '200px',
+                                      }}>
+                                      {regSubmitting ? 'Procesando...' : p.total === 0 ? '✅ Inscribirse (Gratis)' : '🏪 Reservar y Pagar en Campus'}
+                                    </button>
+                                  </div>
+                                </>
+                              );
+                            })()}
 
                             {!user && (
                               <p style={{ color: '#888', fontSize: '0.85rem', marginTop: '10px', textAlign: 'center' }}>

@@ -51,7 +51,52 @@ serve(async (req: Request) => {
     if (authError || !user) throw new Error("Unauthorized: " + (authError?.message || "no user"));
 
     const body = await req.json();
-    const { cartItems, userEmail, returnUrl } = body;
+    const { checkoutType, cartItems, userEmail, returnUrl, campusRegistration } = body;
+    const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
+    const safeReturnUrl = returnUrl || `${origin}/UrosDeRivas/market`;
+
+    if (checkoutType === 'campus') {
+      if (!campusRegistration) throw new Error("Missing campus registration data");
+      
+      const line_items = [{
+        price_data: {
+          currency: 'eur',
+          product_data: { 
+            name: `Inscripción: ${campusRegistration.title}`, 
+            description: `${campusRegistration.numAttendees} asist. | ${campusRegistration.selectedDays.length} días`
+          },
+          unit_amount: Math.max(Math.round(campusRegistration.amount * 100), 1),
+        },
+        quantity: 1,
+      }];
+
+      const session = await stripe.checkout.sessions.create({
+        customer_email: userEmail,
+        payment_method_types: ['card'],
+        line_items,
+        mode: 'payment',
+        success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${safeReturnUrl}?canceled=true`,
+        metadata: { userId: user.id, eventId: campusRegistration.eventId, type: 'campus' }
+      });
+
+      // Upsert registration as pending
+      const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
+        event_id: campusRegistration.eventId,
+        user_id: user.id,
+        selected_days: campusRegistration.selectedDays,
+        num_attendees: campusRegistration.numAttendees,
+        attendee_names: campusRegistration.attendeeNames,
+        amount: campusRegistration.amount,
+        status: 'pending',
+        stripe_session_id: session.id,
+        custom_data: campusRegistration.customData
+      }, { onConflict: 'event_id,user_id' });
+
+      if (insertError) throw new Error("DB insert failed: " + insertError.message);
+
+      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
 
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
       throw new Error("Cart is empty");
@@ -73,8 +118,6 @@ serve(async (req: Request) => {
     }
 
     const dbItemsMap = new Map<string, DbItem>(dbItems.map((i: DbItem) => [i.id, i]));
-    const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
-    const safeReturnUrl = returnUrl || `${origin}/UrosDeRivas/market`;
 
     const line_items: any[] = [];
     const orderInserts: any[] = [];
