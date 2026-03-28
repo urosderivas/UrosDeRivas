@@ -32,11 +32,35 @@ export interface CartItem {
 export interface Event {
   id: string;
   title: string;
-  date: string; // ISO string
+  date: string;
+  dates: string[];
   location: string;
   imageUrl?: string;
   description?: string;
-  type: 'match' | 'training' | 'campus';
+  schedule?: string;
+  type: 'campus';
+  price_per_day: number;
+  price_tiers: { minDays: number; pricePerDay: number }[];
+  attendee_discounts: { minAttendees: number; discountPct: number }[];
+  custom_fields?: CustomField[];
+  max_capacity?: number;
+  active: boolean;
+}
+
+export interface CampusRegistration {
+  id: string;
+  event_id: string;
+  event_title?: string;
+  user_id: string;
+  user_email?: string;
+  selected_days: string[];
+  num_attendees: number;
+  attendee_names: string[];
+  amount: number;
+  status: 'pending' | 'completed' | 'cancelled';
+  stripe_session_id?: string;
+  custom_data: Record<string, string>;
+  created_at: string;
 }
 
 export interface SystemLog {

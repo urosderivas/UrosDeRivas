@@ -21,7 +21,7 @@ export function Navbar() {
         
         <div className={`nav-links ${isOpen ? 'open' : ''}`}>
           <Link to="/" onClick={() => setIsOpen(false)}>INICIO</Link>
-          <Link to="/events" onClick={() => setIsOpen(false)}>EVENTOS</Link>
+          <Link to="/events" onClick={() => setIsOpen(false)}>CAMPUS</Link>
           <Link to="/market" onClick={() => setIsOpen(false)}>TIENDA</Link>
           <Link to="/clasificaciones" onClick={() => setIsOpen(false)}>CLASIFICACIONES</Link>
           {user && (user.role === 'admin' || user.role === 'coach') && (

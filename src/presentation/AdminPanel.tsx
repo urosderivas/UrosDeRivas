@@ -508,81 +508,149 @@ export function AdminPanel() {
     setLoadingAttendees(null);
   };
 
+  const handleImportClupikEvents = async () => {
+    try {
+      const res = await fetch('https://api.clupik.com/clubs/67/publications?expand=user&languageId=709&languageCode=es&limit=15');
+      if (!res.ok) throw new Error('No se pudo conectar con Clupik');
+      const data = await res.json();
+      const pubs = Array.isArray(data) ? data : [];
+      let importedCount = 0;
+      for (const p of pubs) {
+        const title = p.card?.title || p.slug || 'Campus importado';
+        const rawText = p.card?.text || '';
+        const imgMatch = rawText.match(/<img[^>]+src=["']?([^"'>]+)["']/i);
+        const imageUrl = imgMatch ? imgMatch[1] : undefined;
+        const description = p.preview || '';
+        const pubDate = p.date ? new Date(p.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        // Only import if title contains 'campus' (case insensitive)
+        if (!title.toLowerCase().includes('campus')) continue;
+        await adapter.createEvent({
+          title, date: pubDate, dates: [], location: 'Club Uros de Rivas',
+          imageUrl, description, schedule: '', type: 'campus',
+          price_per_day: 0, price_tiers: [], attendee_discounts: [],
+          custom_fields: [], active: false,
+        });
+        importedCount++;
+      }
+      showMessage('Importación Clupik', `Se han importado ${importedCount} campus. Revisa y configura precios y fechas.`);
+      fetchData();
+    } catch (e: any) { showMessage('Error', e.message); }
+  };
+
   const exportEventsExcel = () => {
     const wb = XLSX.utils.book_new();
     const eventsSummary = events.map(e => ({
-      'Evento': e.title,
-      'Fecha': new Date(e.date).toLocaleDateString(),
-      'Tipo': e.type,
+      'Campus': e.title,
+      'Fechas': (e.dates || []).join(', ') || new Date(e.date).toLocaleDateString(),
+      'Ubicación': e.location,
+      'Precio/Día': e.price_per_day,
       'Inscritos': attendees[e.id]?.length || 0
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), "Resumen");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), 'Resumen');
 
     events.forEach(e => {
        const atts = attendees[e.id] || [];
        if (atts.length > 0) {
          const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => ({
            'Email': a.user_email,
+           'Días': (a.selected_days || []).join(', '),
+           'Asistentes': a.num_attendees || 1,
+           'Nombres': (a.attendee_names || []).join(', '),
+           'Importe': a.amount || 0,
+           'Estado': a.status || 'pending',
            'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES')
          })));
-         // Avoid invalid characters or lengths in sheet names
-         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0,31) || 'Evento';
-         XLSX.utils.book_append_sheet(wb, sheet, cleanName); 
+         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0,31) || 'Campus';
+         XLSX.utils.book_append_sheet(wb, sheet, cleanName);
        }
     });
-    XLSX.writeFile(wb, "Reporte_Eventos_Uros.xlsx");
+    XLSX.writeFile(wb, 'Reporte_Campus_Uros.xlsx');
   };
 
   const renderEvents = () => (
     <div className="admin-table-container">
-      <div className="table-toolbar" style={{ justifyContent: 'space-between' }}>
-        <h3>Inscripciones a Eventos Propios</h3>
-        <button className="btn-primary" onClick={exportEventsExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
-          📊 Exportar Excel Completo
-        </button>
+      <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        <h3>Campus & Inscripciones</h3>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
+            📥 Importar Eventos Clupik
+          </button>
+          <button className="btn-primary" onClick={exportEventsExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+            📊 Exportar Excel
+          </button>
+        </div>
       </div>
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Evento</th>
-            <th>Fecha</th>
-            <th>Tipo</th>
-            <th>Inscritos</th>
+            <th>Campus</th>
+            <th>Fechas</th>
+            <th>€/Día</th>
+            <th>Activo</th>
+            <th>Inscripciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={4} className="table-empty">Cargando eventos...</td></tr> :
-           events.length === 0 ? <tr><td colSpan={4} className="table-empty">No hay eventos propios guardados en el sistema.</td></tr> :
+          {loading ? <tr><td colSpan={5} className="table-empty">Cargando campus...</td></tr> :
+           events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
            events.map(ev => (
             <Fragment key={ev.id}>
              <tr>
-               <td>{ev.title}</td>
-               <td>{new Date(ev.date).toLocaleDateString()}</td>
-               <td><span className="status-badge processing">{ev.type.toUpperCase()}</span></td>
+               <td><strong>{ev.title}</strong></td>
+               <td style={{ fontSize: '0.8rem' }}>
+                 {ev.dates && ev.dates.length > 0
+                   ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
+                   : new Date(ev.date).toLocaleDateString()}
+               </td>
+               <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
+               <td><span className={`status-badge ${ev.active ? 'completed' : 'cancelled'}`}>{ev.active ? 'SÍ' : 'NO'}</span></td>
                <td>
                  <button className="btn-secondary" onClick={() => handleLoadAttendees(ev.id)} disabled={loadingAttendees === ev.id}>
-                   {loadingAttendees === ev.id ? 'Cargando...' : 'Ver Asistentes'}
+                   {loadingAttendees === ev.id ? 'Cargando...' : 'Ver Inscritos'}
                  </button>
                </td>
              </tr>
              {attendees[ev.id] && (
                <tr className="attendees-row">
-                 <td colSpan={4}>
+                 <td colSpan={5}>
                    <div className="attendees-list">
-                     <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Usuarios Inscritos ({attendees[ev.id].length}):</strong>
-                     {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito todavía.</p> : (
-                       <table className="admin-table" style={{ marginTop: '0.5rem' }}>
-                         <thead><tr><th>Email</th><th>Fecha Inscripción</th><th>Acciones</th></tr></thead>
+                     <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Inscripciones ({attendees[ev.id].length}):</strong>
+                     {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito.</p> : (
+                       <table className="admin-table" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                         <thead><tr><th>Email</th><th>Días</th><th>Asist.</th><th>Nombres</th><th>Importe</th><th>Estado</th><th>Acciones</th></tr></thead>
                          <tbody>
-                           {attendees[ev.id].map((att: any) => (
+                           {attendees[ev.id].map((att: any) => {
+                             const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
+                             return (
                              <tr key={att.user_id}>
                                <td className="monospace">{att.user_email}</td>
-                               <td>{new Date(att.created_at).toLocaleString('es-ES')}</td>
+                               <td style={{ fontSize: '0.8rem' }}>{(att.selected_days || []).length} días</td>
+                               <td>{att.num_attendees || 1}</td>
+                               <td style={{ fontSize: '0.8rem' }}>{(att.attendee_names || []).join(', ') || '-'}</td>
+                               <td style={{ fontWeight: 700, color: '#d4af37' }}>{att.amount ? `${Number(att.amount).toFixed(2)}€` : '-'}</td>
+                               <td>
+                                 {isLocal ? (
+                                   <select value={att.status || 'pending'}
+                                     onChange={async (e) => {
+                                       try {
+                                         await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                         handleLoadAttendees(ev.id);
+                                       } catch (err: any) { showMessage('Error', err.message); }
+                                     }}
+                                     style={{ padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
+                                     <option value="pending">Pendiente</option>
+                                     <option value="completed">Completado</option>
+                                     <option value="cancelled">Cancelado</option>
+                                   </select>
+                                 ) : (
+                                   <span className={`status-badge ${att.status}`}>{(att.status || 'pending').toUpperCase()}</span>
+                                 )}
+                               </td>
                                <td>
                                  <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
                                    setConfirmPrompt({
                                      open: true,
-                                     message: `¿Eliminar a ${att.user_email} de este evento?`,
+                                     message: `¿Eliminar inscripción de ${att.user_email}?`,
                                      action: async () => {
                                        try {
                                          await adapter.removeEventRegistration(ev.id, att.user_id);
@@ -595,7 +663,8 @@ export function AdminPanel() {
                                  </button>
                                </td>
                              </tr>
-                           ))}
+                             );
+                           })}
                          </tbody>
                        </table>
                      )}
@@ -682,7 +751,7 @@ export function AdminPanel() {
           </button>
         )}
         <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
-          Eventos & Inscripciones
+          Campus & Inscripciones
         </button>
       </div>
 

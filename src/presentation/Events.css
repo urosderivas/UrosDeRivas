@@ -259,3 +259,25 @@
     max-height: 250px;
   }
 }
+
+/* Campus Registration Form */
+.campus-registration-form {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(212,175,55,0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+.campus-registered-box {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.3);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  margin-top: 1rem;
+  color: #10b981;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+

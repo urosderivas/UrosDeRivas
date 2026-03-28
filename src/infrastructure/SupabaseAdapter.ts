@@ -98,16 +98,24 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async getEvents(): Promise<Event[]> {
-    const { data, error } = await supabase.from('events').select('*');
+    const { data, error } = await supabase.from('events').select('*').order('date', { ascending: false });
     if (error) throw error;
-    return data.map(e => ({
+    return data.map((e: any) => ({
       id: e.id,
       title: e.title,
       date: e.date,
+      dates: e.dates || [],
       location: e.location,
       imageUrl: e.image_url,
       description: e.description,
+      schedule: e.schedule,
       type: e.type,
+      price_per_day: e.price_per_day || 0,
+      price_tiers: e.price_tiers || [],
+      attendee_discounts: e.attendee_discounts || [],
+      custom_fields: e.custom_fields || [],
+      max_capacity: e.max_capacity,
+      active: e.active !== false,
     }));
   }
 
@@ -116,29 +124,55 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { data, error } = await supabase.from('events').insert({
       title: event.title,
       date: event.date,
+      dates: event.dates || [],
       location: event.location,
       image_url: event.imageUrl,
       description: event.description,
-      type: event.type,
+      schedule: event.schedule,
+      type: 'campus',
+      price_per_day: event.price_per_day || 0,
+      price_tiers: event.price_tiers || [],
+      attendee_discounts: event.attendee_discounts || [],
+      custom_fields: event.custom_fields || [],
+      max_capacity: event.max_capacity,
+      active: event.active !== false,
       created_by: user?.id,
     }).select().single();
     if (error) throw error;
-    return { id: data.id, title: data.title, date: data.date, location: data.location, imageUrl: data.image_url, description: data.description, type: data.type };
+    return this.mapEvent(data);
   }
 
   async updateEvent(id: string, event: Partial<Event>): Promise<Event> {
     const payload: any = {};
-    if (event.title) payload.title = event.title;
-    if (event.date) payload.date = event.date;
-    if (event.location) payload.location = event.location;
-    if (event.imageUrl) payload.image_url = event.imageUrl;
-    if (event.description) payload.description = event.description;
-    if (event.type) payload.type = event.type;
+    if (event.title !== undefined) payload.title = event.title;
+    if (event.date !== undefined) payload.date = event.date;
+    if (event.dates !== undefined) payload.dates = event.dates;
+    if (event.location !== undefined) payload.location = event.location;
+    if (event.imageUrl !== undefined) payload.image_url = event.imageUrl;
+    if (event.description !== undefined) payload.description = event.description;
+    if (event.schedule !== undefined) payload.schedule = event.schedule;
+    if (event.price_per_day !== undefined) payload.price_per_day = event.price_per_day;
+    if (event.price_tiers !== undefined) payload.price_tiers = event.price_tiers;
+    if (event.attendee_discounts !== undefined) payload.attendee_discounts = event.attendee_discounts;
+    if (event.custom_fields !== undefined) payload.custom_fields = event.custom_fields;
+    if (event.max_capacity !== undefined) payload.max_capacity = event.max_capacity;
+    if (event.active !== undefined) payload.active = event.active;
+    payload.type = 'campus';
 
     const { data, error } = await supabase.from('events').update(payload).eq('id', id).select().single();
     if (error) throw error;
-    // Map back
-    return { id: data.id, title: data.title, date: data.date, location: data.location, imageUrl: data.image_url, description: data.description, type: data.type };
+    return this.mapEvent(data);
+  }
+
+  private mapEvent(e: any): Event {
+    return {
+      id: e.id, title: e.title, date: e.date, dates: e.dates || [],
+      location: e.location, imageUrl: e.image_url, description: e.description,
+      schedule: e.schedule, type: e.type,
+      price_per_day: e.price_per_day || 0, price_tiers: e.price_tiers || [],
+      attendee_discounts: e.attendee_discounts || [], custom_fields: e.custom_fields || [],
+      max_capacity: e.max_capacity, active: e.active !== false,
+    };
   }
 
   async deleteEvent(id: string): Promise<void> {
@@ -147,8 +181,54 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   // ============================================
-  // EVENT REGISTRATIONS
+  // CAMPUS REGISTRATIONS
   // ============================================
+  async getCampusRegistrations(eventId: string): Promise<any[]> {
+    const { data, error } = await supabase.rpc('get_event_registrations', { target_event_id: eventId });
+    if (error) { console.error('Error fetching registrations', error); return []; }
+    // Enrich with registration details from the table
+    const { data: regs } = await supabase.from('event_registrations')
+      .select('*')
+      .eq('event_id', eventId);
+    const regMap = (regs || []).reduce((acc: any, r: any) => { acc[r.user_id] = r; return acc; }, {});
+    return (data || []).map((d: any) => ({
+      ...d,
+      selected_days: regMap[d.user_id]?.selected_days || [],
+      num_attendees: regMap[d.user_id]?.num_attendees || 1,
+      attendee_names: regMap[d.user_id]?.attendee_names || [],
+      amount: regMap[d.user_id]?.amount || 0,
+      status: regMap[d.user_id]?.status || 'pending',
+      stripe_session_id: regMap[d.user_id]?.stripe_session_id,
+      custom_data: regMap[d.user_id]?.custom_data || {},
+    }));
+  }
+
+  async createCampusRegistration(data: {
+    eventId: string;
+    selectedDays: string[];
+    numAttendees: number;
+    attendeeNames: string[];
+    amount: number;
+    customData: Record<string, string>;
+    stripeSessionId?: string;
+    status?: string;
+  }): Promise<void> {
+    const user = await this.getUser();
+    if (!user) throw new Error('No autenticado');
+    const { error } = await supabase.from('event_registrations').upsert({
+      event_id: data.eventId,
+      user_id: user.id,
+      selected_days: data.selectedDays,
+      num_attendees: data.numAttendees,
+      attendee_names: data.attendeeNames,
+      amount: data.amount,
+      status: data.status || 'pending',
+      stripe_session_id: data.stripeSessionId || `local_${Date.now()}`,
+      custom_data: data.customData,
+    }, { onConflict: 'event_id,user_id' });
+    if (error) throw error;
+  }
+
   async toggleEventRegistration(eventId: string, userId: string, isRegistered: boolean): Promise<void> {
     if (isRegistered) {
       const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
@@ -166,13 +246,18 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async getEventAttendees(eventId: string): Promise<any[]> {
-    const { data, error } = await supabase.rpc('get_event_registrations', { target_event_id: eventId });
-    if (error) { console.error('Error fetching attendees', error); return []; }
-    return data || [];
+    return this.getCampusRegistrations(eventId);
   }
 
   async removeEventRegistration(eventId: string, userId: string): Promise<void> {
     const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
+    if (error) throw error;
+  }
+
+  async updateRegistrationStatus(eventId: string, userId: string, status: string): Promise<void> {
+    const { error } = await supabase.from('event_registrations')
+      .update({ status })
+      .match({ event_id: eventId, user_id: userId });
     if (error) throw error;
   }
 
