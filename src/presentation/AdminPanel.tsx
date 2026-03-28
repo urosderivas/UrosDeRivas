@@ -6,7 +6,7 @@ import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { Trash2, RefreshCw, Pencil, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Trash2, RefreshCw, Pencil, XCircle } from 'lucide-react';
 import './AdminPanel.css';
 import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';

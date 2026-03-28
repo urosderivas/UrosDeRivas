@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, ShoppingBag, Type, List } from 'lucide-react';
+import { X, ShoppingBag } from 'lucide-react';
 import { MarketItem, CustomField } from '../domain/entities';
 import './MarketItemModal.css';
 
-const PRESET_SIZES = ['5/6', '7/8', '9/11', '12/14', '16', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'];
+
 
 interface Props {
   isOpen: boolean;
@@ -18,8 +18,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
   const [stripePriceId, setStripePriceId] = useState('');
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [customSize, setCustomSize] = useState('');
+
   
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [saving, setSaving] = useState(false);
@@ -39,26 +38,16 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
       setImageUrl(initial.imageUrl);
       setDescription(initial.description || '');
       setStripePriceId(initial.stripe_price_id || '');
-      setSelectedSizes(initial.sizes || []);
+
       setCustomFields(initial.custom_fields || []);
     } else {
       setName(''); setPrice(''); setImageUrl(''); setDescription('');
-      setStripePriceId(''); setSelectedSizes([]); setCustomFields([]);
+      setStripePriceId(''); setCustomFields([]);
     }
     setError('');
   }, [initial, isOpen]);
 
-  const toggleSize = (s: string) => {
-    setSelectedSizes(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-  };
 
-  const addCustomSize = () => {
-    const trimmed = customSize.trim().toUpperCase();
-    if (trimmed && !selectedSizes.includes(trimmed)) {
-      setSelectedSizes(prev => [...prev, trimmed]);
-    }
-    setCustomSize('');
-  };
 
   const addCustomFieldOption = () => {
     const trimmed = newFieldOptionText.trim();
@@ -94,7 +83,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
         price: parseFloat(price),
         imageUrl,
         description,
-        sizes: selectedSizes,
+        sizes: [],
         custom_fields: customFields,
         stripe_price_id: stripePriceId || undefined,
       });
