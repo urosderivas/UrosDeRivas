@@ -14,8 +14,8 @@ export function MessageModal({ isOpen, onClose, title, message }: Props) {
       <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: '1.5', margin: '0 0 1rem 0' }}>
         {message}
       </p>
-      <div className="modal-actions" style={{ borderTop: 'none', paddingTop: 0 }}>
-        <button type="button" onClick={onClose} className="btn-modal-save">Entendido</button>
+      <div className="modal-actions" style={{ borderTop: 'none', paddingTop: 0, justifyContent: 'center', marginTop: '1rem' }}>
+        <button type="button" onClick={onClose} className="btn-modal-save" style={{ flex: '1' }}>ENTENDIDO</button>
       </div>
     </Modal>
   );

@@ -4,6 +4,13 @@ export interface User {
   role: 'admin' | 'coach' | 'user';
 }
 
+export interface CustomField {
+  name: string;
+  type: 'text' | 'categorical';
+  options?: string[];
+  required: boolean;
+}
+
 export interface MarketItem {
   id: string;
   name: string;
@@ -12,6 +19,14 @@ export interface MarketItem {
   description?: string;
   sizes?: string[];
   stripe_price_id?: string;
+  custom_fields?: CustomField[];
+}
+
+export interface CartItem {
+  cartItemId: string;
+  product: MarketItem;
+  quantity: number;
+  selectedVariables: Record<string, string>;
 }
 
 export interface Event {

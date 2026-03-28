@@ -58,6 +58,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       imageUrl: item.image_url,
       description: item.description,
       sizes: item.sizes,
+      custom_fields: item.custom_fields || [],
       stripe_price_id: item.stripe_price_id,
     }));
   }
@@ -69,10 +70,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       image_url: item.imageUrl,
       description: item.description,
       sizes: item.sizes || [],
+      custom_fields: item.custom_fields || [],
       stripe_price_id: item.stripe_price_id,
     }).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, stripe_price_id: data.stripe_price_id };
+    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
   }
 
   async updateItem(id: string, item: Partial<MarketItem>): Promise<MarketItem> {
@@ -82,11 +84,12 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (item.imageUrl) payload.image_url = item.imageUrl;
     if (item.description !== undefined) payload.description = item.description;
     if (item.sizes !== undefined) payload.sizes = item.sizes;
+    if (item.custom_fields !== undefined) payload.custom_fields = item.custom_fields;
     if (item.stripe_price_id !== undefined) payload.stripe_price_id = item.stripe_price_id;
 
     const { data, error } = await supabase.from('market_items').update(payload).eq('id', id).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, stripe_price_id: data.stripe_price_id };
+    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
   }
 
   async deleteItem(id: string): Promise<void> {
@@ -247,5 +250,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { data, error } = await supabase.from('orders').update({ status }).eq('id', id).select().single();
     if (error) throw error;
     return data;
+  }
+
+  async deleteOrder(id: string): Promise<void> {
+    const { error } = await supabase.rpc('delete_admin_order', { target_order_id: id });
+    if (error) throw error;
   }
 }

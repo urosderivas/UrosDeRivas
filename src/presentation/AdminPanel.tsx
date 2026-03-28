@@ -1,12 +1,15 @@
 import { useEffect, useState, Fragment } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
-import { Order, MarketItem, User as DomainUser, SystemLog, Event } from '../domain/entities';
+import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
 import { AdminGuard } from './AdminGuard';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
+import { ConfirmModal } from './components/ConfirmModal';
 import { Trash2, RefreshCw, Pencil, CheckCircle, Clock, XCircle } from 'lucide-react';
 import './AdminPanel.css';
+import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
+import * as XLSX from 'xlsx';
 
 const adapter = new SupabaseAdapter();
 
@@ -21,6 +24,7 @@ export function AdminPanel() {
   const [events, setEvents] = useState<Event[]>([]);
   const [attendees, setAttendees] = useState<Record<string, any[]>>({});
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
+  const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean, action: (() => void) | null, message: string }>({ open: false, action: null, message: '' });
 
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
@@ -43,6 +47,10 @@ export function AdminPanel() {
       } else if (activeTab === 'stats') {
         const data = await adapter.getLogs();
         setLogs(data);
+        if (user?.role === 'admin') {
+          const sysUsers = await adapter.getSystemUsers();
+          setSystemUsers(sysUsers);
+        }
       } else if (activeTab === 'orders' && user?.role === 'admin') {
         const data = await adapter.getOrders();
         setOrders(data);
@@ -51,7 +59,6 @@ export function AdminPanel() {
       } else if (activeTab === 'market' && user?.role === 'admin') {
         const data = await adapter.getItems();
         setItems(data);
-        await syncClupikProducts(data);
       } else if (activeTab === 'events' && (user?.role === 'admin' || user?.role === 'coach')) {
         const data = await adapter.getEvents();
         setEvents(data);
@@ -62,36 +69,72 @@ export function AdminPanel() {
     setLoading(false);
   };
 
-  const syncClupikProducts = async (dbItems: MarketItem[]) => {
+  const handleMigrateClupikData = async () => {
+    if (!window.confirm("¿Importar todo el catálogo de Clupik a la base local?\n\nEsto añadirá variables automáticas (Jugador, Equipo) y detendrá la conexión externa en tiempo real.")) return;
     try {
+      setLoading(true);
       const res = await fetch('https://api.clupik.com/clubs/67/shop/products/public/home?limit=100');
-      if (!res.ok) return;
+      if (!res.ok) throw new Error("API Clupik inaccesible");
       const data = await res.json();
-      const clupikItems = data.value || [];
+      const clupikItems = data.value || data.data || data || [];
       
       let syncedCount = 0;
       for (const cItem of clupikItems) {
-        // Prevent dupes by checking name or ID watermark
-        const exists = dbItems.some(dbItem => dbItem.name === cItem.title || dbItem.description?.includes(`[Clupik ID: ${cItem.id}]`));
+        let detailData = cItem;
+        try {
+          const detailRes = await fetch(`https://api.clupik.com/clubs/67/shop/product/${cItem.id}`);
+          if(detailRes.ok) {
+            const rawDetail = await detailRes.json();
+            detailData = rawDetail.data || rawDetail;
+          }
+        } catch(e) {}
         
-        if (!exists) {
+        const rawId = cItem.id.toString().replace('clupik_', '');
+        const price = detailData.minPrice ? detailData.minPrice / 100 : 0;
+        const imageUrl = `https://api.clupik.com/clubs/67/shop/image/${rawId}?format=large`;
+        const name = detailData.title || cItem.title;
+        
+        const customFields = [];
+        let sizes: string[] = [];
+        
+        if (detailData.productGroupAttributes) {
+          const attr = detailData.productGroupAttributes.find((a: any) => a.name === "Tallas" || a.name?.Tallas);
+          if (attr && Array.isArray(attr.values)) {
+            sizes = attr.values;
+            customFields.push({ name: 'Talla', type: 'categorical', options: attr.values, required: true });
+          }
+        }
+        
+        const nameMatcher = name.toLowerCase();
+        if (nameMatcher.includes('cubre') || nameMatcher.includes('chándal') || nameMatcher.includes('chaqueta')) {
+          customFields.push({ name: 'Jugador/a con el que tiene relación', type: 'text', required: true });
+          customFields.push({ name: 'Equipo al que pertenece', type: 'text', required: true });
+        } else if (nameMatcher.includes('camiseta')) {
+          customFields.push({ name: 'Número a imprimir (Opcional)', type: 'text', required: false });
+          customFields.push({ name: 'Jugador/a', type: 'text', required: true });
+        }
+        
+        const exists = items.some(i => i.name === name);
+        if(!exists) {
           await adapter.createItem({
-            name: cItem.title,
-            price: (cItem.minPrice || 0) / 100,
-            imageUrl: `https://api.clupik.com/clubs/67/shop/image/${cItem.id}?format=large`,
-            description: `Producto Oficial.\n[Clupik ID: ${cItem.id}]`,
-            sizes: []
-          });
+            name,
+            price,
+            imageUrl,
+            description: detailData.description || 'Producto importado de Clupik.',
+            sizes: sizes,
+            custom_fields: customFields
+          } as any);
           syncedCount++;
         }
       }
-      
-      if (syncedCount > 0) {
-        const freshData = await adapter.getItems();
-        setItems(freshData);
-      }
-    } catch (e) {
-      console.error('Error syncing Clupik products', e);
+      showMessage("Migración Clupik", `Se han importado ${syncedCount} artículos a la base de datos interna con campos personalizados habilitados.`);
+      const freshData = await adapter.getItems();
+      setItems(freshData);
+    } catch(e: any) {
+      console.error(e);
+      showMessage("Error", "No se pudo sincronizar Clupik: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -100,13 +143,16 @@ export function AdminPanel() {
   }, [activeTab]);
 
   const handleDeleteLog = async (id: string) => {
-    if (!window.confirm('¿Eliminar este registro de forma permanente?')) return;
-    try {
-      await adapter.deleteLog(id);
-      setLogs(logs.filter(log => log.id !== id));
-    } catch (e) {
-      console.error(e);
-    }
+    setConfirmPrompt({
+      open: true,
+      message: '¿Eliminar este registro de forma permanente?',
+      action: async () => {
+        try {
+          await adapter.deleteLog(id);
+          setLogs(logs.filter(log => log.id !== id));
+        } catch (e) { console.error(e); }
+      }
+    });
   };
 
   const handleUpdateOrderStatus = async (id: string, newStatus: Order['status']) => {
@@ -116,6 +162,22 @@ export function AdminPanel() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleDeleteOrder = async (id: string, itemName: string, buyer: string) => {
+    setConfirmPrompt({
+      open: true,
+      message: `¿Eliminar permanentemente el pedido de "${itemName}" realizado por ${buyer}? Esta acción no reembolsa el pago en Stripe, únicamente elimina este registro del sistema y libera el bloqueo de base de datos.`,
+      action: async () => {
+        try {
+          await adapter.deleteOrder(id);
+          setOrders(orders.filter(o => o.id !== id));
+          showMessage('Éxito', 'Pedido eliminado correctamente.');
+        } catch (e: any) { 
+          showMessage('Error al borrar pedido', e.message); 
+        }
+      }
+    });
   };
 
   const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
@@ -129,19 +191,29 @@ export function AdminPanel() {
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (!window.confirm('¿Borrar producto de la tienda?')) return;
-    try {
-      await adapter.deleteItem(id);
-      setItems(items.filter(i => i.id !== id));
-    } catch (e: any) { showMessage('Error al borrar', e.message); }
+    setConfirmPrompt({
+      open: true,
+      message: '¿Borrar producto de la tienda de forma permanente?',
+      action: async () => {
+        try {
+          await adapter.deleteItem(id);
+          setItems(items.filter(i => i.id !== id));
+        } catch (e: any) { showMessage('Error al borrar', e.message); }
+      }
+    });
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!window.confirm('¿Eliminar esta cuenta de usuario para siempre? Esta acción no se puede deshacer.')) return;
-    try {
-      await adapter.deleteUser(id);
-      setSystemUsers(systemUsers.filter(u => u.id !== id));
-    } catch (e: any) { showMessage('Error al borrar usuario', e.message); }
+    setConfirmPrompt({
+      open: true,
+      message: '¿Eliminar esta cuenta de usuario para siempre? Esta acción no se puede deshacer.',
+      action: async () => {
+        try {
+          await adapter.deleteUser(id);
+          setSystemUsers(systemUsers.filter(u => u.id !== id));
+        } catch (e: any) { showMessage('Error al borrar usuario', e.message); }
+      }
+    });
   };
 
   const renderStats = () => (
@@ -174,7 +246,9 @@ export function AdminPanel() {
              logs.slice(0, 50).map(log => (
               <tr key={log.id}>
                 <td>{new Date(log.created_at).toLocaleString('es-ES')}</td>
-                <td className="monospace">{log.user_email || log.user_id?.substring(0,8) || 'Anon'}</td>
+                <td className="monospace">
+                  {log.user_email || systemUsers.find(u => u.id === log.user_id)?.email || log.user_id?.substring(0,8) || 'Anon'}
+                </td>
                 <td><span className="badge-action">{log.action_type}</span></td>
                 <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
                 <td>
@@ -217,78 +291,144 @@ export function AdminPanel() {
     setOrders(freshOrders);
   };
 
-  const renderOrders = () => (
-    <div className="admin-table-container">
-      <div className="table-toolbar">
-        <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
-          {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar con Stripe'}
-        </button>
-      </div>
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Comprador</th>
-            <th>Email</th>
-            <th>Producto (ID)</th>
-            <th>Importe</th>
-            <th>Estado DB</th>
-            <th>Pago Stripe</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? <tr><td colSpan={8} className="table-empty">Cargando...</td></tr> : 
-           orders.length === 0 ? <tr><td colSpan={8} className="table-empty">Sin pedidos registrados.</td></tr> :
-           orders.map(order => (
-            <tr key={order.id}>
-              <td>{new Date(order.created_at).toLocaleString('es-ES')}</td>
-              <td>{order.buyer_name}</td>
-              <td className="monospace">{order.buyer_email}</td>
-              <td title={order.item_id}>
-                <strong>{order.item_name}</strong>
-                {order.size && <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Talla: {order.size}</div>}
-              </td>
-              <td style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>€{order.amount}</td>
-              <td>
-                <span className={`status-badge ${order.status}`}>
-                  {order.status === 'completed' ? <CheckCircle size={14} /> : order.status === 'processing' ? <RefreshCw size={14} className="spin" /> : order.status === 'cancelled' ? <XCircle size={14} /> : <Clock size={14} />}
-                  {order.status}
-                </span>
-              </td>
-              <td>
-                {stripeStatuses[order.id] === 'paid' ? (
-                  <span className="status-badge completed"><CheckCircle size={14} /> Pagado</span>
-                ) : stripeStatuses[order.id] === 'unpaid' ? (
-                  <span className="status-badge cancelled"><XCircle size={14} /> No pagado</span>
-                ) : stripeStatuses[order.id] === 'error' ? (
-                  <span className="status-badge cancelled">⚠️ Error</span>
-                ) : (
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>— Pulsa Sincronizar</span>
-                )}
-              </td>
-              <td>
-                <select 
-                  className="status-dropdown" 
-                  value={order.status} 
-                  onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="processing">Procesando</option>
-                  <option value="completed">Completado</option>
-                  <option value="cancelled">Cancelado</option>
-                </select>
-              </td>
+  const generateFactura = (groupKey: string, groupOrders: Order[]) => {
+    InvoiceGenerator.generatePdfFactura({
+      orderGroupId: groupKey,
+      clientName: groupOrders[0].buyer_name,
+      clientEmail: groupOrders[0].buyer_email,
+      orders: groupOrders,
+      date: new Date(groupOrders[0].created_at)
+    });
+  };
+
+  const exportOrdersExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(orders.map(o => ({
+      'Reserva ID / Sesión': o.stripe_session_id || o.id,
+      'Fecha': new Date(o.created_at).toLocaleString('es-ES'),
+      'Comprador': o.buyer_name,
+      'Email': o.buyer_email,
+      'Producto': o.item_name,
+      'Especificaciones': o.size || '-',
+      'Importe Pagado': o.amount,
+      'Estado': o.status
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
+    XLSX.writeFile(wb, "Reporte_Tienda_Uros.xlsx");
+  };
+
+  const renderOrders = () => {
+    const grouped = orders.reduce((acc, order) => {
+       const key = order.stripe_session_id || order.id;
+       if(!acc[key]) acc[key] = [];
+       acc[key].push(order);
+       return acc;
+    }, {} as Record<string, Order[]>);
+
+    return (
+      <div className="admin-table-container">
+        <div className="table-toolbar">
+          <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
+            {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
+          </button>
+          <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', marginLeft: 'auto' }}>
+            📊 Exportar Excel
+          </button>
+        </div>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Reserva (Stripe)</th>
+              <th>Comprador / Fecha</th>
+              <th>Desglose Pedido</th>
+              <th>Total (€)</th>
+              <th>Estado Envío</th>
+              <th>Factura</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+          </thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="table-empty">Cargando...</td></tr> : 
+             orders.length === 0 ? <tr><td colSpan={6} className="table-empty">Sin pedidos registrados.</td></tr> :
+             Object.entries(grouped).map(([groupId, groupOrders]) => {
+               const first = groupOrders[0];
+               const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
+               const allCompleted = groupOrders.every(o => o.status === 'completed');
+               
+               return (
+                <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
+                  <td className="monospace">
+                    {groupId.substring(0,12)}...
+                    {stripeStatuses[first.id] === 'paid' && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                  </td>
+                  <td>
+                    <strong>{first.buyer_name}</strong><br/>
+                    <span style={{ fontSize: '0.8rem', color: '#666' }}>{first.buyer_email}</span><br/>
+                    <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(first.created_at).toLocaleDateString()}</span>
+                  </td>
+                  <td>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
+                      {groupOrders.map(o => (
+                        <li key={o.id} style={{ marginBottom: '6px' }}>
+                          • <strong>{o.item_name}</strong> 
+                          {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
+                          <span style={{ marginLeft: '6px', color: '#0e70ab' }}>(€{o.amount.toFixed(2)})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                  <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{groupTotal.toFixed(2)}</td>
+                  <td>
+                    <select 
+                      className="status-dropdown" 
+                      value={allCompleted ? 'completed' : first.status} 
+                      onChange={(e) => {
+                        // Bulk update the entire group
+                        groupOrders.forEach(o => handleUpdateOrderStatus(o.id, e.target.value as Order['status']));
+                      }}
+                    >
+                      <option value="pending">Pendiente</option>
+                      <option value="processing">Procesando</option>
+                      <option value="completed">Completado</option>
+                      <option value="cancelled">Cancelado</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button className="btn-secondary" onClick={() => generateFactura(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                      📄 PDF
+                    </button>
+                    <button onClick={() => handleDeleteOrder(first.id, `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+               )
+             })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const exportUsersExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(systemUsers.map(u => ({
+      'ID': u.id,
+      'Email': u.email,
+      'Rol': u.role,
+      'Fecha Registro': new Date(u.created_at).toLocaleString('es-ES')
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
+    XLSX.writeFile(wb, "Reporte_Usuarios_Uros.xlsx");
+  };
 
   const renderUsers = () => (
     <div className="admin-table-container">
-      <h3>Usuarios Registrados</h3>
+      <div className="table-toolbar" style={{ justifyContent: 'space-between' }}>
+        <h3>Usuarios Registrados</h3>
+        <button className="btn-primary" onClick={exportUsersExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+          📊 Exportar Excel
+        </button>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
@@ -325,9 +465,39 @@ export function AdminPanel() {
     setLoadingAttendees(null);
   };
 
+  const exportEventsExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const eventsSummary = events.map(e => ({
+      'Evento': e.title,
+      'Fecha': new Date(e.date).toLocaleDateString(),
+      'Tipo': e.type,
+      'Inscritos': attendees[e.id]?.length || 0
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), "Resumen");
+
+    events.forEach(e => {
+       const atts = attendees[e.id] || [];
+       if (atts.length > 0) {
+         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => ({
+           'Email': a.user_email,
+           'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES')
+         })));
+         // Avoid invalid characters or lengths in sheet names
+         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0,31) || 'Evento';
+         XLSX.utils.book_append_sheet(wb, sheet, cleanName); 
+       }
+    });
+    XLSX.writeFile(wb, "Reporte_Eventos_Uros.xlsx");
+  };
+
   const renderEvents = () => (
     <div className="admin-table-container">
-      <h3>Inscripciones a Eventos Propios</h3>
+      <div className="table-toolbar" style={{ justifyContent: 'space-between' }}>
+        <h3>Inscripciones a Eventos Propios</h3>
+        <button className="btn-primary" onClick={exportEventsExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+          📊 Exportar Excel Completo
+        </button>
+      </div>
       <table className="admin-table">
         <thead>
           <tr>
@@ -367,11 +537,16 @@ export function AdminPanel() {
                                <td>{new Date(att.created_at).toLocaleString('es-ES')}</td>
                                <td>
                                  <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
-                                   if (!window.confirm(`¿Eliminar a ${att.user_email} de este evento?`)) return;
-                                   try {
-                                     await adapter.removeEventRegistration(ev.id, att.user_id);
-                                     handleLoadAttendees(ev.id);
-                                   } catch (err: any) { showMessage('Error', err.message); }
+                                   setConfirmPrompt({
+                                     open: true,
+                                     message: `¿Eliminar a ${att.user_email} de este evento?`,
+                                     action: async () => {
+                                       try {
+                                         await adapter.removeEventRegistration(ev.id, att.user_id);
+                                         handleLoadAttendees(ev.id);
+                                       } catch (err: any) { showMessage('Error', err.message); }
+                                     }
+                                   });
                                  }}>
                                    <XCircle size={16} />
                                  </button>
@@ -398,6 +573,9 @@ export function AdminPanel() {
     <div className="admin-table-container">
       <div className="table-toolbar">
          <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
+         <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', marginLeft: 'auto' }}>
+           📥 Importar Catálogo Clupik
+         </button>
       </div>
       <table className="admin-table">
         <thead>
@@ -483,6 +661,16 @@ export function AdminPanel() {
         onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} 
         title={messageAlert.title} 
         message={messageAlert.message} 
+      />
+      <ConfirmModal
+        isOpen={confirmPrompt.open}
+        title="Confirmar Acción"
+        message={confirmPrompt.message}
+        onConfirm={() => {
+          if (confirmPrompt.action) confirmPrompt.action();
+          setConfirmPrompt(prev => ({ ...prev, open: false, action: null }));
+        }}
+        onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
       />
     </AdminGuard>
   );

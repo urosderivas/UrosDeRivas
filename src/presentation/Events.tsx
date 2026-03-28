@@ -5,6 +5,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { EventModal } from './EventModal';
 import { Event } from '../domain/entities';
 import { MessageModal } from './components/MessageModal';
+import { ConfirmModal } from './components/ConfirmModal';
 import './Events.css';
 
 const adapter = new SupabaseAdapter();
@@ -77,6 +78,7 @@ export function Events() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<Event | null>(null);
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
+  const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean, action: (() => void) | null, message: string }>({ open: false, action: null, message: '' });
 
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
@@ -189,9 +191,14 @@ export function Events() {
   const handleOpenCreate = () => { setEditEvent(null); setModalOpen(true); };
   const handleOpenEdit = (ev: Event) => { setEditEvent(ev); setModalOpen(true); };
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Seguro que quieres borrar este evento?')) return;
-    try { await adapter.deleteEvent(id); loadSupabaseEvents(); }
-    catch (e: any) { showMessage('Error al borrar', e.message); }
+    setConfirmPrompt({
+      open: true,
+      message: '¿Seguro que quieres borrar este evento permanentemente?',
+      action: async () => {
+        try { await adapter.deleteEvent(id); loadSupabaseEvents(); }
+        catch (e: any) { showMessage('Error al borrar', e.message); }
+      }
+    });
   };
 
   const handleToggleRegistration = async (eventId: string, e: React.MouseEvent) => {
@@ -350,6 +357,16 @@ export function Events() {
         onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))}
         title={messageAlert.title}
         message={messageAlert.message}
+      />
+      <ConfirmModal
+        isOpen={confirmPrompt.open}
+        title="Confirmar Acción"
+        message={confirmPrompt.message}
+        onConfirm={() => {
+          if (confirmPrompt.action) confirmPrompt.action();
+          setConfirmPrompt(prev => ({ ...prev, open: false, action: null }));
+        }}
+        onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
       />
     </>
   );

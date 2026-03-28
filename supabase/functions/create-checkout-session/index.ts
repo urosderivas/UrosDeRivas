@@ -30,79 +30,102 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const authHeader = req.headers.get('Authorization')!;
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) throw new Error("Missing auth header");
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseAdminClient.auth.getUser(token);
 
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { itemId, userEmail, returnUrl, size } = await req.json();
+    const { cartItems, userEmail, returnUrl } = await req.json();
 
-    // Fetch the real price securely from DB to prevent frontend tampering
-    const { data: item, error: itemError } = await supabaseAdminClient
-      .from('market_items')
-      .select('*')
-      .eq('id', itemId)
-      .single();
-
-    if (itemError || !item) {
-      throw new Error(`Item not found: ${itemError?.message}`);
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      throw new Error("Cart is empty");
     }
 
+    // Fetch all required items from database securely
+    const itemIds = cartItems.map((c: any) => c.itemId);
+    const { data: dbItems, error: itemsError } = await supabaseAdminClient
+      .from('market_items')
+      .select('*')
+      .in('id', itemIds);
+
+    if (itemsError || !dbItems) {
+      throw new Error(`Failed to fetch items: ${itemsError?.message}`);
+    }
+
+    const dbItemsMap = new Map(dbItems.map(i => [i.id, i]));
     const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
-    // If the client sent their explicit browser window URL, we use it directly;
-    // else we fallback to standard origin (which breaks in gh-pages subfolders).
     const safeReturnUrl = returnUrl || `${origin}/market`;
 
-    // Initialize Stripe Checkout
+    const line_items: any[] = [];
+    const orderInserts: any[] = [];
+
+    // Validation & Stripe object construction
+    for (const cartItem of cartItems) {
+      const dbItem = dbItemsMap.get(cartItem.itemId);
+      if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
+
+      const finalPrice = Math.round(dbItem.price * 100);
+      const textOptionsList = Object.entries(cartItem.options || {}).map(([k,v]) => `${k}: ${v}`);
+      const textOptionsStr = textOptionsList.join(' | ');
+
+      line_items.push({
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: dbItem.name,
+            description: textOptionsStr || undefined,
+            images: (dbItem.image_url && dbItem.image_url.startsWith('http')) ? [dbItem.image_url] : undefined,
+          },
+          unit_amount: finalPrice, 
+        },
+        quantity: cartItem.quantity,
+      });
+
+      // Prepare DB insert rows (Stripe session id will be injected after session creation)
+      orderInserts.push({
+        user_id: user.id,
+        buyer_name: user?.email?.split('@')[0] || 'Unknown',
+        buyer_email: userEmail,
+        item_id: dbItem.id,
+        item_name: dbItem.name,
+        size: textOptionsStr || null, // Saving variables here seamlessly matching existing Admin Panel bindings
+        amount: (finalPrice / 100) * cartItem.quantity,
+        status: 'pending'
+      });
+    }
+
     const session = await stripe.checkout.sessions.create({
       customer_email: userEmail,
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: size ? `${item.name} (Talla: ${size})` : item.name,
-              images: (item.image_url && item.image_url.startsWith('http')) ? [item.image_url] : undefined,
-            },
-            unit_amount: Math.round(item.price * 100), // Stripe uses cents
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: line_items,
       mode: 'payment',
       success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {
         userId: user.id,
-        itemId: itemId,
-        size: size || null,
+        // Short metadata representation to avoid 500chars limit. The true metadata resides safely in Supabase `orders` table.
+        cartSummary: `Cart with ${cartItems.length} configurations.`
       }
     });
 
-    // Create a pending Order in our DB tracker logically linked to Stripe Session using Admin Rights bypassing RLS
-    const { error: insertError } = await supabaseAdminClient.from('orders').insert({
-      user_id: user.id,
-      buyer_name: user.email?.split('@')[0] || 'Unknown',
-      buyer_email: userEmail,
-      item_id: itemId,
-      size: size || null,
-      amount: item.price,
-      status: 'pending',
-      stripe_session_id: session.id
-    });
+    // Write all cart rows simultaneously sharing the exact same stripe_session_id natively bridging grouped UI tracking.
+    for (const order of orderInserts) {
+      order.stripe_session_id = session.id;
+    }
 
+    const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
     if (insertError) {
-      console.error("Failed creating shadow order in DB: ", insertError);
-      throw new Error("Order creation failed locally before stripe redirect");
+      console.error("Failed creating shadow orders in DB: ", insertError);
+      throw new Error("Order creation failed locally before stripe redirect. Error: " + insertError.message);
     }
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,

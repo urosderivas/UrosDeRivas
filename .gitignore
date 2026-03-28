@@ -10,3 +10,6 @@ dist-ssr
 !.vscode/extensions.json
 .DS_Store
 .agents
+
+# Supabase Local Master Dump
+supabase_schema.sql

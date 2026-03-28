@@ -25,4 +25,26 @@ export class StripeAdapter implements PaymentPort {
 
     return data.url;
   }
+
+  async createCheckoutSessionFromCart(cart: any[], userEmail: string): Promise<string> {
+    const returnUrl = window.location.href.split('?')[0]; 
+    const payload = cart.map(c => ({
+      itemId: c.product.id,
+      quantity: c.quantity,
+      options: c.selectedVariables || {}
+    }));
+
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { cartItems: payload, userEmail, returnUrl }
+    });
+
+    if (error) {
+      console.error("Error invoking Stripe Edge Function:", error);
+      const errMsg = error.context?.error || error.message || "Error al procesar carrito.";
+      throw new Error(errMsg);
+    }
+
+    if (!data?.url) throw new Error("Url de Stripe inválida.");
+    return data.url;
+  }
 }
