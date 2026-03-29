@@ -430,4 +430,76 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { error } = await supabase.from('orders').insert(rows);
     if (error) throw new Error("Error creando pedido: " + error.message);
   }
+
+  /**
+   * Look up an order or campus registration by its stripe_session_id.
+   * Used by the QR scanner verification flow.
+   */
+  async lookupByStripeSession(sessionId: string): Promise<{
+    found: boolean;
+    type: 'order' | 'campus' | null;
+    status: string;
+    buyer_name: string;
+    buyer_email: string;
+    item_name: string;
+    amount: number;
+    stripe_session_id: string;
+    is_local: boolean;
+  }> {
+    const empty = { found: false, type: null as any, status: '', buyer_name: '', buyer_email: '', item_name: '', amount: 0, stripe_session_id: sessionId, is_local: false };
+
+    // 1. Search in orders table
+    const { data: orderData } = await supabase
+      .from('orders')
+      .select('*, market_items(name)')
+      .eq('stripe_session_id', sessionId)
+      .limit(1);
+
+    if (orderData && orderData.length > 0) {
+      const o = orderData[0];
+      return {
+        found: true,
+        type: 'order',
+        status: o.status,
+        buyer_name: o.buyer_name,
+        buyer_email: o.buyer_email,
+        item_name: o.market_items?.name || 'Producto',
+        amount: o.amount,
+        stripe_session_id: sessionId,
+        is_local: sessionId.startsWith('local_'),
+      };
+    }
+
+    // 2. Search in event_registrations table
+    const { data: regData } = await supabase
+      .from('event_registrations')
+      .select('*, events(title)')
+      .eq('stripe_session_id', sessionId)
+      .limit(1);
+
+    if (regData && regData.length > 0) {
+      const r = regData[0];
+      // Get user email via RPC or auth lookup — we use the get_system_users approach
+      let userEmail = '';
+      try {
+        const { data: users } = await supabase.rpc('get_system_users');
+        const matched = users?.find((u: any) => u.id === r.user_id);
+        if (matched) userEmail = matched.email || '';
+      } catch {}
+
+      return {
+        found: true,
+        type: 'campus',
+        status: r.status,
+        buyer_name: userEmail ? userEmail.split('@')[0] : (r.attendee_names?.[0] || 'Desconocido'),
+        buyer_email: userEmail,
+        item_name: r.events?.title || 'Campus',
+        amount: r.amount || 0,
+        stripe_session_id: sessionId,
+        is_local: sessionId.startsWith('local_'),
+      };
+    }
+
+    return empty;
+  }
 }

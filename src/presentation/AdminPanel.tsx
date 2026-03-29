@@ -10,6 +10,7 @@ import { Trash2, RefreshCw, Pencil, XCircle } from 'lucide-react';
 import './AdminPanel.css';
 import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
+import { QrScannerModal } from './components/QrScannerModal';
 
 const adapter = new SupabaseAdapter();
 
@@ -34,6 +35,10 @@ export function AdminPanel() {
   const [stripeStatuses, setStripeStatuses] = useState<Record<string, string>>({});
   const [syncingStripe, setSyncingStripe] = useState(false);
   const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
+
+  // QR Scanner state
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [qrVerifying, setQrVerifying] = useState(false);
 
   // Market Item Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -328,6 +333,71 @@ export function AdminPanel() {
     });
   };
 
+  const handleQrResult = async (qrData: string) => {
+    setQrScannerOpen(false);
+    setQrVerifying(true);
+
+    try {
+      // Parse QR format: uros_id_<stripe_session_id>
+      let sessionId = qrData;
+      if (qrData.startsWith('uros_id_')) {
+        sessionId = qrData.replace('uros_id_', '');
+      }
+
+      // Look up in DB
+      const result = await adapter.lookupByStripeSession(sessionId);
+
+      if (!result.found) {
+        showMessage('❌ No encontrado', `No se encontró ningún pedido o inscripción con el código escaneado.\n\nCódigo: ${sessionId.substring(0, 20)}...`);
+        setQrVerifying(false);
+        return;
+      }
+
+      // If it's a Stripe order, also verify payment with Stripe
+      let stripeStatus = '';
+      const isStripeOrder = sessionId.startsWith('cs_');
+      if (isStripeOrder) {
+        try {
+          const stripeResult = await adapter.checkStripePayment(sessionId);
+          stripeStatus = stripeResult.payment_status;
+        } catch { stripeStatus = 'error'; }
+      }
+
+      // Build result message
+      const typeLabel = result.type === 'campus' ? '🏀 Inscripción Campus' : '🛒 Pedido Tienda';
+      const statusEmoji = result.status === 'completed' ? '✅' : result.status === 'cancelled' ? '❌' : '⏳';
+
+      let paymentLine = '';
+      if (isStripeOrder) {
+        paymentLine = stripeStatus === 'paid'
+          ? '✅ PAGADO con Stripe'
+          : stripeStatus === 'error'
+            ? '⚠️ No se pudo verificar con Stripe'
+            : '❌ NO PAGADO en Stripe';
+      } else {
+        paymentLine = result.status === 'completed'
+          ? '✅ PAGADO EN MANO'
+          : '❌ NO pagado en mano';
+      }
+
+      const msg = [
+        `📋 Tipo: ${typeLabel}`,
+        `👤 Cliente: ${result.buyer_name}`,
+        `📧 Email: ${result.buyer_email}`,
+        `📦 Concepto: ${result.item_name}`,
+        `💰 Importe: ${result.amount.toFixed(2)} €`,
+        `📌 Estado BD: ${statusEmoji} ${result.status}`,
+        '',
+        `💳 ${paymentLine}`,
+      ].join('\n');
+
+      showMessage('🔍 Resultado de Verificación', msg);
+    } catch (err: any) {
+      showMessage('Error', `No se pudo verificar: ${err.message}`);
+    }
+    setQrVerifying(false);
+  };
+
   const exportOrdersExcel = () => {
     const ws = XLSX.utils.json_to_sheet(orders.map(o => {
       const qty = o.quantity || 1;
@@ -369,6 +439,9 @@ export function AdminPanel() {
         <div className="table-toolbar">
           <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
+          </button>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+            {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
           </button>
           <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', marginLeft: 'auto' }}>
             📊 Exportar Excel
@@ -699,6 +772,9 @@ export function AdminPanel() {
           <button className="btn-primary" onClick={() => handleSyncAllCampusStripe()} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+            {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
+          </button>
           <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
             📥 Importar Eventos Clupik
           </button>
@@ -979,6 +1055,11 @@ export function AdminPanel() {
           setConfirmPrompt(prev => ({ ...prev, open: false, action: null }));
         }}
         onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
+      />
+      <QrScannerModal
+        isOpen={qrScannerOpen}
+        onClose={() => setQrScannerOpen(false)}
+        onResult={handleQrResult}
       />
     </AdminGuard>
   );
