@@ -644,7 +644,7 @@ export function AdminPanel() {
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
         <h3>Campus & Inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={handleSyncAllCampusStripe} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
+          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe()} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
           <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
