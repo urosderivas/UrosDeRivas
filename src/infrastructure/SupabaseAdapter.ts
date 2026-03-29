@@ -169,9 +169,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (event.active !== undefined) payload.active = event.active;
     payload.type = 'campus';
 
-    const { data, error } = await supabase.from('events').update(payload).eq('id', id).select().single();
+    const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
     if (error) throw error;
-    return this.mapEvent(data);
+    if (!data || data.length === 0) throw new Error('No se pudo actualizar el campus. Puede que no tengas permisos si no eres el creador.');
+    
+    return this.mapEvent(data[0]);
   }
 
   private mapEvent(e: any): Event {
@@ -269,7 +271,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       buyer_name: r.attendee_names?.join(', ') || 'Desconocido',
       buyer_email: r.user_email || '', 
       item_name: r.events?.title || 'Campus',
-      size: `${r.num_attendees} asist. | ${r.selected_days?.length} días`,
+      size: `${r.num_attendees} asist. | ${(r.selected_days || []).join(', ')}`,
       quantity: 1,
       amount: r.amount,
       status: r.status,

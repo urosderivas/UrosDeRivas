@@ -522,7 +522,18 @@ export function AdminPanel() {
     </div>
   );
 
-  const handleLoadAttendees = async (eventId: string) => {
+  const handleLoadAttendees = async (eventId: string, forceReload = false) => {
+    // If forcing a reload (e.g., after deletion or status update), bypass toggle
+    if (forceReload) {
+      setLoadingAttendees(eventId);
+      try {
+        const data = await adapter.getEventAttendees(eventId);
+        setAttendees({ ...attendees, [eventId]: data });
+      } catch (e: any) { showMessage('Error', e.message); }
+      setLoadingAttendees(null);
+      return;
+    }
+
     // Toggle UI expansion
     const isExpanded = !!expandedEvents[eventId];
     setExpandedEvents({ ...expandedEvents, [eventId]: !isExpanded });
@@ -798,7 +809,7 @@ export function AdminPanel() {
                                           onChange={async (e) => {
                                             try {
                                               await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
-                                              handleLoadAttendees(ev.id);
+                                              handleLoadAttendees(ev.id, true);
                                             } catch (err: any) { showMessage('Error', err.message); }
                                           }}
                                         >
@@ -821,7 +832,7 @@ export function AdminPanel() {
                                               const newStatus = e.target.checked ? 'completed' : 'pending';
                                               try {
                                                 await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
-                                                handleLoadAttendees(ev.id);
+                                                handleLoadAttendees(ev.id, true);
                                               } catch (err: any) { showMessage('Error', err.message); }
                                             }}
                                             style={{ width: '18px', height: '18px', cursor: 'pointer' }}
@@ -839,7 +850,7 @@ export function AdminPanel() {
                                             action: async () => {
                                               try {
                                                 await adapter.removeEventRegistration(ev.id, att.user_id);
-                                                handleLoadAttendees(ev.id);
+                                                handleLoadAttendees(ev.id, true);
                                               } catch (err: any) { showMessage('Error', err.message); }
                                             }
                                           });
