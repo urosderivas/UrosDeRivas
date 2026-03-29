@@ -206,8 +206,10 @@ serve(async (req: Request) => {
       status: 200,
     });
   } catch (error: any) {
-    console.error("Edge Function Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error("Edge Function Exception:", error);
+    // Return a 400 status with JSON so the frontend `invoke` parser can read the exact error message
+    // If it returns 500 or throws, Supabase hides the message and sets it to "Edge Function returned a non-2xx status code"
+    return new Response(JSON.stringify({ error: error.message || 'Unknown error in edge function' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });

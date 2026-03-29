@@ -315,6 +315,10 @@ export function AdminPanel() {
     const ws = XLSX.utils.json_to_sheet(orders.map(o => {
       const qty = o.quantity || 1;
       const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
+      const isStripeOrder = o.stripe_session_id && o.stripe_session_id.startsWith('cs_');
+      const isPaidStripe = stripeStatuses[o.id] === 'paid';
+      const allCompleted = o.status === 'completed';
+
       return {
         'Reserva ID / Sesión': o.stripe_session_id || o.id,
         'Fecha': new Date(o.created_at).toLocaleString('es-ES'),
@@ -325,7 +329,9 @@ export function AdminPanel() {
         'Cantidad': qty,
         'Precio Unitario': unitPrice,
         'Importe Total': o.amount,
-        'Estado': o.status
+        'Estado': o.status,
+        'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
+        'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
       };
     }));
     const wb = XLSX.utils.book_new();
@@ -565,15 +571,23 @@ export function AdminPanel() {
     events.forEach(e => {
        const atts = updatedAttendees[e.id] || [];
        if (atts.length > 0) {
-         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => ({
-           'Email': a.user_email,
-           'Días': (a.selected_days || []).join(', '),
-           'Asistentes': a.num_attendees || 1,
-           'Nombres': (a.attendee_names || []).join(', '),
-           'Importe': a.amount || 0,
-           'Estado': a.status || 'pending',
-           'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES')
-         })));
+         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
+           const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
+           const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
+           const allCompleted = a.status === 'completed';
+
+           return {
+             'Email': a.user_email,
+             'Días': (a.selected_days || []).join(', '),
+             'Asistentes': a.num_attendees || 1,
+             'Nombres': (a.attendee_names || []).join(', '),
+             'Importe': a.amount || 0,
+             'Estado': a.status || 'pending',
+             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
+             'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
+             'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+           };
+         }));
          const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0,31) || 'Campus';
          XLSX.utils.book_append_sheet(wb, sheet, cleanName);
        }
