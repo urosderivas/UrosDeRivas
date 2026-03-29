@@ -62,6 +62,7 @@ export function AdminPanel() {
       } else if (activeTab === 'events' && (user?.role === 'admin' || user?.role === 'coach')) {
         const data = await adapter.getEvents();
         setEvents(data);
+        setTimeout(() => handleSyncAllCampusStripe(data), 100);
       }
     } catch (e) {
       console.error(e);
@@ -543,6 +544,49 @@ export function AdminPanel() {
     } catch (e: any) { showMessage('Error', e.message); }
   };
 
+  const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
+    setSyncingStripe(true);
+    // Auto-fetch attendees for all events if missing
+    let updatedAttendees = { ...attendees };
+    const targetEvents = eventsList || events;
+    for (const ev of targetEvents) {
+      if (!updatedAttendees[ev.id]) {
+        try {
+          updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
+        } catch (e) {}
+      }
+    }
+    setAttendees(updatedAttendees);
+
+    const newStatuses: Record<string, string> = { ...stripeStatuses };
+    for (const evId in updatedAttendees) {
+      for (const att of updatedAttendees[evId]) {
+        if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
+          try {
+            const result = await adapter.checkStripePayment(att.stripe_session_id);
+            newStatuses[att.stripe_session_id] = result.payment_status; 
+            if (result.payment_status === 'paid' && att.status === 'pending') {
+              await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
+            } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
+              await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
+            }
+          } catch {
+            newStatuses[att.stripe_session_id] = 'error';
+          }
+        }
+      }
+    }
+    setStripeStatuses(newStatuses);
+    // Reload UI for the updated ones
+    for (const ev of targetEvents) {
+      if (updatedAttendees[ev.id]) {
+        updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
+      }
+    }
+    setAttendees({ ...updatedAttendees });
+    setSyncingStripe(false);
+  };
+
   const exportEventsExcel = async () => {
     setLoadingAttendees('export'); // show loading state
 
@@ -600,6 +644,9 @@ export function AdminPanel() {
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
         <h3>Campus & Inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn-primary" onClick={handleSyncAllCampusStripe} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
+            {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
+          </button>
           <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
             📥 Importar Eventos Clupik
           </button>
