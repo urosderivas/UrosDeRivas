@@ -51,6 +51,7 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
         if (mounted) {
           setError(err?.message || 'No se pudo acceder a la cámara. Asegúrate de dar permiso.');
           setScanning(false);
+          scannerRef.current = null; // Clear if it failed to start
         }
       }
     };
@@ -67,14 +68,20 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
     };
   }, [isOpen]);
 
-  const handleClose = () => {
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {});
-      scannerRef.current = null;
+  const handleClose = async () => {
+    try {
+      if (scannerRef.current && scanning) {
+        await scannerRef.current.stop();
+      }
+    } catch (err) {
+      console.warn("Scanner stop error:", err);
+    } finally {
+      // Guaranteed to run
+      if (scannerRef.current) scannerRef.current = null;
+      setScanning(false);
+      setError(null);
+      onClose();
     }
-    setScanning(false);
-    setError(null);
-    onClose();
   };
 
   if (!isOpen) return null;
