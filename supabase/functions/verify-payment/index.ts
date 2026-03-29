@@ -20,9 +20,32 @@ serve(async (req: Request) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    const { sessionId } = await req.json();
-    if (!sessionId) throw new Error("sessionId required");
+    const { sessionId, sessionIds } = await req.json();
+    if (!sessionId && !sessionIds) throw new Error("sessionId or sessionIds required");
 
+    // Bulk Mode
+    if (sessionIds && Array.isArray(sessionIds)) {
+      const results: Record<string, any> = {};
+      // Chunk concurrent fetch to avoid hitting immediate Stripe rate limits (Stripe allows 100 req/s, we chunk by 20 to be safe)
+      const chunkSize = 20;
+      for (let i = 0; i < sessionIds.length; i += chunkSize) {
+        const chunk = sessionIds.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(async (id) => {
+          try {
+            const s = await stripe.checkout.sessions.retrieve(id);
+            results[id] = { payment_status: s.payment_status, status: s.status };
+          } catch (err: any) {
+            results[id] = { payment_status: 'error', error: err.message };
+          }
+        }));
+      }
+      return new Response(JSON.stringify(results), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
+    // Single Mode (Legacy)
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     return new Response(JSON.stringify({

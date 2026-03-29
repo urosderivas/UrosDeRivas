@@ -267,23 +267,38 @@ export function AdminPanel() {
   const handleSyncAllStripe = async (ordersList?: Order[]) => {
     setSyncingStripe(true);
     const target = ordersList || orders;
-    const newStatuses: Record<string, string> = {};
+    
+    // Extract all pending Stripe session IDs
+    const sessionIdsToVerify: string[] = [];
     for (const order of target) {
-      if (order.stripe_session_id) {
-        try {
-          const result = await adapter.checkStripePayment(order.stripe_session_id);
-          newStatuses[order.id] = result.payment_status; // 'paid' | 'unpaid'
-          // Auto-update DB based on Stripe status (only if still pending)
-          if (result.payment_status === 'paid' && order.status === 'pending') {
-            await adapter.updateOrderStatus(order.id, 'processing');
-          } else if (result.payment_status === 'unpaid' && order.status === 'pending') {
-            await adapter.updateOrderStatus(order.id, 'cancelled');
+      if (order.stripe_session_id && order.stripe_session_id.startsWith('cs_')) {
+        sessionIdsToVerify.push(order.stripe_session_id);
+      }
+    }
+
+    const newStatuses: Record<string, string> = { ...stripeStatuses };
+    
+    // Batch fetch from Edge Function
+    if (sessionIdsToVerify.length > 0) {
+      try {
+        const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+        for (const order of target) {
+          if (order.stripe_session_id && batchResults[order.stripe_session_id]) {
+            const result = batchResults[order.stripe_session_id];
+            newStatuses[order.id] = result.payment_status; 
+            
+            // Auto-update DB based on Stripe status (only if still pending)
+            if (result.payment_status === 'paid' && order.status === 'pending') {
+               await adapter.updateOrderStatus(order.id, 'processing');
+            } else if (result.payment_status === 'unpaid' && order.status === 'pending') {
+               await adapter.updateOrderStatus(order.id, 'cancelled');
+            }
+          } else if (!order.stripe_session_id) {
+            newStatuses[order.id] = 'no_session';
           }
-        } catch {
-          newStatuses[order.id] = 'error';
         }
-      } else {
-        newStatuses[order.id] = 'no_session';
+      } catch (err) {
+        console.error("Batch verification failed:", err);
       }
     }
     setStripeStatuses(newStatuses);
@@ -559,23 +574,40 @@ export function AdminPanel() {
     setAttendees(updatedAttendees);
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
+    
+    // Collect all Stripe session IDs from all attendees
+    const sessionIdsToVerify: string[] = [];
+    const attMap: any[] = [];
+    
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
         if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
-          try {
-            const result = await adapter.checkStripePayment(att.stripe_session_id);
-            newStatuses[att.stripe_session_id] = result.payment_status; 
-            if (result.payment_status === 'paid' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
-            } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
-            }
-          } catch {
-            newStatuses[att.stripe_session_id] = 'error';
-          }
+          sessionIdsToVerify.push(att.stripe_session_id);
+          attMap.push({ evId, att });
         }
       }
     }
+
+    // Process all in a single batch
+    if (sessionIdsToVerify.length > 0) {
+      try {
+         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+         for (const { evId, att } of attMap) {
+           const result = batchResults[att.stripe_session_id];
+           if (result) {
+             newStatuses[att.stripe_session_id] = result.payment_status;
+             if (result.payment_status === 'paid' && att.status === 'pending') {
+               await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
+             } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
+               await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
+             }
+           }
+         }
+      } catch (err) {
+         console.error("Batch campus verification failed", err);
+      }
+    }
+    
     setStripeStatuses(newStatuses);
     // Reload UI for the updated ones
     for (const ev of targetEvents) {

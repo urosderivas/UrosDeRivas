@@ -277,10 +277,19 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async updateRegistrationStatus(eventId: string, userId: string, status: string): Promise<void> {
-    const { error } = await supabase.from('event_registrations')
-      .update({ status })
-      .match({ event_id: eventId, user_id: userId });
-    if (error) throw error;
+    const { error } = await supabase.rpc('update_admin_campus_status', { 
+      p_event_id: eventId, 
+      p_user_id: userId, 
+      p_status: status 
+    });
+    // Fallback if rpc hasn't been uploaded yet (which might fail silently or throw due to RLS)
+    if (error) {
+      console.warn("RPC update_admin_campus_status failed, trying direct update (may fail silently if RLS blocks):", error);
+      const { error: err2 } = await supabase.from('event_registrations')
+        .update({ status })
+        .match({ event_id: eventId, user_id: userId });
+      if (err2) throw err2;
+    }
   }
 
   async verifyPayment(sessionId: string): Promise<boolean> {
@@ -291,6 +300,15 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async checkStripePayment(sessionId: string): Promise<{ payment_status: string; status: string }> {
     const { data, error } = await supabase.functions.invoke('verify-payment', {
       body: { sessionId }
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async checkStripePaymentsBatch(sessionIds: string[]): Promise<Record<string, { payment_status: string; status: string }>> {
+    if (sessionIds.length === 0) return {};
+    const { data, error } = await supabase.functions.invoke('verify-payment', {
+      body: { sessionIds } // Array mode supported by our new Edge layout
     });
     if (error) throw error;
     return data;
