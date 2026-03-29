@@ -769,7 +769,7 @@ export function AdminPanel() {
                                     user_id: att.user_id,
                                     item_id: att.event_id,
                                     event_id: att.event_id,
-                                    buyer_name: (att.attendee_names || []).join(', ') || 'Desconocido',
+                                    buyer_name: att.user_email ? att.user_email.split('@')[0] : 'Desconocido',
                                     buyer_email: att.user_email || '',
                                     item_name: ev.title,
                                     size: `${(att.attendee_names || []).join(', ')} | ${(att.selected_days || []).join(', ')}`,
