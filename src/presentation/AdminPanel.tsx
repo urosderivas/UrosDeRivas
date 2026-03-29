@@ -772,7 +772,7 @@ export function AdminPanel() {
                                     buyer_name: (att.attendee_names || []).join(', ') || 'Desconocido',
                                     buyer_email: att.user_email || '',
                                     item_name: ev.title,
-                                    size: `${att.num_attendees} asist. | ${(att.selected_days || []).join(', ')}`,
+                                    size: `${(att.attendee_names || []).join(', ')} | ${(att.selected_days || []).join(', ')}`,
                                     quantity: 1,
                                     amount: Number(att.amount),
                                     status: att.status,
@@ -797,7 +797,7 @@ export function AdminPanel() {
                                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                                           <li>
                                             • <strong>{ev.title}</strong>
-                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{att.num_attendees} asist. | {(att.selected_days || []).join(', ')}]</span>
+                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {(att.selected_days || []).join(', ')}]</span>
                                           </li>
                                         </ul>
                                       </td>

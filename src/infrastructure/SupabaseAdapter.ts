@@ -271,7 +271,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       buyer_name: r.attendee_names?.join(', ') || 'Desconocido',
       buyer_email: r.user_email || '', 
       item_name: r.events?.title || 'Campus',
-      size: `${r.num_attendees} asist. | ${(r.selected_days || []).join(', ')}`,
+      size: `${(r.attendee_names || []).join(', ')} | ${(r.selected_days || []).join(', ')}`,
       quantity: 1,
       amount: r.amount,
       status: r.status,
