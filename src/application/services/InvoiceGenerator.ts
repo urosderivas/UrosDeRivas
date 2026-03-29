@@ -149,10 +149,26 @@ export class InvoiceGenerator {
     doc.text(`${totalAmount.toFixed(2)} €`, 190, startY + 17, { align: 'right' });
     doc.setTextColor(0, 0, 0);
 
+    // Anti-falsification QR Code
+    try {
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=uros_id_${orderGroupId}`;
+      const qrRes = await fetch(qrUrl);
+      const qrBlob = await qrRes.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(qrBlob);
+      });
+      doc.addImage(base64, 'PNG', 14, startY - 5, 25, 25);
+      doc.setFontSize(7);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`ID Validación: ${shortId}`, 14, startY + 23);
+    } catch (e) { console.error("Could not fetch QR code", e); }
+
     // Footer mark
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text('Documento generado automáticamente — C.B. Uros de Rivas', 14, 280);
+    doc.text('Documento generado automáticamente — C.B. Uros de Rivas', 14, 285);
     doc.setTextColor(0, 0, 0);
 
     doc.save(`Factura_${shortId}.pdf`);

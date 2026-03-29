@@ -295,7 +295,7 @@ export function AdminPanel() {
 
   const generateFactura = (groupKey: string, groupOrders: Order[]) => {
     const first = groupOrders[0];
-    const isPaidStripe = stripeStatuses[first.id] === 'paid';
+    const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
     const allCompleted = groupOrders.every(o => o.status === 'completed');
     
     let paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending' = 'pending';

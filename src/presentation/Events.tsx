@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
@@ -59,6 +60,8 @@ export function Events() {
   const [regCustomData, setRegCustomData] = useState<Record<string, string>>({});
   const [regSubmitting, setRegSubmitting] = useState(false);
 
+  const location = useLocation();
+
   const loadEvents = async () => {
     setLoading(true);
     try {
@@ -72,7 +75,27 @@ export function Events() {
     setLoading(false);
   };
 
-  useEffect(() => { loadEvents(); }, [user]);
+  useEffect(() => { 
+    loadEvents(); 
+    
+    // Check Stripe success / cancel redirects
+    const params = new URLSearchParams(location.search);
+    if (params.get('success')) {
+      showMessage('Pago Completado', '¡Inscripción pagada con éxito! Has recibido tu reserva segura.');
+      // Auto-update if it was pending
+      const sessionId = params.get('session_id');
+      if (sessionId && user) {
+        // Find the event ID that corresponds to this session
+        adapter.checkStripePayment(sessionId).then(res => {
+          if (res.payment_status === 'paid') {
+            loadEvents(); // just reload, webhook or admin sync will handle DB if needed, but we can't reliably know ev.id without finding it among attendees.
+          }
+        }).catch(() => {});
+      }
+    } else if (params.get('canceled')) {
+      showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
+    }
+  }, [user, location.search]);
 
   const handleSaveEvent = async (eventData: Omit<Event, 'id'>) => {
     if (editEvent) await adapter.updateEvent(editEvent.id, eventData);
