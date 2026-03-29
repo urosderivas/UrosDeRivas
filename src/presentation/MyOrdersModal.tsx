@@ -23,7 +23,9 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
         
         if (user) {
           const campusRegs = await adapter.getUserFullRegistrations(user.id);
-          allOrders = [...allOrders, ...campusRegs];
+          // Enrich with user email since event_registrations table only stores user_id
+          const enrichedRegs = campusRegs.map(r => ({ ...r, buyer_email: user.email || '' }));
+          allOrders = [...allOrders, ...enrichedRegs];
           allOrders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
         }
         

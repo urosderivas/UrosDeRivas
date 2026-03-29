@@ -631,37 +631,106 @@ export function AdminPanel() {
                      <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Inscripciones ({attendees[ev.id].length}):</strong>
                      {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito.</p> : (
                        <table className="admin-table" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                         <thead><tr><th>Email</th><th>Días</th><th>Asist.</th><th>Nombres</th><th>Importe</th><th>Estado</th><th>Acciones</th></tr></thead>
+                         <thead>
+                           <tr>
+                             <th>Reserva (Stripe)</th>
+                             <th>Comprador / Fecha</th>
+                             <th>Desglose Inscripción</th>
+                             <th>Total (€)</th>
+                             <th>Estado</th>
+                             <th>Pago en mano</th>
+                             <th>Factura</th>
+                           </tr>
+                         </thead>
                          <tbody>
                            {attendees[ev.id].map((att: any) => {
                              const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
+                             // stripeStatuses map might hold the checked status
+                             const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
+                             const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
+                             const allCompleted = att.status === 'completed';
+
+                             // Build mock Order for Factura
+                             const dummyOrder = {
+                               id: att.event_id + '_' + att.user_id,
+                               user_id: att.user_id,
+                               item_id: att.event_id,
+                               event_id: att.event_id,
+                               buyer_name: (att.attendee_names || []).join(', ') || 'Desconocido',
+                               buyer_email: att.user_email || '',
+                               item_name: ev.title,
+                               size: `${att.num_attendees} asist. | ${(att.selected_days || []).length} días`,
+                               quantity: 1,
+                               amount: Number(att.amount),
+                               status: att.status,
+                               stripe_session_id: att.stripe_session_id,
+                               created_at: att.created_at,
+                               type: 'campus' as const
+                             } as any;
+
                              return (
                              <tr key={att.user_id}>
-                               <td className="monospace">{att.user_email}</td>
-                               <td style={{ fontSize: '0.8rem' }}>{(att.selected_days || []).length} días</td>
-                               <td>{att.num_attendees || 1}</td>
-                               <td style={{ fontSize: '0.8rem' }}>{(att.attendee_names || []).join(', ') || '-'}</td>
-                               <td style={{ fontWeight: 700, color: '#d4af37' }}>{att.amount ? `${Number(att.amount).toFixed(2)}€` : '-'}</td>
+                               <td className="monospace">
+                                 {isLocal ? 'Reserva Manual' : att.stripe_session_id?.substring(0,12) + '...'}
+                                 {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                                 {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize:'0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
+                               </td>
                                <td>
-                                 {isLocal ? (
-                                   <select value={att.status || 'pending'}
+                                 <strong>{(att.attendee_names || []).join(', ')}</strong><br/>
+                                 <span style={{ fontSize: '0.8rem', color: '#666' }}>{att.user_email}</span><br/>
+                                 <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
+                               </td>
+                               <td>
+                                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
+                                   <li>
+                                     • <strong>{ev.title}</strong>
+                                     <span style={{ color: '#555', marginLeft: '4px' }}>[{att.num_attendees} asist. | {(att.selected_days || []).length} días]</span>
+                                   </li>
+                                 </ul>
+                               </td>
+                               <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{Number(att.amount).toFixed(2)}</td>
+                               <td>
+                                 <select 
+                                   className="status-dropdown" 
+                                   value={att.status || 'pending'} 
+                                   onChange={async (e) => {
+                                     try {
+                                       await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                       handleLoadAttendees(ev.id);
+                                     } catch (err: any) { showMessage('Error', err.message); }
+                                   }}
+                                 >
+                                   <option value="pending">Pendiente</option>
+                                   <option value="completed">Completado</option>
+                                   <option value="cancelled">Cancelado</option>
+                                 </select>
+                               </td>
+                               <td style={{ textAlign: 'center' }}>
+                                 {!isLocal ? (
+                                   <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
+                                     {isPaidStripe ? '✅ Online' : 'Online'}
+                                   </span>
+                                 ) : (
+                                   <input
+                                     type="checkbox"
+                                     checked={allCompleted}
+                                     title="Marcar como pagado en mano"
                                      onChange={async (e) => {
+                                       const newStatus = e.target.checked ? 'completed' : 'pending';
                                        try {
-                                         await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                         await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
                                          handleLoadAttendees(ev.id);
                                        } catch (err: any) { showMessage('Error', err.message); }
                                      }}
-                                     style={{ padding: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)' }}>
-                                     <option value="pending">Pendiente</option>
-                                     <option value="completed">Completado</option>
-                                     <option value="cancelled">Cancelado</option>
-                                   </select>
-                                 ) : (
-                                   <span className={`status-badge ${att.status}`}>{(att.status || 'pending').toUpperCase()}</span>
+                                     style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                   />
                                  )}
                                </td>
                                <td>
-                                 <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
+                                 <button className="btn-secondary" onClick={() => generateFactura(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                                   📄 PDF
+                                 </button>
+                                 <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {
                                    setConfirmPrompt({
                                      open: true,
                                      message: `¿Eliminar inscripción de ${att.user_email}?`,
@@ -672,8 +741,8 @@ export function AdminPanel() {
                                        } catch (err: any) { showMessage('Error', err.message); }
                                      }
                                    });
-                                 }}>
-                                   <XCircle size={16} />
+                                 }} style={{ marginTop: '6px' }}>
+                                   <Trash2 size={16} />
                                  </button>
                                </td>
                              </tr>
