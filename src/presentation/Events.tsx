@@ -51,7 +51,7 @@ export function Events() {
   const [messageAlert, setMessageAlert] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
   const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean; action: (() => void) | null; message: string }>({ open: false, action: null, message: '' });
   const showMessage = (title: string, message: string) => setMessageAlert({ open: true, title, message });
-  const [userRegistrations, setUserRegistrations] = useState<string[]>([]);
+  const [userRegistrations, setUserRegistrations] = useState<Record<string, string>>({});
 
   // Registration form state
   const [regSelectedDays, setRegSelectedDays] = useState<string[]>([]);
@@ -75,9 +75,9 @@ export function Events() {
     setLoading(false);
   };
 
-  useEffect(() => { 
-    loadEvents(); 
-    
+  useEffect(() => {
+    loadEvents();
+
     // Check Stripe success / cancel redirects
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
@@ -90,7 +90,7 @@ export function Events() {
           if (res.payment_status === 'paid') {
             loadEvents(); // just reload, webhook or admin sync will handle DB if needed, but we can't reliably know ev.id without finding it among attendees.
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } else if (params.get('canceled')) {
       showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
@@ -177,7 +177,7 @@ export function Events() {
         customData: regCustomData,
         status: 'pending',
       });
-      setUserRegistrations(prev => [...prev, ev.id]);
+      setUserRegistrations(prev => ({ ...prev, [ev.id]: 'pending' }));
       showMessage('Reserva Confirmada', `✅ Inscripción reservada por €${pricing.total.toFixed(2)}. Paga en el campus.`);
       setExpandedId(null);
     } catch (e: any) {
@@ -204,10 +204,18 @@ export function Events() {
           ) : (
             events.map(ev => {
               const isExpanded = expandedId === ev.id;
-              const isRegistered = userRegistrations.includes(ev.id);
+              const regStatus = userRegistrations[ev.id];
+              const isRegistered = regStatus !== undefined;
               const dateRange = ev.dates.length > 0
                 ? `${new Date(ev.dates[0] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${new Date(ev.dates[ev.dates.length - 1] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+
+              const renderBadge = () => {
+                if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }} title="Tu participación está asegurada">✅ Inscrito</div>;
+                if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }} title="Los administradores están revisando tu inscripción">⏳ Pendiente</div>;
+                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="Pago fallido o cancelado. Espera revisión del club.">❌ Cancelado</div>;
+                return null;
+              };
 
               return (
                 <div key={ev.id} className={`event-card ${isExpanded ? 'event-expanded' : ''}`}>
@@ -222,11 +230,12 @@ export function Events() {
                     {ev.imageUrl ? (
                       <div className="event-image" style={{ backgroundImage: `url(${ev.imageUrl})` }}>
                         <div className="event-type-badge badge-campus">CAMPUS</div>
-                        {isRegistered && <div className="source-badge" style={{ background: '#10b981' }}>✅ Inscrito</div>}
+                        {renderBadge()}
                       </div>
                     ) : (
                       <div className="event-image event-image-placeholder">
                         <div className="event-type-badge badge-campus">CAMPUS</div>
+                        {renderBadge()}
                         <span className="placeholder-icon">🏀</span>
                       </div>
                     )}
@@ -259,8 +268,10 @@ export function Events() {
                         )}
 
                         {isRegistered ? (
-                          <div className="campus-registered-box">
-                            <p>✅ Ya estás inscrito en este campus.</p>
+                          <div className="campus-registered-box" style={{ padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+                            {regStatus === 'completed' && <p>✅ Tu inscripción está <b>Completada</b>.</p>}
+                            {regStatus === 'pending' && <p>⏳ Tu inscripción está <b>Pendiente</b> de revisión por los administradores o de finalizar el pago online.</p>}
+                            {regStatus === 'cancelled' && <p>❌ Tu inscripción ha sido <b>Cancelada</b>. Espera a que un administrador la elimine para volver a intentar rellenarla.</p>}
                           </div>
                         ) : (
                           <div className="campus-registration-form">

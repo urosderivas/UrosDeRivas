@@ -239,10 +239,12 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     }
   }
 
-  async getUserRegistrations(userId: string): Promise<string[]> {
-    const { data, error } = await supabase.from('event_registrations').select('event_id').eq('user_id', userId);
-    if (error) return [];
-    return data.map(r => r.event_id);
+  async getUserRegistrations(userId: string): Promise<Record<string, string>> {
+    const { data, error } = await supabase.from('event_registrations').select('event_id, status').eq('user_id', userId);
+    if (error) return {};
+    const map: Record<string, string> = {};
+    for (const r of data) map[r.event_id] = r.status;
+    return map;
   }
 
   async getUserFullRegistrations(userId: string): Promise<any[]> {
