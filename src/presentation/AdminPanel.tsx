@@ -16,7 +16,7 @@ const adapter = new SupabaseAdapter();
 export function AdminPanel() {
   const { user } = useStore();
   const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>(user?.role === 'coach' ? 'stats' : 'users');
-  
+
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<MarketItem[]>([]);
@@ -33,7 +33,8 @@ export function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [stripeStatuses, setStripeStatuses] = useState<Record<string, string>>({});
   const [syncingStripe, setSyncingStripe] = useState(false);
-  
+  const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
+
   // Market Item Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<MarketItem | null>(null);
@@ -78,27 +79,27 @@ export function AdminPanel() {
       if (!res.ok) throw new Error("API Clupik inaccesible");
       const data = await res.json();
       const clupikItems = data.value || data.data || data || [];
-      
+
       let syncedCount = 0;
       for (const cItem of clupikItems) {
         let detailData = cItem;
         try {
           const detailRes = await fetch(`https://api.clupik.com/clubs/67/shop/product/${cItem.id}`);
-          if(detailRes.ok) {
+          if (detailRes.ok) {
             const rawDetail = await detailRes.json();
             detailData = rawDetail.data || rawDetail;
           }
-        } catch(e) {}
-        
+        } catch (e) { }
+
         const rawId = cItem.id.toString().replace('clupik_', '');
         const price = detailData.minPrice ? detailData.minPrice / 100 : (detailData.price ? detailData.price / 100 : 0);
         const imageUrl = `https://api.clupik.com/clubs/67/shop/image/${rawId}?format=large`;
         const name = detailData.title || cItem.title;
         const desc = detailData.description || '';
-        
+
         const customFields = [];
         let sizes: string[] = [];
-        
+
         if (detailData.productGroupAttributes) {
           const attr = detailData.productGroupAttributes.find((a: any) => a.name === "Tallas" || a.name?.Tallas);
           if (attr && Array.isArray(attr.values)) {
@@ -106,7 +107,7 @@ export function AdminPanel() {
             customFields.push({ name: 'Talla', type: 'categorical', options: attr.values, required: true });
           }
         }
-        
+
         const nameMatcher = name.toLowerCase();
         if (nameMatcher.includes('cubre') || nameMatcher.includes('chándal') || nameMatcher.includes('chaqueta')) {
           customFields.push({ name: 'Jugador/a con el que tiene relación', type: 'text', required: true });
@@ -115,9 +116,9 @@ export function AdminPanel() {
           customFields.push({ name: 'Número a imprimir (Opcional)', type: 'text', required: false });
           customFields.push({ name: 'Jugador/a', type: 'text', required: true });
         }
-        
+
         const exists = items.some(i => i.name === name);
-        if(!exists) {
+        if (!exists) {
           await adapter.createItem({
             name,
             price,
@@ -132,7 +133,7 @@ export function AdminPanel() {
       showMessage("Migración Clupik", `Se han importado ${syncedCount} artículos a la base de datos interna con campos personalizados habilitados.`);
       const freshData = await adapter.getItems();
       setItems(freshData);
-    } catch(e: any) {
+    } catch (e: any) {
       console.error(e);
       showMessage("Error", "No se pudo sincronizar Clupik: " + e.message);
     } finally {
@@ -175,8 +176,8 @@ export function AdminPanel() {
           await adapter.deleteOrder(id);
           setOrders(orders.filter(o => o.id !== id));
           showMessage('Éxito', 'Pedido eliminado correctamente.');
-        } catch (e: any) { 
-          showMessage('Error al borrar pedido', e.message); 
+        } catch (e: any) {
+          showMessage('Error al borrar pedido', e.message);
         }
       }
     });
@@ -243,21 +244,21 @@ export function AdminPanel() {
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> : 
-             logs.length === 0 ? <tr><td colSpan={5} className="table-empty">Sin actividad.</td></tr> :
-             logs.slice(0, 50).map(log => (
-              <tr key={log.id}>
-                <td>{new Date(log.created_at).toLocaleString('es-ES')}</td>
-                <td className="monospace">
-                  {log.user_email || systemUsers.find(u => u.id === log.user_id)?.email || log.user_id?.substring(0,8) || 'Anon'}
-                </td>
-                <td><span className="badge-action">{log.action_type}</span></td>
-                <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
-                <td>
-                  <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete"><Trash2 size={16} /></button>
-                </td>
-              </tr>
-            ))}
+            {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> :
+              logs.length === 0 ? <tr><td colSpan={5} className="table-empty">Sin actividad.</td></tr> :
+                logs.slice(0, 50).map(log => (
+                  <tr key={log.id}>
+                    <td>{new Date(log.created_at).toLocaleString('es-ES')}</td>
+                    <td className="monospace">
+                      {log.user_email || systemUsers.find(u => u.id === log.user_id)?.email || log.user_id?.substring(0, 8) || 'Anon'}
+                    </td>
+                    <td><span className="badge-action">{log.action_type}</span></td>
+                    <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
+                    <td>
+                      <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete"><Trash2 size={16} /></button>
+                    </td>
+                  </tr>
+                ))}
           </tbody>
         </table>
       </div>
@@ -267,7 +268,7 @@ export function AdminPanel() {
   const handleSyncAllStripe = async (ordersList?: Order[]) => {
     setSyncingStripe(true);
     const target = ordersList || orders;
-    
+
     // Extract all pending Stripe session IDs
     const sessionIdsToVerify: string[] = [];
     for (const order of target) {
@@ -277,7 +278,7 @@ export function AdminPanel() {
     }
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
-    
+
     // Batch fetch from Edge Function
     if (sessionIdsToVerify.length > 0) {
       try {
@@ -285,13 +286,13 @@ export function AdminPanel() {
         for (const order of target) {
           if (order.stripe_session_id && batchResults[order.stripe_session_id]) {
             const result = batchResults[order.stripe_session_id];
-            newStatuses[order.id] = result.payment_status; 
-            
+            newStatuses[order.id] = result.payment_status;
+
             // Auto-update DB based on Stripe status (only if still pending)
             if (result.payment_status === 'paid' && order.status === 'pending') {
-               await adapter.updateOrderStatus(order.id, 'processing');
+              await adapter.updateOrderStatus(order.id, 'processing');
             } else if (result.payment_status === 'unpaid' && order.status === 'pending') {
-               await adapter.updateOrderStatus(order.id, 'cancelled');
+              await adapter.updateOrderStatus(order.id, 'cancelled');
             }
           } else if (!order.stripe_session_id) {
             newStatuses[order.id] = 'no_session';
@@ -312,11 +313,11 @@ export function AdminPanel() {
     const first = groupOrders[0];
     const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
     const allCompleted = groupOrders.every(o => o.status === 'completed');
-    
+
     let paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending' = 'pending';
     if (isPaidStripe) paymentStatus = 'paid_stripe';
     else if (allCompleted) paymentStatus = 'paid_hand';
-    
+
     InvoiceGenerator.generatePdfFactura({
       orderGroupId: groupKey,
       clientName: first.buyer_name,
@@ -357,10 +358,10 @@ export function AdminPanel() {
 
   const renderOrders = () => {
     const grouped = orders.reduce((acc, order) => {
-       const key = order.stripe_session_id || order.id;
-       if(!acc[key]) acc[key] = [];
-       acc[key].push(order);
-       return acc;
+      const key = order.stripe_session_id || order.id;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(order);
+      return acc;
     }, {} as Record<string, Order[]>);
 
     return (
@@ -386,88 +387,88 @@ export function AdminPanel() {
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={7} className="table-empty">Cargando...</td></tr> : 
-             orders.length === 0 ? <tr><td colSpan={7} className="table-empty">Sin pedidos registrados.</td></tr> :
-             Object.entries(grouped).map(([groupId, groupOrders]) => {
-               const first = groupOrders[0];
-               const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
-               const allCompleted = groupOrders.every(o => o.status === 'completed');
-               const isStripeOrder = groupId.startsWith('cs_');
-               const isPaidStripe = stripeStatuses[first.id] === 'paid';
-               const stripeChecked = stripeStatuses[first.id] !== undefined;
-               
-               return (
-                <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
-                  <td className="monospace" style={{ fontSize: '0.8rem' }}>
-                    {groupId.substring(0,12)}...
-                    {isStripeOrder && isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
-                    {isStripeOrder && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize:'0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
-                  </td>
-                  <td>
-                    <strong>{first.buyer_name}</strong><br/>
-                    <span style={{ fontSize: '0.8rem', color: '#666' }}>{first.buyer_email}</span><br/>
-                    <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(first.created_at).toLocaleDateString()}</span>
-                  </td>
-                  <td>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
-                      {groupOrders.map(o => (
-                        <li key={o.id} style={{ marginBottom: '6px' }}>
-                          • <strong>{o.item_name}</strong>
-                          {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
-                          {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
-                          <span style={{ marginLeft: '6px', color: '#0e70ab' }}>
-                            {(o.quantity || 1) > 1 
-                              ? `(€${(o.amount / o.quantity).toFixed(2)} c/u = €${o.amount.toFixed(2)})`
-                              : `(€${o.amount.toFixed(2)})`}
+            {loading ? <tr><td colSpan={7} className="table-empty">Cargando...</td></tr> :
+              orders.length === 0 ? <tr><td colSpan={7} className="table-empty">Sin pedidos registrados.</td></tr> :
+                Object.entries(grouped).map(([groupId, groupOrders]) => {
+                  const first = groupOrders[0];
+                  const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
+                  const allCompleted = groupOrders.every(o => o.status === 'completed');
+                  const isStripeOrder = groupId.startsWith('cs_');
+                  const isPaidStripe = stripeStatuses[first.id] === 'paid';
+                  const stripeChecked = stripeStatuses[first.id] !== undefined;
+
+                  return (
+                    <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
+                      <td className="monospace" style={{ fontSize: '0.8rem' }}>
+                        {groupId.substring(0, 12)}...
+                        {isStripeOrder && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                        {isStripeOrder && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize: '0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
+                      </td>
+                      <td>
+                        <strong>{first.buyer_name}</strong><br />
+                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{first.buyer_email}</span><br />
+                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(first.created_at).toLocaleDateString()}</span>
+                      </td>
+                      <td>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
+                          {groupOrders.map(o => (
+                            <li key={o.id} style={{ marginBottom: '6px' }}>
+                              • <strong>{o.item_name}</strong>
+                              {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
+                              {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
+                              <span style={{ marginLeft: '6px', color: '#0e70ab' }}>
+                                {(o.quantity || 1) > 1
+                                  ? `(€${(o.amount / o.quantity).toFixed(2)} c/u = €${o.amount.toFixed(2)})`
+                                  : `(€${o.amount.toFixed(2)})`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{groupTotal.toFixed(2)}</td>
+                      <td>
+                        <select
+                          className="status-dropdown"
+                          value={allCompleted ? 'completed' : first.status}
+                          onChange={(e) => {
+                            groupOrders.forEach(o => handleUpdateOrderStatus(o.id, e.target.value as Order['status']));
+                          }}
+                        >
+                          <option value="pending">Pendiente</option>
+                          <option value="processing">Procesando</option>
+                          <option value="completed">Completado</option>
+                          <option value="cancelled">Cancelado</option>
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {isStripeOrder ? (
+                          <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
+                            {isPaidStripe ? '✅ Online' : 'Online'}
                           </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </td>
-                  <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{groupTotal.toFixed(2)}</td>
-                  <td>
-                    <select 
-                      className="status-dropdown" 
-                      value={allCompleted ? 'completed' : first.status} 
-                      onChange={(e) => {
-                        groupOrders.forEach(o => handleUpdateOrderStatus(o.id, e.target.value as Order['status']));
-                      }}
-                    >
-                      <option value="pending">Pendiente</option>
-                      <option value="processing">Procesando</option>
-                      <option value="completed">Completado</option>
-                      <option value="cancelled">Cancelado</option>
-                    </select>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    {isStripeOrder ? (
-                      <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
-                        {isPaidStripe ? '✅ Online' : 'Online'}
-                      </span>
-                    ) : (
-                      <input
-                        type="checkbox"
-                        checked={allCompleted}
-                        title="Marcar como pagado en mano"
-                        onChange={(e) => {
-                          const newStatus = e.target.checked ? 'completed' : 'pending';
-                          groupOrders.forEach(o => handleUpdateOrderStatus(o.id, newStatus as Order['status']));
-                        }}
-                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <button className="btn-secondary" onClick={() => generateFactura(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
-                      📄 PDF
-                    </button>
-                    <button onClick={() => handleDeleteOrder(first.id, `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-               )
-             })}
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={allCompleted}
+                            title="Marcar como pagado en mano"
+                            onChange={(e) => {
+                              const newStatus = e.target.checked ? 'completed' : 'pending';
+                              groupOrders.forEach(o => handleUpdateOrderStatus(o.id, newStatus as Order['status']));
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn-secondary" onClick={() => generateFactura(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                          📄 PDF
+                        </button>
+                        <button onClick={() => handleDeleteOrder(first.id, `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
           </tbody>
         </table>
       </div>
@@ -505,29 +506,36 @@ export function AdminPanel() {
         </thead>
         <tbody>
           {loading ? <tr><td colSpan={4} className="table-empty">Cargando usuarios...</td></tr> :
-           systemUsers.length === 0 ? <tr><td colSpan={4} className="table-empty">Sin usuarios registrados o sin permisos suficientes.</td></tr> :
-           systemUsers.map(sysUser => (
-            <tr key={sysUser.id}>
-              <td>{sysUser.email}</td>
-              <td><span className={`status-badge ${sysUser.role === 'admin' ? 'completed' : sysUser.role === 'coach' ? 'processing' : 'pending'}`}>{sysUser.role?.toUpperCase() || 'USER'}</span></td>
-              <td>{new Date(sysUser.created_at).toLocaleDateString()}</td>
-              <td>
-                <button className="btn-icon delete" title="Eliminar cuenta" onClick={() => handleDeleteUser(sysUser.id)}><XCircle size={16} /></button>
-              </td>
-            </tr>
-          ))}
+            systemUsers.length === 0 ? <tr><td colSpan={4} className="table-empty">Sin usuarios registrados o sin permisos suficientes.</td></tr> :
+              systemUsers.map(sysUser => (
+                <tr key={sysUser.id}>
+                  <td>{sysUser.email}</td>
+                  <td><span className={`status-badge ${sysUser.role === 'admin' ? 'completed' : sysUser.role === 'coach' ? 'processing' : 'pending'}`}>{sysUser.role?.toUpperCase() || 'USER'}</span></td>
+                  <td>{new Date(sysUser.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <button className="btn-icon delete" title="Eliminar cuenta" onClick={() => handleDeleteUser(sysUser.id)}><XCircle size={16} /></button>
+                  </td>
+                </tr>
+              ))}
         </tbody>
       </table>
     </div>
   );
 
   const handleLoadAttendees = async (eventId: string) => {
-    setLoadingAttendees(eventId);
-    try {
-      const data = await adapter.getEventAttendees(eventId);
-      setAttendees({ ...attendees, [eventId]: data });
-    } catch (e: any) { showMessage('Error', e.message); }
-    setLoadingAttendees(null);
+    // Toggle UI expansion
+    const isExpanded = !!expandedEvents[eventId];
+    setExpandedEvents({ ...expandedEvents, [eventId]: !isExpanded });
+
+    // Only load data if we are expanding and it's missing (or just always if we click "Ver")
+    if (!isExpanded && !attendees[eventId]) {
+      setLoadingAttendees(eventId);
+      try {
+        const data = await adapter.getEventAttendees(eventId);
+        setAttendees({ ...attendees, [eventId]: data });
+      } catch (e: any) { showMessage('Error', e.message); }
+      setLoadingAttendees(null);
+    }
   };
 
   const handleImportClupikEvents = async () => {
@@ -568,17 +576,17 @@ export function AdminPanel() {
       if (!updatedAttendees[ev.id]) {
         try {
           updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
     setAttendees(updatedAttendees);
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
-    
+
     // Collect all Stripe session IDs from all attendees
     const sessionIdsToVerify: string[] = [];
     const attMap: any[] = [];
-    
+
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
         if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
@@ -591,23 +599,23 @@ export function AdminPanel() {
     // Process all in a single batch
     if (sessionIdsToVerify.length > 0) {
       try {
-         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
-         for (const { evId, att } of attMap) {
-           const result = batchResults[att.stripe_session_id];
-           if (result) {
-             newStatuses[att.stripe_session_id] = result.payment_status;
-             if (result.payment_status === 'paid' && att.status === 'pending') {
-               await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
-             } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
-               await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
-             }
-           }
-         }
+        const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+        for (const { evId, att } of attMap) {
+          const result = batchResults[att.stripe_session_id];
+          if (result) {
+            newStatuses[att.stripe_session_id] = result.payment_status;
+            if (result.payment_status === 'paid' && att.status === 'pending') {
+              await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
+            } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
+              await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
+            }
+          }
+        }
       } catch (err) {
-         console.error("Batch campus verification failed", err);
+        console.error("Batch campus verification failed", err);
       }
     }
-    
+
     setStripeStatuses(newStatuses);
     // Reload UI for the updated ones
     for (const ev of targetEvents) {
@@ -645,29 +653,29 @@ export function AdminPanel() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), 'Resumen');
 
     events.forEach(e => {
-       const atts = updatedAttendees[e.id] || [];
-       if (atts.length > 0) {
-         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
-           const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
-           const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
-           const allCompleted = a.status === 'completed';
+      const atts = updatedAttendees[e.id] || [];
+      if (atts.length > 0) {
+        const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
+          const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
+          const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
+          const allCompleted = a.status === 'completed';
 
-           return {
-             'Reserva (Stripe)': a.stripe_session_id || 'Manual',
-             'Email': a.user_email,
-             'Días': (a.selected_days || []).join(', '),
-             'Asistentes': a.num_attendees || 1,
-             'Nombres': (a.attendee_names || []).join(', '),
-             'Importe': a.amount || 0,
-             'Estado': a.status || 'pending',
-             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
-             'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
-             'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
-           };
-         }));
-         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0,31) || 'Campus';
-         XLSX.utils.book_append_sheet(wb, sheet, cleanName);
-       }
+          return {
+            'Reserva (Stripe)': a.stripe_session_id || 'Manual',
+            'Email': a.user_email,
+            'Días': (a.selected_days || []).join(', '),
+            'Asistentes': a.num_attendees || 1,
+            'Nombres': (a.attendee_names || []).join(', '),
+            'Importe': a.amount || 0,
+            'Estado': a.status || 'pending',
+            'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
+            'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
+            'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+          };
+        }));
+        const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0, 31) || 'Campus';
+        XLSX.utils.book_append_sheet(wb, sheet, cleanName);
+      }
     });
     XLSX.writeFile(wb, 'Reporte_Campus_Uros.xlsx');
   };
@@ -700,157 +708,157 @@ export function AdminPanel() {
         </thead>
         <tbody>
           {loading ? <tr><td colSpan={5} className="table-empty">Cargando campus...</td></tr> :
-           events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
-           events.map(ev => (
-            <Fragment key={ev.id}>
-             <tr>
-               <td><strong>{ev.title}</strong></td>
-               <td style={{ fontSize: '0.8rem' }}>
-                 {ev.dates && ev.dates.length > 0
-                   ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
-                   : new Date(ev.date).toLocaleDateString()}
-               </td>
-               <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
-               <td><span className={`status-badge ${ev.active ? 'completed' : 'cancelled'}`}>{ev.active ? 'SÍ' : 'NO'}</span></td>
-               <td>
-                 <button className="btn-secondary" onClick={() => handleLoadAttendees(ev.id)} disabled={loadingAttendees === ev.id}>
-                   {loadingAttendees === ev.id ? 'Cargando...' : 'Ver Inscritos'}
-                 </button>
-               </td>
-             </tr>
-             {attendees[ev.id] && (
-               <tr className="attendees-row">
-                 <td colSpan={5}>
-                   <div className="attendees-list">
-                     <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Inscripciones ({attendees[ev.id].length}):</strong>
-                     {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito.</p> : (
-                       <table className="admin-table" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                         <thead>
-                           <tr>
-                             <th>Reserva (Stripe)</th>
-                             <th>Comprador / Fecha</th>
-                             <th>Desglose Inscripción</th>
-                             <th>Total (€)</th>
-                             <th>Estado</th>
-                             <th>Pago en mano</th>
-                             <th>Factura</th>
-                           </tr>
-                         </thead>
-                         <tbody>
-                           {attendees[ev.id].map((att: any) => {
-                             const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
-                             // stripeStatuses map might hold the checked status
-                             const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
-                             const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
-                             const allCompleted = att.status === 'completed';
+            events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
+              events.map(ev => (
+                <Fragment key={ev.id}>
+                  <tr>
+                    <td><strong>{ev.title}</strong></td>
+                    <td style={{ fontSize: '0.8rem' }}>
+                      {ev.dates && ev.dates.length > 0
+                        ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
+                        : new Date(ev.date).toLocaleDateString()}
+                    </td>
+                    <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
+                    <td><span className={`status-badge ${ev.active ? 'completed' : 'cancelled'}`}>{ev.active ? 'SÍ' : 'NO'}</span></td>
+                    <td>
+                      <button className="btn-secondary" onClick={() => handleLoadAttendees(ev.id)} disabled={loadingAttendees === ev.id}>
+                        {loadingAttendees === ev.id ? 'Cargando...' : expandedEvents[ev.id] ? 'Ocultar Inscritos' : 'Ver Inscritos'}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedEvents[ev.id] && attendees[ev.id] && (
+                    <tr className="attendees-row">
+                      <td colSpan={5}>
+                        <div className="attendees-list">
+                          <strong style={{ display: 'block', marginBottom: '0.75rem' }}>Inscripciones ({attendees[ev.id].length}):</strong>
+                          {attendees[ev.id].length === 0 ? <p style={{ color: 'var(--text-secondary)' }}>Nadie inscrito.</p> : (
+                            <table className="admin-table" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                              <thead>
+                                <tr>
+                                  <th>Reserva (Stripe)</th>
+                                  <th>Comprador / Fecha</th>
+                                  <th>Desglose Inscripción</th>
+                                  <th>Total (€)</th>
+                                  <th>Estado</th>
+                                  <th>Pago en mano</th>
+                                  <th>Factura</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {attendees[ev.id].map((att: any) => {
+                                  const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
+                                  // stripeStatuses map might hold the checked status
+                                  const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
+                                  const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
+                                  const allCompleted = att.status === 'completed';
 
-                             // Build mock Order for Factura
-                             const dummyOrder = {
-                               id: att.event_id + '_' + att.user_id,
-                               user_id: att.user_id,
-                               item_id: att.event_id,
-                               event_id: att.event_id,
-                               buyer_name: (att.attendee_names || []).join(', ') || 'Desconocido',
-                               buyer_email: att.user_email || '',
-                               item_name: ev.title,
-                               size: `${att.num_attendees} asist. | ${(att.selected_days || []).length} días`,
-                               quantity: 1,
-                               amount: Number(att.amount),
-                               status: att.status,
-                               stripe_session_id: att.stripe_session_id,
-                               created_at: att.created_at,
-                               type: 'campus' as const
-                             } as any;
+                                  // Build mock Order for Factura
+                                  const dummyOrder = {
+                                    id: att.event_id + '_' + att.user_id,
+                                    user_id: att.user_id,
+                                    item_id: att.event_id,
+                                    event_id: att.event_id,
+                                    buyer_name: (att.attendee_names || []).join(', ') || 'Desconocido',
+                                    buyer_email: att.user_email || '',
+                                    item_name: ev.title,
+                                    size: `${att.num_attendees} asist. | ${(att.selected_days || []).join(', ')}`,
+                                    quantity: 1,
+                                    amount: Number(att.amount),
+                                    status: att.status,
+                                    stripe_session_id: att.stripe_session_id,
+                                    created_at: att.created_at,
+                                    type: 'campus' as const
+                                  } as any;
 
-                             return (
-                             <tr key={att.user_id}>
-                               <td className="monospace">
-                                 {isLocal ? 'Reserva Manual' : att.stripe_session_id?.substring(0,12) + '...'}
-                                 {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize:'0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
-                                 {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize:'0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
-                               </td>
-                               <td>
-                                 <strong>{(att.attendee_names || []).join(', ')}</strong><br/>
-                                 <span style={{ fontSize: '0.8rem', color: '#666' }}>{att.user_email}</span><br/>
-                                 <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
-                               </td>
-                               <td>
-                                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
-                                   <li>
-                                     • <strong>{ev.title}</strong>
-                                     <span style={{ color: '#555', marginLeft: '4px' }}>[{att.num_attendees} asist. | {(att.selected_days || []).length} días]</span>
-                                   </li>
-                                 </ul>
-                               </td>
-                               <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{Number(att.amount).toFixed(2)}</td>
-                               <td>
-                                 <select 
-                                   className="status-dropdown" 
-                                   value={att.status || 'pending'} 
-                                   onChange={async (e) => {
-                                     try {
-                                       await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
-                                       handleLoadAttendees(ev.id);
-                                     } catch (err: any) { showMessage('Error', err.message); }
-                                   }}
-                                 >
-                                   <option value="pending">Pendiente</option>
-                                   <option value="completed">Completado</option>
-                                   <option value="cancelled">Cancelado</option>
-                                 </select>
-                               </td>
-                               <td style={{ textAlign: 'center' }}>
-                                 {!isLocal ? (
-                                   <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
-                                     {isPaidStripe ? '✅ Online' : 'Online'}
-                                   </span>
-                                 ) : (
-                                   <input
-                                     type="checkbox"
-                                     checked={allCompleted}
-                                     title="Marcar como pagado en mano"
-                                     onChange={async (e) => {
-                                       const newStatus = e.target.checked ? 'completed' : 'pending';
-                                       try {
-                                         await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
-                                         handleLoadAttendees(ev.id);
-                                       } catch (err: any) { showMessage('Error', err.message); }
-                                     }}
-                                     style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                   />
-                                 )}
-                               </td>
-                               <td>
-                                 <button className="btn-secondary" onClick={() => generateFactura(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
-                                   📄 PDF
-                                 </button>
-                                 <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {
-                                   setConfirmPrompt({
-                                     open: true,
-                                     message: `¿Eliminar inscripción de ${att.user_email}?`,
-                                     action: async () => {
-                                       try {
-                                         await adapter.removeEventRegistration(ev.id, att.user_id);
-                                         handleLoadAttendees(ev.id);
-                                       } catch (err: any) { showMessage('Error', err.message); }
-                                     }
-                                   });
-                                 }} style={{ marginTop: '6px' }}>
-                                   <Trash2 size={16} />
-                                 </button>
-                               </td>
-                             </tr>
-                             );
-                           })}
-                         </tbody>
-                       </table>
-                     )}
-                   </div>
-                 </td>
-               </tr>
-             )}
-            </Fragment>
-          ))}
+                                  return (
+                                    <tr key={att.user_id}>
+                                      <td className="monospace">
+                                        {isLocal ? 'Reserva Manual' : att.stripe_session_id?.substring(0, 12) + '...'}
+                                        {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
+                                        {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize: '0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
+                                      </td>
+                                      <td>
+                                        <strong>{(att.attendee_names || []).join(', ')}</strong><br />
+                                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{att.user_email}</span><br />
+                                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
+                                      </td>
+                                      <td>
+                                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
+                                          <li>
+                                            • <strong>{ev.title}</strong>
+                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{att.num_attendees} asist. | {(att.selected_days || []).join(', ')}]</span>
+                                          </li>
+                                        </ul>
+                                      </td>
+                                      <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{Number(att.amount).toFixed(2)}</td>
+                                      <td>
+                                        <select
+                                          className="status-dropdown"
+                                          value={att.status || 'pending'}
+                                          onChange={async (e) => {
+                                            try {
+                                              await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                              handleLoadAttendees(ev.id);
+                                            } catch (err: any) { showMessage('Error', err.message); }
+                                          }}
+                                        >
+                                          <option value="pending">Pendiente</option>
+                                          <option value="completed">Completado</option>
+                                          <option value="cancelled">Cancelado</option>
+                                        </select>
+                                      </td>
+                                      <td style={{ textAlign: 'center' }}>
+                                        {!isLocal ? (
+                                          <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
+                                            {isPaidStripe ? '✅ Online' : 'Online'}
+                                          </span>
+                                        ) : (
+                                          <input
+                                            type="checkbox"
+                                            checked={allCompleted}
+                                            title="Marcar como pagado en mano"
+                                            onChange={async (e) => {
+                                              const newStatus = e.target.checked ? 'completed' : 'pending';
+                                              try {
+                                                await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
+                                                handleLoadAttendees(ev.id);
+                                              } catch (err: any) { showMessage('Error', err.message); }
+                                            }}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                          />
+                                        )}
+                                      </td>
+                                      <td>
+                                        <button className="btn-secondary" onClick={() => generateFactura(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                                          📄 PDF
+                                        </button>
+                                        <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {
+                                          setConfirmPrompt({
+                                            open: true,
+                                            message: `¿Eliminar inscripción de ${att.user_email}?`,
+                                            action: async () => {
+                                              try {
+                                                await adapter.removeEventRegistration(ev.id, att.user_id);
+                                                handleLoadAttendees(ev.id);
+                                              } catch (err: any) { showMessage('Error', err.message); }
+                                            }
+                                          });
+                                        }} style={{ marginTop: '6px' }}>
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
         </tbody>
       </table>
     </div>
@@ -861,10 +869,10 @@ export function AdminPanel() {
   const renderMarket = () => (
     <div className="admin-table-container">
       <div className="table-toolbar">
-         <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
-         <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', marginLeft: 'auto' }}>
-           📥 Importar Catálogo Clupik
-         </button>
+        <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
+        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', marginLeft: 'auto' }}>
+          📥 Importar Catálogo Clupik
+        </button>
       </div>
       <table className="admin-table">
         <thead>
@@ -877,22 +885,22 @@ export function AdminPanel() {
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> : 
-           items.length === 0 ? <tr><td colSpan={5} className="table-empty">Tienda vacía.</td></tr> :
-           items.map(item => (
-            <tr key={item.id}>
-              <td><img src={item.imageUrl} alt={item.name} className="market-thumb" /></td>
-              <td>{item.name}</td>
-              <td>€{item.price}</td>
-              <td className="description-cell">{item.description}</td>
-              <td>
-                <div className="admin-actions-cell">
-                  <button className="btn-icon" title="Editar" onClick={() => { setEditItem(item); setModalOpen(true); }}><Pencil size={16} /></button>
-                  <button className="btn-icon delete" title="Borrar" onClick={() => handleDeleteItem(item.id)}><Trash2 size={16} /></button>
-                </div>
-              </td>
-            </tr>
-          ))}
+          {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> :
+            items.length === 0 ? <tr><td colSpan={5} className="table-empty">Tienda vacía.</td></tr> :
+              items.map(item => (
+                <tr key={item.id}>
+                  <td><img src={item.imageUrl} alt={item.name} className="market-thumb" /></td>
+                  <td>{item.name}</td>
+                  <td>€{item.price}</td>
+                  <td className="description-cell">{item.description}</td>
+                  <td>
+                    <div className="admin-actions-cell">
+                      <button className="btn-icon" title="Editar" onClick={() => { setEditItem(item); setModalOpen(true); }}><Pencil size={16} /></button>
+                      <button className="btn-icon delete" title="Borrar" onClick={() => handleDeleteItem(item.id)}><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
         </tbody>
       </table>
     </div>
@@ -909,47 +917,47 @@ export function AdminPanel() {
         </div>
 
         <div className="admin-tabs">
-        {user?.role === 'admin' && (
-          <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-            Usuarios
+          {user?.role === 'admin' && (
+            <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
+              Usuarios
+            </button>
+          )}
+          <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
+            Estadísticas
           </button>
-        )}
-        <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
-          Estadísticas
-        </button>
-        {user?.role === 'admin' && (
-          <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-            Pedidos
+          {user?.role === 'admin' && (
+            <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
+              Pedidos
+            </button>
+          )}
+          {user?.role === 'admin' && (
+            <button className={`tab-btn ${activeTab === 'market' ? 'active' : ''}`} onClick={() => setActiveTab('market')}>
+              Catálogo Tienda
+            </button>
+          )}
+          <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
+            Campus & Inscripciones
           </button>
-        )}
-        {user?.role === 'admin' && (
-          <button className={`tab-btn ${activeTab === 'market' ? 'active' : ''}`} onClick={() => setActiveTab('market')}>
-            Catálogo Tienda
-          </button>
-        )}
-        <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
-          Campus & Inscripciones
-        </button>
-      </div>
-
-      <div className="admin-content-area">
-        {loading && <div className="loading-state">Cargando...</div>}
-        <div className="admin-tab-content">
-          {activeTab === 'users' && renderUsers()}
-          {activeTab === 'stats' && renderStats()}
-          {activeTab === 'orders' && renderOrders()}
-          {activeTab === 'market' && renderMarket()}
-          {activeTab === 'events' && renderEvents()}
         </div>
-      </div>
+
+        <div className="admin-content-area">
+          {loading && <div className="loading-state">Cargando...</div>}
+          <div className="admin-tab-content">
+            {activeTab === 'users' && renderUsers()}
+            {activeTab === 'stats' && renderStats()}
+            {activeTab === 'orders' && renderOrders()}
+            {activeTab === 'market' && renderMarket()}
+            {activeTab === 'events' && renderEvents()}
+          </div>
+        </div>
       </div>
 
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
-      <MessageModal 
-        isOpen={messageAlert.open} 
-        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} 
-        title={messageAlert.title} 
-        message={messageAlert.message} 
+      <MessageModal
+        isOpen={messageAlert.open}
+        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))}
+        title={messageAlert.title}
+        message={messageAlert.message}
       />
       <ConfirmModal
         isOpen={confirmPrompt.open}

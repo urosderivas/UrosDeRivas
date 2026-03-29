@@ -82,9 +82,10 @@ export class InvoiceGenerator {
 
     // Stripe session reference
     if (orderGroupId.startsWith('cs_')) {
-      doc.setFontSize(8);
+      doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
-      doc.text(`Ref. Stripe: ${orderGroupId}`, 130, 60);
+      // Use maxWidth to prevent cropping on long Stripe IDs
+      doc.text(`Ref. Stripe: ${orderGroupId}`, 130, 60, { maxWidth: 65 });
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
     }
