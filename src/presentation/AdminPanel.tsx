@@ -653,6 +653,7 @@ export function AdminPanel() {
            const allCompleted = a.status === 'completed';
 
            return {
+             'Reserva (Stripe)': a.stripe_session_id || 'Manual',
              'Email': a.user_email,
              'Días': (a.selected_days || []).join(', '),
              'Asistentes': a.num_attendees || 1,
