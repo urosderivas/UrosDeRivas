@@ -14,6 +14,7 @@ interface AppState {
   // Actions
   initAuth: () => Promise<void>;
   signIn: (email: string, pass: string) => Promise<void>;
+  signUp: (email: string, pass: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   fetchItems: () => Promise<void>;
@@ -47,6 +48,10 @@ export const useStore = create<AppState>()((set) => ({
   signIn: async (email, pass) => {
     const user = await adapter.signIn(email, pass);
     set({ user });
+  },
+
+  signUp: async (email, pass) => {
+    await adapter.signUp(email, pass);
   },
 
   signInWithGoogle: async () => {

@@ -4,26 +4,59 @@ import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
 export function Login() {
-  const { signIn, signInWithGoogle } = useStore();
+  const { signIn, signUp, signInWithGoogle } = useStore();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
-    
-    try {
-      await signIn(email, password);
-      setLoading(false);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Error occurred during login.');
-      setLoading(false);
+
+    if (isRegister) {
+      // Register flow
+      if (password.length < 6) {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+        setLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Las contraseñas no coinciden.');
+        setLoading(false);
+        return;
+      }
+      try {
+        await signUp(email, password);
+        setSuccess('✅ Cuenta creada. Revisa tu email para confirmar tu cuenta antes de iniciar sesión.');
+        setIsRegister(false);
+        setPassword('');
+        setConfirmPassword('');
+      } catch (err: any) {
+        setError(err.message || 'Error al crear la cuenta.');
+      }
+    } else {
+      // Login flow
+      try {
+        await signIn(email, password);
+        navigate('/');
+      } catch (err: any) {
+        if (err.message?.includes('Invalid login credentials')) {
+          setError('Email o contraseña incorrectos.');
+        } else if (err.message?.includes('Email not confirmed')) {
+          setError('Confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');
+        } else {
+          setError(err.message || 'Error al iniciar sesión.');
+        }
+      }
     }
+    setLoading(false);
   };
 
   const handleGoogleAuth = async () => {
@@ -33,7 +66,7 @@ export function Login() {
       await signInWithGoogle();
       // Google Auth redirects away, so no local navigation is needed here immediately.
     } catch (err: any) {
-      setError(err.message || 'Error initating Google Auth');
+      setError(err.message || 'Error initiating Google Auth');
       setLoading(false);
     }
   };
@@ -41,36 +74,61 @@ export function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2>Acceso al Club</h2>
-        <p>Inicia sesión como administrador o entrenador para gestionar torneos y estadísticas.</p>
-        
+        <h2>{isRegister ? 'Crear Cuenta' : 'Acceso al Club'}</h2>
+        <p>
+          {isRegister
+            ? 'Regístrate con tu email para inscribirte en campus, comprar en la tienda y más.'
+            : 'Inicia sesión para acceder a todas las funcionalidades del club.'}
+        </p>
+
         {error && <div className="error-message">{error}</div>}
+        {success && <div className="success-message">{success}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
             <label>Email</label>
-            <input 
-              type="email" 
-              required 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              placeholder="admin@urosderivas.com" 
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="tu@email.com"
             />
           </div>
           <div className="form-group">
             <label>Contraseña</label>
-            <input 
-              type="password" 
-              required 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              placeholder="••••••••" 
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              minLength={6}
             />
           </div>
+
+          {isRegister && (
+            <div className="form-group">
+              <label>Confirmar Contraseña</label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={6}
+              />
+            </div>
+          )}
+
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Validando...' : 'Iniciar Sesión'}
+            {loading
+              ? 'Procesando...'
+              : isRegister
+                ? 'Crear Cuenta'
+                : 'Iniciar Sesión'}
           </button>
-          
+
           <div className="auth-separator">o continuar con</div>
 
           <button type="button" className="btn-secondary google-btn" onClick={handleGoogleAuth} disabled={loading}>
@@ -82,6 +140,14 @@ export function Login() {
             </svg>
             Google
           </button>
+
+          <div className="auth-toggle">
+            {isRegister ? (
+              <p>¿Ya tienes cuenta? <button type="button" className="link-btn" onClick={() => { setIsRegister(false); setError(''); setSuccess(''); }}>Inicia sesión</button></p>
+            ) : (
+              <p>¿No tienes cuenta? <button type="button" className="link-btn" onClick={() => { setIsRegister(true); setError(''); setSuccess(''); }}>Regístrate</button></p>
+            )}
+          </div>
         </form>
       </div>
     </div>

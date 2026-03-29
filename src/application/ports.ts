@@ -3,6 +3,7 @@ import { User, MarketItem, Event } from '../domain/entities';
 export interface AuthPort {
   getUser(): Promise<User | null>;
   signIn(email: string, password: string): Promise<User>;
+  signUp(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
 

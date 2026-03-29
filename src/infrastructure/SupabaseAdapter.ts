@@ -30,6 +30,16 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return userResult;
   }
 
+  async signUp(email: string, password: string): Promise<void> {
+    const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: redirectUrl }
+    });
+    if (error) throw error;
+  }
+
   async signInWithGoogle(): Promise<void> {
     // Determine the precise origin path considering GitHub Pages base url padding seamlessly
     const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
