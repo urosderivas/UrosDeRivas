@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { ShoppingCart } from 'lucide-react';
 import './Home.css';
 
 export function Home() {
@@ -35,7 +36,10 @@ export function Home() {
           <p className="hero-subtitle">Únete a la familia Uros de Rivas. El mejor baloncesto local.</p>
           <div className="hero-buttons">
             <Link to="/events" className="btn-primary">Ir a Campus</Link>
-            <Link to="/market" className="btn-secondary">Tienda Oficial</Link>
+            <Link to="/market" className="btn-secondary">
+              <ShoppingCart size={20} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+              Tienda Oficial
+            </Link>
           </div>
         </div>
         <div className="scroll-indicator">

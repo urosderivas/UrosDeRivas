@@ -243,6 +243,19 @@
 }
 
 @media (max-width: 600px) {
+  .hero-buttons { 
+    flex-wrap: wrap; 
+    gap: 1rem; 
+    padding: 0 1rem;
+  }
+  .btn-primary, .btn-secondary { 
+    width: 100%; 
+    padding: 1rem; 
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .sponsors-grid { gap: 1rem; }
   .sponsor-item { flex: 0 1 calc(50% - 0.5rem); min-width: 140px; height: 140px; } /* 2 columns */
   .sponsors-section h3 { font-size: 1.8rem; }

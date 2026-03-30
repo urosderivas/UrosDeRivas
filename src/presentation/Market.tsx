@@ -19,12 +19,12 @@ const stripeAdapter = new StripeAdapter();
 export function Market() {
   const { user, items, loading, fetchItems, cart, addToCart } = useStore();
   const location = useLocation();
-  
+
   const [modalOpen, setModalOpen] = useState(false);
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [editItem, setEditItem] = useState<MarketItem | null>(null);
-  
+
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
   const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean, action: (() => void) | null, message: string }>({ open: false, action: null, message: '' });
@@ -45,7 +45,7 @@ export function Market() {
       if (sessionId) {
         adapter.getOrders().then(orders => {
           const match = orders.filter((o: any) => o.stripe_session_id === sessionId);
-          for(const order of match) {
+          for (const order of match) {
             if (order.status === 'pending') adapter.updateOrderStatus(order.id, 'completed').catch(console.error);
           }
         }).catch(console.error);
@@ -81,7 +81,7 @@ export function Market() {
 
   const validateProductConfiguration = (item: MarketItem): Record<string, string> | null => {
     const config = selectedVariables[item.id] || {};
-    
+
     // Check Custom Fields
     if (item.custom_fields && item.custom_fields.length > 0) {
       for (const field of item.custom_fields) {
@@ -91,7 +91,7 @@ export function Market() {
         }
       }
     }
-    
+
     // Check legacy sizes
     if (item.sizes && item.sizes.length > 0 && !config['Talla']) {
       showMessage('Faltan datos', 'Por favor, selecciona una talla antes de continuar.');
@@ -102,12 +102,12 @@ export function Market() {
 
   const handleAddToCart = (item: MarketItem) => {
     if (!user) { showMessage('Atención', 'Debes iniciar sesión para comprar.'); return; }
-    
+
     const config = validateProductConfiguration(item);
     if (!config) return;
 
     // Generate a unique ID for this configuration
-    const configSig = Object.entries(config).sort(([a], [b]) => a.localeCompare(b)).map(([k,v]) => `${k}:${v}`).join('|');
+    const configSig = Object.entries(config).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join('|');
     const cartItemId = `${item.id}-${configSig}`;
 
     addToCart({
@@ -145,7 +145,23 @@ export function Market() {
     }));
   };
 
-  if (loading && items.length === 0) return <div className="loading-state">Cargando catálogo...</div>;
+  const SkeletonGrid = () => (
+    <>
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <div key={i} className="skeleton-card-market">
+          <div className="skeleton-image skeleton-shimmer" />
+          <div className="skeleton-info">
+            <div className="skeleton-text skeleton-shimmer" />
+            <div className="skeleton-text-short skeleton-shimmer" />
+          </div>
+          <div className="skeleton-footer">
+            <div className="skeleton-btn skeleton-shimmer" />
+            <div className="skeleton-btn skeleton-shimmer" />
+          </div>
+        </div>
+      ))}
+    </>
+  );
 
   return (
     <>
@@ -166,13 +182,15 @@ export function Market() {
         </div>
 
         <div className="products-grid">
-          {items.length === 0 ? (
+          {loading ? (
+            <SkeletonGrid />
+          ) : items.length === 0 ? (
             <p className="no-items">Próximamente disponible.</p>
           ) : (
             items.map(item => {
-               const vars = selectedVariables[item.id] || {};
-               return (
-                <div key={item.id} className="product-card">
+              const vars = selectedVariables[item.id] || {};
+              return (
+                <div key={item.id} className="product-card animate-fade-in">
                   <AdminGuard>
                     <div className="admin-card-actions">
                       <button className="btn-admin-edit" onClick={() => handleOpenEdit(item)} title="Editar">✏️</button>
@@ -185,7 +203,7 @@ export function Market() {
                   <div className="product-info">
                     <h3 className="product-name">{item.name}</h3>
                     <p className="product-desc">{item.description}</p>
-                    
+
                     <div className="product-variables">
                       {/* Legacy Sizes mapped as a categorical field if no custom fields exist */}
                       {item.sizes && item.sizes.length > 0 && (!item.custom_fields || !item.custom_fields.find(c => c.name === 'Talla')) && (
@@ -204,32 +222,32 @@ export function Market() {
 
                       {/* Custom Dynamic Fields */}
                       {item.custom_fields && item.custom_fields.map((field: CustomField) => (
-                         <div key={field.name} className="var-group">
-                            <label className="var-label">{field.name} {field.required && '*'}</label>
-                            {field.type === 'categorical' ? (
-                              <div className="sizes-grid">
-                                {(field.options || []).map(opt => (
-                                  <button key={opt} type="button" onClick={() => handleSetVar(item.id, field.name, opt)}
-                                    className={`market-size-chip ${vars[field.name] === opt ? 'active' : ''}`}>
-                                    {opt}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <input type="text" className="market-text-input" placeholder="..." 
-                                value={vars[field.name] || ''} onChange={(e) => handleSetVar(item.id, field.name, e.target.value)} />
-                            )}
-                         </div>
+                        <div key={field.name} className="var-group">
+                          <label className="var-label">{field.name} {field.required && '*'}</label>
+                          {field.type === 'categorical' ? (
+                            <div className="sizes-grid">
+                              {(field.options || []).map(opt => (
+                                <button key={opt} type="button" onClick={() => handleSetVar(item.id, field.name, opt)}
+                                  className={`market-size-chip ${vars[field.name] === opt ? 'active' : ''}`}>
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <input type="text" className="market-text-input" placeholder="..."
+                              value={vars[field.name] || ''} onChange={(e) => handleSetVar(item.id, field.name, e.target.value)} />
+                          )}
+                        </div>
                       ))}
                     </div>
 
                     <div className="product-footer-actions">
                       <span className="product-price">{item.price.toFixed(2)} €</span>
                       <div className="btn-stack" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                         <button className="btn-add-cart" onClick={() => handleAddToCart(item)}>Añadir al Carrito</button>
-                         <button className="btn-buy" onClick={() => handleBuyNow(item)} disabled={checkoutLoading === item.id}>
-                           {checkoutLoading === item.id ? 'Redirigiendo...' : 'Comprar Ahora'}
-                         </button>
+                        <button className="btn-add-cart" onClick={() => handleAddToCart(item)}>Añadir al Carrito</button>
+                        <button className="btn-buy" onClick={() => handleBuyNow(item)} disabled={checkoutLoading === item.id}>
+                          {checkoutLoading === item.id ? 'Redirigiendo...' : 'Comprar Ahora'}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -243,18 +261,18 @@ export function Market() {
       <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
-      <MessageModal 
-        isOpen={messageAlert.open} 
-        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} 
-        title={messageAlert.title} 
-        message={messageAlert.message} 
+      <MessageModal
+        isOpen={messageAlert.open}
+        onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))}
+        title={messageAlert.title}
+        message={messageAlert.message}
       />
       <ConfirmModal
         isOpen={confirmPrompt.open}
         title="Confirmar Acción"
         message={confirmPrompt.message}
-        onConfirm={() => { if (confirmPrompt.action) confirmPrompt.action(); }}
-        onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false }))}
+        onConfirm={() => { if (confirmPrompt.action) confirmPrompt.action(); setConfirmPrompt(prev => ({ ...prev, open: false, action: null })); }}
+        onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
       />
     </>
   );

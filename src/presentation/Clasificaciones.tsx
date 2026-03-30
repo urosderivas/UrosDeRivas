@@ -313,6 +313,36 @@ export function Clasificaciones() {
     }
   };
 
+  const MatchSkeleton = () => (
+    <div className="matches-list">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="skeleton-match-card">
+          <div className="skeleton-date skeleton-shimmer" />
+          <div className="skeleton-teams-box">
+            <div className="skeleton-team-rect skeleton-shimmer" />
+            <div className="skeleton-team-rect skeleton-shimmer" />
+          </div>
+          <div className="skeleton-status-badge skeleton-shimmer" />
+        </div>
+      ))}
+    </div>
+  );
+
+  const StandingSkeleton = () => (
+    <div className="standings-wrapper">
+      {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+        <div key={i} className="skeleton-standing-row">
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ width: '30px' }} />
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ width: '40px', height: '30px', borderRadius: '50%' }} />
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ flex: 1 }} />
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ width: '40px' }} />
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ width: '40px' }} />
+          <div className="skeleton-standing-cell skeleton-shimmer" style={{ width: '40px' }} />
+        </div>
+      ))}
+    </div>
+  );
+
   const renderGameList = (title: string, gameArray: ClupikGame[]) => (
     <div className="game-section">
       <h3 className="section-title">{title}</h3>
@@ -557,68 +587,73 @@ export function Clasificaciones() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="loading-state">Desplegando infraestructura de partidos...</div>
-      ) : (
-        <div className="stands-content animate-slide-up">
-          {tab === 'partidos' && (
-            <>
-              {upcomingMatches.length > 0 && renderGameList("Próximos Partidos", upcomingMatches)}
-              {pastMatches.length > 0 && renderGameList("Últimos Resultados", pastMatches)}
-              {upcomingMatches.length === 0 && pastMatches.length === 0 && <div className="no-items">Sin partidos que mostrar para esta selección.</div>}
-            </>
-          )}
+      <div className="stands-content animate-slide-up">
+        {loading ? (
+          <div className="game-section">
+            <h3 className="section-title">Iniciando feed...</h3>
+            <MatchSkeleton />
+          </div>
+        ) : (
+          <>
+            {tab === 'partidos' && (
+              <>
+                {upcomingMatches.length > 0 && renderGameList("Próximos Partidos", upcomingMatches)}
+                {pastMatches.length > 0 && renderGameList("Últimos Resultados", pastMatches)}
+                {upcomingMatches.length === 0 && pastMatches.length === 0 && <div className="no-items">Sin partidos que mostrar para esta selección.</div>}
+              </>
+            )}
 
-          {tab === 'clasificacion' && (
-            <div className="standings-wrapper">
-              {loadingStandings ? (
-                <div className="loading-msg">Calculando estadísticas de grupo...</div>
-              ) : dynamicStandings.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="standings-table">
-                    <thead>
-                      <tr>
-                        <th>Pos</th>
-                        <th>Equipo</th>
-                        <th>PJ</th>
-                        <th>G</th>
-                        <th>P</th>
-                        <th>E</th>
-                        <th>PF</th>
-                        <th>PC</th>
-                        <th>Pts</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dynamicStandings.sort((a,b) => a.rankingOrder - b.rankingOrder).map(s => {
-                        const isPrimaryClub = s.team?.club?.id === clubId || s.team?.name.toUpperCase().includes('UROS DE RIVAS');
-                        return (
-                          <tr key={s.team.id || s.rankingOrder} className={isPrimaryClub ? 'row-highlight' : ''}>
-                            <td>{s.rankingOrder}</td>
-                            <td className="team-col">
-                              {s.team.shieldUrl && <img src={s.team.shieldUrl} alt="" className="table-shield"/>}
-                              <span>{s.team.name}</span>
-                            </td>
-                            <td>{s.gamesPlayed}</td>
-                            <td>{s.gamesWon}</td>
-                            <td>{s.gamesLost}</td>
-                            <td>{s.gamesDrawn}</td>
-                            <td>{s.pointsScored}</td>
-                            <td>{s.pointsReceived}</td>
-                            <td className="points-col">{s.rankingPoints}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                 <div className="no-items">No hay clasificaciones disponibles para esta competición.</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+            {tab === 'clasificacion' && (
+              <div className="standings-wrapper">
+                {loadingStandings ? (
+                  <StandingSkeleton />
+                ) : dynamicStandings.length > 0 ? (
+                  <div className="table-responsive">
+                    <table className="standings-table">
+                      <thead>
+                        <tr>
+                          <th>Pos</th>
+                          <th>Equipo</th>
+                          <th>PJ</th>
+                          <th>G</th>
+                          <th>P</th>
+                          <th>E</th>
+                          <th>PF</th>
+                          <th>PC</th>
+                          <th>Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dynamicStandings.sort((a,b) => a.rankingOrder - b.rankingOrder).map(s => {
+                          const isPrimaryClub = s.team?.club?.id === clubId || s.team?.name.toUpperCase().includes('UROS DE RIVAS');
+                          return (
+                            <tr key={s.team.id || s.rankingOrder} className={isPrimaryClub ? 'row-highlight' : ''}>
+                              <td>{s.rankingOrder}</td>
+                              <td className="team-col">
+                                {s.team.shieldUrl && <img src={s.team.shieldUrl} alt="" className="table-shield"/>}
+                                <span>{s.team.name}</span>
+                              </td>
+                              <td>{s.gamesPlayed}</td>
+                              <td>{s.gamesWon}</td>
+                              <td>{s.gamesLost}</td>
+                              <td>{s.gamesDrawn}</td>
+                              <td>{s.pointsScored}</td>
+                              <td>{s.pointsReceived}</td>
+                              <td className="points-col">{s.rankingPoints}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                   <div className="no-items">No hay clasificaciones disponibles para esta competición.</div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

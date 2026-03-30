@@ -656,3 +656,73 @@
     display: none;
   }
 }
+
+/* Skeleton Loading Support */
+.skeleton-match-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--secondary-bg);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid rgba(255, 255, 255, 0.05);
+  min-height: 90px;
+}
+
+.skeleton-date {
+  width: 120px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.skeleton-teams-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.skeleton-team-rect {
+  width: 200px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.skeleton-status-badge {
+  width: 80px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.skeleton-standing-row {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #111;
+  gap: 1rem;
+}
+
+.skeleton-standing-cell {
+  height: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+@media (max-width: 900px) {
+  .skeleton-match-card {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+  }
+  .skeleton-teams-box {
+    flex-direction: column;
+    width: 100%;
+  }
+  .skeleton-team-rect {
+    width: 80%;
+  }
+  .skeleton-date, .skeleton-status-badge {
+    width: 60%;
+  }
+}

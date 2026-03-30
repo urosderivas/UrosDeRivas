@@ -25,6 +25,7 @@
   letter-spacing: 1px;
   color: var(--text-primary);
   text-transform: uppercase;
+  text-decoration: none; /* Explicitly remove underline */
 }
 
 .nav-logo {
@@ -38,9 +39,11 @@
   font-weight: 600;
 }
 
-.nav-links a {
+.nav-links a, .nav-links a:visited {
   transition: color 0.3s ease;
   position: relative;
+  text-decoration: none;
+  color: var(--text-primary);
 }
 
 .nav-links a:hover {
