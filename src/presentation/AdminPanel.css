@@ -140,6 +140,17 @@
   padding: 40px !important;
 }
 
+@media (max-width: 768px) {
+  .admin-header h2 {
+    font-size: 1.4rem;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+  .admin-panel {
+    padding: 20px 10px;
+  }
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -172,6 +183,20 @@
   border-bottom: 3px solid transparent;
   transition: all 0.2s ease;
   margin-bottom: -2px; /* overlap border */
+}
+
+@media (max-width: 768px) {
+  .admin-tabs {
+    gap: 5px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
 }
 
 .tab-btn:hover {
@@ -280,13 +305,55 @@
   padding: 10px 20px 30px 20px;
 }
 
-@media (max-width: 768px) {
-  .admin-header {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
+@media (max-width: 900px) {
+  .table-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
   }
-  .admin-tabs {
-    flex-wrap: wrap;
+  .table-toolbar .btn-primary {
+    width: 100%;
+    margin: 0 !important;
+    font-size: 0.75rem;
+    padding: 8px;
+    height: auto;
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .admin-table th, .admin-table td {
+    padding: 8px 4px;
+    font-size: 0.75rem;
+  }
+  .description-cell {
+    max-width: 80px;
+  }
+  .market-thumb {
+    width: 30px;
+    height: 30px;
+  }
+  .attendees-list {
+    padding: 5px 0;
+  }
+  .attendees-list .admin-table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-header h2 {
+    font-size: 1.1rem;
+  }
+  .stat-card {
+    padding: 15px;
+  }
+  .stat-number {
+    font-size: 2rem;
+  }
+  .table-toolbar {
+    grid-template-columns: 1fr;
   }
 }

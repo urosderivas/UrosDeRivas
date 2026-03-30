@@ -726,3 +726,39 @@
     width: 60%;
   }
 }
+
+@media (max-width: 768px) {
+  .match-deep-stats {
+    padding: 1rem;
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+  }
+  .form-cols {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .form-hist-row {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+  }
+  .fh-name {
+    max-width: 120px;
+  }
+  .comp-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .stat-row {
+    font-size: 0.8rem;
+  }
+  .stat-num {
+    font-size: 1rem;
+  }
+  .h2h-date {
+    display: none; /* Hide date in mobile H2H to save space */
+  }
+  .h2h-row {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.8rem;
+  }
+}
