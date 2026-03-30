@@ -6,7 +6,7 @@ import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { Trash2, RefreshCw, Pencil, XCircle } from 'lucide-react';
+import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import './AdminPanel.css';
 import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
@@ -798,7 +798,10 @@ export function AdminPanel() {
             events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
               events.map(ev => (
                 <Fragment key={ev.id}>
-                  <tr>
+                  <tr 
+                    className={`clickable-row ${expandedEvents[ev.id] ? 'expanded' : ''}`}
+                    onClick={() => handleLoadAttendees(ev.id)}
+                  >
                     <td><strong>{ev.title}</strong></td>
                     <td style={{ fontSize: '0.8rem' }}>
                       {ev.dates && ev.dates.length > 0
@@ -808,9 +811,10 @@ export function AdminPanel() {
                     <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
                     <td><span className={`status-badge ${ev.active ? 'completed' : 'cancelled'}`}>{ev.active ? 'SÍ' : 'NO'}</span></td>
                     <td>
-                      <button className="btn-secondary" onClick={() => handleLoadAttendees(ev.id)} disabled={loadingAttendees === ev.id}>
-                        {loadingAttendees === ev.id ? 'Cargando...' : expandedEvents[ev.id] ? 'Ocultar Inscritos' : 'Ver Inscritos'}
-                      </button>
+                      <div className="attendee-count-badge">
+                        {expandedEvents[ev.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        <span>{attendees[ev.id]?.length || 0}</span>
+                      </div>
                     </td>
                   </tr>
                   {expandedEvents[ev.id] && attendees[ev.id] && (

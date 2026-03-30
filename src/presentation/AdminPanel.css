@@ -239,6 +239,47 @@
   color: #fff;
 }
 
+/* Clickable Rows (Campus Admin) */
+.clickable-row {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.clickable-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.clickable-row.expanded {
+  background: rgba(64, 224, 208, 0.05); /* Turquoise highlight from brand */
+  border-left: 2px solid var(--accent-turquoise);
+}
+
+.attendee-count-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  width: fit-content;
+  color: var(--accent-gold);
+}
+
+.clickable-row.expanded .attendee-count-badge {
+  background: var(--accent-gold);
+  color: #000;
+}
+
+.attendees-row {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.attendees-list {
+  padding: 10px 20px 30px 20px;
+}
+
 @media (max-width: 768px) {
   .admin-header {
     flex-direction: column;
