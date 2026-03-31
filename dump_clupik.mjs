@@ -1,7 +1,14 @@
 import { Client } from 'pg';
 import fs from 'fs';
+import dotenv from 'dotenv';
 
-const DB_URL = "postgresql://postgres:REDACTED@db.osekoolekqyzbpepyxze.supabase.co:5432/postgres";
+dotenv.config();
+
+const DB_URL = process.env.DATABASE_URL;
+
+if (!DB_URL) {
+  throw new Error("DATABASE_URL is missing in .env configurations.");
+}
 
 async function run() {
   console.log('Connecting to database...');
