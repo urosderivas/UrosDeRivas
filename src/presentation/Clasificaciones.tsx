@@ -40,9 +40,9 @@ interface StandingTeam {
 const SearchableSelect = ({ options, value, onChange, placeholder }: any) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  
+
   const filtered = useMemo(() => options.filter((o: any) => o.label.toLowerCase().includes(search.toLowerCase())), [options, search]);
-  const selectedLabel = options.find((o:any) => o.value === value)?.label || placeholder;
+  const selectedLabel = options.find((o: any) => o.value === value)?.label || placeholder;
 
   return (
     <div className="searchable-select" onMouseLeave={() => setOpen(false)}>
@@ -52,18 +52,18 @@ const SearchableSelect = ({ options, value, onChange, placeholder }: any) => {
       </div>
       {open && (
         <div className="ss-dropdown animate-fade-in">
-          <input 
-            type="text" 
-            autoFocus 
-            className="ss-search" 
-            placeholder="Buscar..." 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
+          <input
+            type="text"
+            autoFocus
+            className="ss-search"
+            placeholder="Buscar..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
           <div className="ss-options">
             {filtered.map((o: any) => (
-              <div 
-                key={o.value} 
+              <div
+                key={o.value}
                 className={`ss-option ${o.value === value ? 'active' : ''}`}
                 onClick={() => {
                   onChange(o.value);
@@ -84,12 +84,12 @@ const SearchableSelect = ({ options, value, onChange, placeholder }: any) => {
 
 export function Clasificaciones() {
   const [tab, setTab] = useState<'partidos' | 'clasificacion'>('partidos');
-  const [clubId, setClubId] = useState<string>('67'); 
+  const [clubId, setClubId] = useState<string>('67');
   const [matches, setMatches] = useState<ClupikGame[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Maintain a dynamic unique list of encountered clubs globally
-  const [knownClubs, setKnownClubs] = useState<{id: string, name: string}[]>([{id: '67', name: 'Uros de Rivas'}]);
+  const [knownClubs, setKnownClubs] = useState<{ id: string, name: string }[]>([{ id: '67', name: 'Uros de Rivas' }]);
 
   // Standings State
   const [dynamicStandings, setDynamicStandings] = useState<StandingTeam[]>([]);
@@ -113,13 +113,13 @@ export function Clasificaciones() {
         toDate.setMonth(toDate.getMonth() + 4);
 
         const res = await fetch(`https://api.clupik.com/games?clubId=${clubId}&from=${fromDate.toISOString()}&to=${toDate.toISOString()}&firstLoad=false&overrideClubId=${clubId}&expand=localTeam,localTeam.club,visitorTeam,visitorTeam.club,organization,competition,group,stadium`);
-        
+
         if (!res.ok) throw new Error("API error: " + res.status);
         const json = await res.json();
-        
+
         // Ensure array of games from json.games (fixed structure)
         const gamesList: ClupikGame[] = Array.isArray(json) ? json : (json.games || json.data || []);
-        
+
         // Fallback: If external club returns 0 matches (no native Clupik presence),
         // we revert to the Uros master feed and filter locally for games involving them.
         if (gamesList.length === 0 && clubId !== '67') {
@@ -131,7 +131,7 @@ export function Clasificaciones() {
               const filteredMatches = fbGames.filter(m => m.localTeam?.club?.id === clubId || m.visitorTeam?.club?.id === clubId);
               gamesList.push(...filteredMatches);
             }
-          } catch(err) {
+          } catch (err) {
             console.error("Fallback fetch failed", err);
           }
         }
@@ -151,7 +151,7 @@ export function Clasificaciones() {
               map.set(m.visitorTeam.club.id, { id: m.visitorTeam.club.id, name: m.visitorTeam.club.name || `Club ${m.visitorTeam.club.id}` });
             }
           });
-          return Array.from(map.values()).sort((a,b) => a.name.localeCompare(b.name));
+          return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
         });
 
       } catch (err) {
@@ -243,7 +243,7 @@ export function Clasificaciones() {
       setComparisonStats(null);
       return;
     }
-    
+
     setSelectedGameId(gameId);
     setLoadingDetail(true);
     setGameDetail(clickedMatch); // Instantly set the cached matching object
@@ -253,19 +253,19 @@ export function Clasificaciones() {
       // Fetch standings for comparative stats using cached match object
       if (clickedMatch.competitionId && clickedMatch.group && clickedMatch.groupId) {
         const targetPhaseId = (clickedMatch.group as any).phaseId || clickedMatch.group.phase?.id || '0';
-        
+
         try {
           const stRes = await fetch(`https://api.clupik.com/competitions/${clickedMatch.competitionId}/phases/${targetPhaseId}/groups/${clickedMatch.groupId}/standings?expand=team,team.club`);
           if (stRes.ok) {
             const stJson = await stRes.json();
             const standings = stJson.standings as StandingTeam[] || [];
-            
+
             const localTeamStats = standings.find(s => s.team.id === clickedMatch.localTeam?.id || s.team.name === clickedMatch.localTeamName || s.team.id === clickedMatch.localTeamId) || null;
             const visitorTeamStats = standings.find(s => s.team.id === clickedMatch.visitorTeam?.id || s.team.name === clickedMatch.visitorTeamName || s.team.id === clickedMatch.visitorTeamId) || null;
-            
+
             setComparisonStats({ local: localTeamStats, visitor: visitorTeamStats });
           }
-        } catch(subErr) {
+        } catch (subErr) {
           console.error("Standings compare fetch failed", subErr);
         }
       }
@@ -288,18 +288,18 @@ export function Clasificaciones() {
         const received = isLocal ? m.visitorScore : m.localScore;
         const win = scored >= received;
         const opponentName = isLocal ? (m.visitorTeamEditableName || m.visitorTeam?.club?.name || m.visitorTeamName) : (m.localTeamEditableName || m.localTeam?.club?.name || m.localTeamName);
-        return { 
-          win, 
+        return {
+          win,
           isLocal,
-          scoreText: `${m.localScore} - ${m.visitorScore}`, 
-          opponentName 
+          scoreText: `${m.localScore} - ${m.visitorScore}`,
+          opponentName
         };
       });
   };
 
   const getHeadToHead = (localId: string | undefined, visitorId: string | undefined, mainMatches: ClupikGame[]) => {
     if (!localId || !visitorId) return [];
-    return mainMatches.filter(m => 
+    return mainMatches.filter(m =>
       ((m.localTeam?.id === localId || m.localTeamId === localId) && (m.visitorTeam?.id === visitorId || m.visitorTeamId === visitorId)) ||
       ((m.localTeam?.id === visitorId || m.localTeamId === visitorId) && (m.visitorTeam?.id === localId || m.visitorTeamId === localId))
     ).slice(0, 5);
@@ -353,22 +353,22 @@ export function Clasificaciones() {
           const vImg = m.visitorTeam?.shieldUrl || m.visitorTeamShieldUrl;
           const lName = m.localTeamEditableName || m.localTeam?.club?.name || m.localTeamName;
           const vName = m.visitorTeamEditableName || m.visitorTeam?.club?.name || m.visitorTeamName;
-          
+
           const localClubId = m.localTeam?.club?.id;
           const visitorClubId = m.visitorTeam?.club?.id;
 
           return (
             <div key={gameIdToUse} className="match-wrapper">
-              <div 
+              <div
                 className={`match-card ${selectedGameId === gameIdToUse ? 'expanded' : ''}`}
                 onClick={() => handleGameClick(m)}
               >
                 <div className="match-date">
                   {new Date(m.date).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
-                
+
                 <div className="match-teams">
-                  <div 
+                  <div
                     className={`team local-team clickable-team ${m.localScore > m.visitorScore && m.status === 'finished' ? 'winner' : ''}`}
                     onClick={(e) => handleTeamClick(e, localClubId)}
                     title={localClubId ? `Cargar feed del Club ${lName}` : ''}
@@ -377,10 +377,10 @@ export function Clasificaciones() {
                     {lImg && <img src={lImg} alt="shield" className="team-shield" />}
                     {m.status === 'finished' && <span className="team-score">{m.localScore}</span>}
                   </div>
-                  
+
                   <div className="match-vs">VS</div>
-                  
-                  <div 
+
+                  <div
                     className={`team visitor-team clickable-team ${m.visitorScore > m.localScore && m.status === 'finished' ? 'winner' : ''}`}
                     onClick={(e) => handleTeamClick(e, visitorClubId)}
                     title={visitorClubId ? `Cargar feed del Club ${vName}` : ''}
@@ -390,7 +390,7 @@ export function Clasificaciones() {
                     <span className="team-name">{vName}</span>
                   </div>
                 </div>
-                
+
                 <div className="match-status">
                   {m.status === 'finished' ? <span className="badge-played">Final</span> : <span className="badge-scheduled">Próximo</span>}
                 </div>
@@ -458,8 +458,8 @@ export function Clasificaciones() {
                             <span className="stat-num">{comparisonStats.visitor.gamesLost}</span>
                           </div>
 
-                           {/* Puntos A Favor (Promedio por partido) */}
-                           <div className="stat-row">
+                          {/* Puntos A Favor (Promedio por partido) */}
+                          <div className="stat-row">
                             <span className="stat-num">{Number(comparisonStats.local.pointsScored / Math.max(comparisonStats.local.gamesPlayed, 1)).toFixed(1)}</span>
                             <div className="bar-wrapper left-bar">
                               <div className="bar-fill pb-fill" style={{ width: `${Math.min(((comparisonStats.local.pointsScored / Math.max(comparisonStats.local.gamesPlayed, 1)) / 100) * 100, 100)}%` }}></div>
@@ -470,9 +470,9 @@ export function Clasificaciones() {
                             </div>
                             <span className="stat-num">{Number(comparisonStats.visitor.pointsScored / Math.max(comparisonStats.visitor.gamesPlayed, 1)).toFixed(1)}</span>
                           </div>
-                          
+
                           {/* Puntos En Contra (Promedio por partido) */}
-                           <div className="stat-row">
+                          <div className="stat-row">
                             <span className="stat-num">{Number(comparisonStats.local.pointsReceived / Math.max(comparisonStats.local.gamesPlayed, 1)).toFixed(1)}</span>
                             <div className="bar-wrapper left-bar lose-bar">
                               <div className="bar-fill" style={{ width: `${Math.min(((comparisonStats.local.pointsReceived / Math.max(comparisonStats.local.gamesPlayed, 1)) / 100) * 100, 100)}%` }}></div>
@@ -502,7 +502,7 @@ export function Clasificaciones() {
                             ))}
                           </div>
                           <div className="form-col-side right">
-                             {getTeamFormMatches(gameDetail.visitorTeam?.id || gameDetail.visitorTeamId, matches).map((f, i) => (
+                            {getTeamFormMatches(gameDetail.visitorTeam?.id || gameDetail.visitorTeamId, matches).map((f, i) => (
                               <div key={i} className={`form-hist-row row-right ${f.win ? 'row-win' : 'row-lose'}`}>
                                 <span className="fh-score">{f.scoreText}</span>
                                 <span className="fh-icon">{f.isLocal ? '🏠' : '✈️'}</span>
@@ -518,25 +518,25 @@ export function Clasificaciones() {
                         <h4 className="cb-title" style={{ textAlign: 'center', margin: '2rem 0 1rem' }}>ENFRENTAMIENTOS DIRECTOS</h4>
                         <div className="h2h-list">
                           {getHeadToHead(gameDetail.localTeam?.id || gameDetail.localTeamId, gameDetail.visitorTeam?.id || gameDetail.visitorTeamId, matches).map((hm, i) => (
-                             <div key={i} className="h2h-row">
-                               <span className="h2h-date">{new Date(hm.date).toLocaleString('es-ES', { month: 'short', day: 'numeric'})}</span>
-                               
-                               <div className="h2h-lname">
-                                 <span className={hm.localScore > hm.visitorScore ? 'winner-text' : ''}>
-                                   {hm.localTeam?.club?.name || hm.localTeamEditableName || hm.localTeamName || 'Local'}
-                                 </span>
-                                 {(hm.localTeam?.shieldUrl || hm.localTeamShieldUrl) && <img src={hm.localTeam?.shieldUrl || hm.localTeamShieldUrl} alt="" className="h2h-shield"/>}
-                               </div>
+                            <div key={i} className="h2h-row">
+                              <span className="h2h-date">{new Date(hm.date).toLocaleString('es-ES', { month: 'short', day: 'numeric' })}</span>
 
-                               <span className="h2h-score">{hm.localScore} - {hm.visitorScore}</span>
+                              <div className="h2h-lname">
+                                <span className={hm.localScore > hm.visitorScore ? 'winner-text' : ''}>
+                                  {hm.localTeam?.club?.name || hm.localTeamEditableName || hm.localTeamName || 'Local'}
+                                </span>
+                                {(hm.localTeam?.shieldUrl || hm.localTeamShieldUrl) && <img src={hm.localTeam?.shieldUrl || hm.localTeamShieldUrl} alt="" className="h2h-shield" />}
+                              </div>
 
-                               <div className="h2h-vname">
-                                 {(hm.visitorTeam?.shieldUrl || hm.visitorTeamShieldUrl) && <img src={hm.visitorTeam?.shieldUrl || hm.visitorTeamShieldUrl} alt="" className="h2h-shield"/>}
-                                 <span className={hm.visitorScore > hm.localScore ? 'winner-text' : ''}>
-                                   {hm.visitorTeam?.club?.name || hm.visitorTeamEditableName || hm.visitorTeamName || 'Visitante'}
-                                 </span>
-                               </div>
-                             </div>
+                              <span className="h2h-score">{hm.localScore} - {hm.visitorScore}</span>
+
+                              <div className="h2h-vname">
+                                {(hm.visitorTeam?.shieldUrl || hm.visitorTeamShieldUrl) && <img src={hm.visitorTeam?.shieldUrl || hm.visitorTeamShieldUrl} alt="" className="h2h-shield" />}
+                                <span className={hm.visitorScore > hm.localScore ? 'winner-text' : ''}>
+                                  {hm.visitorTeam?.club?.name || hm.visitorTeamEditableName || hm.visitorTeamName || 'Visitante'}
+                                </span>
+                              </div>
+                            </div>
                           ))}
                           {getHeadToHead(gameDetail.localTeam?.id || gameDetail.localTeamId, gameDetail.visitorTeam?.id || gameDetail.visitorTeamId, matches).length === 0 && (
                             <span className="loading-msg">No hay enfrentamientos anteriores registrados en el feed.</span>
@@ -561,14 +561,14 @@ export function Clasificaciones() {
     <div className="stands-container">
       <div className="stands-header">
         <h1>Competición en Vivo</h1>
-        
+
         <div className="stands-controls">
           <div className="stands-tabs">
             <button className={`tab-btn ${tab === 'partidos' ? 'active' : ''}`} onClick={() => setTab('partidos')}>Partidos</button>
             <button className={`tab-btn ${tab === 'clasificacion' ? 'active' : ''}`} onClick={() => setTab('clasificacion')}>Clasificación</button>
           </div>
-          
-          <SearchableSelect 
+
+          <SearchableSelect
             options={knownClubs.map(c => ({ value: c.id, label: c.name }))}
             value={clubId}
             onChange={(val: string) => { setClubId(val); setSelectedCompKey('ALL'); setSelectedGameId(null); }}
@@ -578,7 +578,7 @@ export function Clasificaciones() {
 
         {/* Global Competition Filter for both views */}
         <div className="stands-subcontrols animate-fade-in">
-          <SearchableSelect 
+          <SearchableSelect
             options={compSelectOptions}
             value={selectedCompKey}
             onChange={(val: string) => setSelectedCompKey(val)}
@@ -590,7 +590,7 @@ export function Clasificaciones() {
       <div className="stands-content animate-slide-up">
         {loading ? (
           <div className="game-section">
-            <h3 className="section-title">Iniciando feed...</h3>
+            <h3 className="section-title">Desplegando infraestructura de partidos...</h3>
             <MatchSkeleton />
           </div>
         ) : (
@@ -624,13 +624,13 @@ export function Clasificaciones() {
                         </tr>
                       </thead>
                       <tbody>
-                        {dynamicStandings.sort((a,b) => a.rankingOrder - b.rankingOrder).map(s => {
+                        {dynamicStandings.sort((a, b) => a.rankingOrder - b.rankingOrder).map(s => {
                           const isPrimaryClub = s.team?.club?.id === clubId || s.team?.name.toUpperCase().includes('UROS DE RIVAS');
                           return (
                             <tr key={s.team.id || s.rankingOrder} className={isPrimaryClub ? 'row-highlight' : ''}>
                               <td>{s.rankingOrder}</td>
                               <td className="team-col">
-                                {s.team.shieldUrl && <img src={s.team.shieldUrl} alt="" className="table-shield"/>}
+                                {s.team.shieldUrl && <img src={s.team.shieldUrl} alt="" className="table-shield" />}
                                 <span>{s.team.name}</span>
                               </td>
                               <td>{s.gamesPlayed}</td>
@@ -647,7 +647,7 @@ export function Clasificaciones() {
                     </table>
                   </div>
                 ) : (
-                   <div className="no-items">No hay clasificaciones disponibles para esta competición.</div>
+                  <div className="no-items">No hay clasificaciones disponibles para esta competición.</div>
                 )}
               </div>
             )}

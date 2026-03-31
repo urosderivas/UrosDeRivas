@@ -35,10 +35,10 @@ function calcCampusPrice(
     if (numAttendees >= d.minAttendees) { discountPct = d.discountPct; break; }
   }
 
-  const subtotalDiscount = subtotal * (discountPct / 100);
-  const total = subtotal - subtotalDiscount;
+  const discount = subtotal * (discountPct / 100);
+  const total = subtotal - discount;
 
-  return { pricePerDay, subtotal, discount: subtotalDiscount, total };
+  return { pricePerDay, subtotal, discount, total };
 }
 
 export function Events() {
@@ -82,11 +82,13 @@ export function Events() {
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
       showMessage('Pago Completado', '¡Inscripción pagada con éxito! Has recibido tu reserva segura.');
+      // Auto-update if it was pending
       const sessionId = params.get('session_id');
       if (sessionId && user) {
+        // Find the event ID that corresponds to this session
         adapter.checkStripePayment(sessionId).then(res => {
           if (res.payment_status === 'paid') {
-            loadEvents();
+            loadEvents(); // just reload, webhook or admin sync will handle DB if needed, but we can't reliably know ev.id without finding it among attendees.
           }
         }).catch(() => { });
       }
@@ -115,6 +117,7 @@ export function Events() {
   const handleExpand = (ev: Event) => {
     if (expandedId === ev.id) { setExpandedId(null); return; }
     setExpandedId(ev.id);
+    // Reset registration form
     setRegSelectedDays([]);
     setRegNumAttendees(1);
     setRegAttendeeNames(['']);
@@ -129,12 +132,14 @@ export function Events() {
     if (!user) { showMessage('Atención', 'Debes iniciar sesión para inscribirte.'); return; }
     if (regSelectedDays.length === 0) { showMessage('Faltan datos', 'Selecciona al menos un día.'); return; }
 
+    // Validate attendee names
     const names = regAttendeeNames.filter(n => n.trim());
     if (names.length < regNumAttendees) {
       showMessage('Faltan datos', `Introduce el nombre de los ${regNumAttendees} asistentes.`);
       return;
     }
 
+    // Validate required custom fields
     if (ev.custom_fields) {
       for (const cf of ev.custom_fields) {
         if (cf.required && !regCustomData[cf.name]) {
@@ -149,6 +154,7 @@ export function Events() {
     setRegSubmitting(true);
     try {
       if (!payLocal) {
+        // Stripe flow
         const url = await stripeAdapter.createCampusCheckoutSession({
           eventId: ev.id,
           title: ev.title,
@@ -220,9 +226,9 @@ export function Events() {
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
 
               const renderBadge = () => {
-                if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }}>✅ Inscrito</div>;
-                if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }}>⏳ Pendiente</div>;
-                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }}>❌ Cancelado</div>;
+                if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }} title="Tu participación está asegurada">✅ Inscrito</div>;
+                if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }} title="Los administradores están revisando tu inscripción">⏳ Pendiente</div>;
+                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="Pago fallido o cancelado. Espera revisión del club.">❌ Cancelado</div>;
                 return null;
               };
 
@@ -261,6 +267,7 @@ export function Events() {
                     </div>
                   </div>
 
+                  {/* Expanded: Registration Form */}
                   {isExpanded && (
                     <div className="event-detail animate-slide-down">
                       <div className="detail-content">
@@ -283,6 +290,7 @@ export function Events() {
                           <div className="campus-registration-form">
                             <h4 className="form-header">📋 Inscripción</h4>
 
+                            {/* Day picker */}
                             <div className="form-section">
                               <label className="form-label">Selecciona los días:</label>
                               <div className="days-picker-grid">
@@ -302,6 +310,7 @@ export function Events() {
                               </button>
                             </div>
 
+                            {/* Number of attendees */}
                             <div className="form-section">
                               <label className="form-label">Nº de asistentes:</label>
                               <div className="attendee-counter">
@@ -313,6 +322,7 @@ export function Events() {
                               </div>
                             </div>
 
+                            {/* Attendee names */}
                             <div className="form-section">
                               <label className="form-label">Nombre(s):</label>
                               {Array.from({ length: regNumAttendees }).map((_, i) => (
@@ -322,6 +332,7 @@ export function Events() {
                               ))}
                             </div>
 
+                            {/* Custom fields */}
                             {ev.custom_fields && ev.custom_fields.length > 0 && (
                               <div className="form-section">
                                 <label className="form-label">Datos adicionales:</label>
@@ -345,6 +356,7 @@ export function Events() {
                               </div>
                             )}
 
+                             {/* Price calculation */}
                              {(() => {
                                const p = calcCampusPrice(ev, regSelectedDays.length, regNumAttendees);
                                return (
@@ -368,6 +380,7 @@ export function Events() {
                                      </div>
                                    )}
  
+                                   {/* Action buttons */}
                                    <div className="form-actions-stack">
                                      {p.total > 0 && (
                                        <button onClick={() => handleRegister(ev, false)} disabled={regSubmitting}
