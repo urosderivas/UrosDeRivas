@@ -58,14 +58,54 @@ serve(async (req: Request) => {
     if (checkoutType === 'campus') {
       if (!campusRegistration) throw new Error("Missing campus registration data");
       
+      // 1. Fetch Event securely from DB
+      const { data: dbEvent, error: eventError } = await supabaseAdminClient
+        .from('events')
+        .select('price_per_day, price_tiers, attendee_discounts')
+        .eq('id', campusRegistration.eventId)
+        .single();
+        
+      if (eventError || !dbEvent) {
+        throw new Error(`Failed to securely fetch event constraints: ${eventError?.message}`);
+      }
+
+      // 2. Replicate the calcCampusPrice algorithm inside the Edge Function securely
+      const numDays = Array.isArray(campusRegistration.selectedDays) ? campusRegistration.selectedDays.length : 0;
+      const numAttendees = Number(campusRegistration.numAttendees) || 1;
+      
+      let safePricePerDay = Number(dbEvent.price_per_day) || 0;
+      const sortedTiers = [...(dbEvent.price_tiers || [])].sort((a: any, b: any) => b.minDays - a.minDays);
+      for (const tier of sortedTiers) {
+        if (numDays >= tier.minDays) { 
+          safePricePerDay = Number(tier.pricePerDay); 
+          break; 
+        }
+      }
+
+      const subtotal = safePricePerDay * numDays * numAttendees;
+
+      let discountPct = 0;
+      const sortedDiscounts = [...(dbEvent.attendee_discounts || [])].sort((a: any, b: any) => b.minAttendees - a.minAttendees);
+      for (const d of sortedDiscounts) {
+        if (numAttendees >= d.minAttendees) { 
+          discountPct = Number(d.discountPct); 
+          break; 
+        }
+      }
+
+      const discount = subtotal * (discountPct / 100);
+      const safeTotalAmount = subtotal - discount;
+      
+      const finalPrice = Math.max(Math.round(safeTotalAmount * 100), 1);
+
       const line_items = [{
         price_data: {
           currency: 'eur',
           product_data: { 
             name: `Inscripción: ${campusRegistration.title}`, 
-            description: `${campusRegistration.numAttendees} asist. | ${campusRegistration.selectedDays.length} días`
+            description: `${numAttendees} asist. | ${numDays} días`
           },
-          unit_amount: Math.max(Math.round(campusRegistration.amount * 100), 1),
+          unit_amount: finalPrice,
         },
         quantity: 1,
       }];
@@ -85,9 +125,9 @@ serve(async (req: Request) => {
         event_id: campusRegistration.eventId,
         user_id: user.id,
         selected_days: campusRegistration.selectedDays,
-        num_attendees: campusRegistration.numAttendees,
+        num_attendees: numAttendees,
         attendee_names: campusRegistration.attendeeNames,
-        amount: campusRegistration.amount,
+        amount: safeTotalAmount, // [SECURE] Override with backend calculation
         status: 'pending',
         stripe_session_id: session.id,
         custom_data: campusRegistration.customData
