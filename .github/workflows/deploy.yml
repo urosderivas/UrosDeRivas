@@ -4,6 +4,8 @@
 # Configuración (Settings → Secrets and variables → Actions → Variables):
 #   VITE_SUPABASE_URL                     URL del proyecto de Supabase
 #   VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY clave pública (sb_publishable_...)
+#                                         Las dos son públicas (van dentro de la web); si no
+#                                         se configuran se usan las del proyecto actual.
 #   CUSTOM_DOMAIN                         dominio propio, p. ej. www.urosderivas.es
 #                                         (vacío: se publica en <org>.github.io/<repo>/)
 # Y en Settings → Pages → Source: "GitHub Actions".
@@ -39,8 +41,8 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://osekoolekqyzbpepyxze.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || 'sb_publishable_xgzUre4A7bkfPh2G0t-CnQ_sjUOF3IA' }}
           BASE_PATH: ${{ vars.CUSTOM_DOMAIN && '/' || format('/{0}/', github.event.repository.name) }}
 
       - name: Prepare for GitHub Pages
