@@ -57,6 +57,29 @@ interface DbItem {
   image_url?: string;
 }
 
+async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminClient: any): Promise<Response> {
+  if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) throw new Error("Invalid session id");
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  if (session.metadata?.userId !== userId) throw new Error("Forbidden");
+  if (session.status === 'open') await stripe.checkout.sessions.expire(sessionId);
+  if (session.status === 'complete') {
+    return new Response(JSON.stringify({ cancelled: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+  }
+
+  // Lo mismo que hará el webhook con checkout.session.expired; solo filas pendientes
+  const [ordersResult, registrationsResult] = await Promise.all([
+    supabaseAdminClient.from('orders').update({ status: 'cancelled' })
+      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
+    supabaseAdminClient.from('event_registrations').update({ status: 'cancelled' })
+      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
+  ]);
+  const dbError = ordersResult.error || registrationsResult.error;
+  if (dbError) throw new Error("DB update failed: " + dbError.message);
+
+  return new Response(JSON.stringify({ cancelled: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -86,6 +109,13 @@ serve(async (req: Request) => {
     if (authError || !user) throw new Error("Unauthorized: " + (authError?.message || "no user"));
 
     const body = await req.json();
+
+    // El usuario ha vuelto de Stripe con "cancelar": se cierra la sesión de pago
+    // y sus pedidos o inscripciones pendientes pasan a cancelados al momento.
+    if (body.cancelSessionId !== undefined) {
+      return await cancelCheckout(body.cancelSessionId, user.id, supabaseAdminClient);
+    }
+
     const { checkoutType, cartItems, userEmail, returnUrl, campusRegistration } = body;
     const isLocalReservation = checkoutType === 'campus' && campusRegistration?.payLocal === true;
     // Una reserva para pagar en mano no pasa por Stripe y no necesita URL de vuelta.
@@ -229,7 +259,7 @@ serve(async (req: Request) => {
 
       if (insertError) throw new Error("DB insert failed: " + insertError.message);
 
-      return new Response(JSON.stringify({ url: session.url }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
@@ -338,7 +368,7 @@ serve(async (req: Request) => {
       throw new Error("DB insert failed: " + insertError.message);
     }
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
