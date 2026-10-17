@@ -15,7 +15,9 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(searchParams.get('link') === 'expired'
+    ? 'El enlace del correo ha caducado o ya se ha usado. Si querías cambiar la contraseña, pide uno nuevo con «¿Olvidaste tu contraseña?».'
+    : '');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'reset' ? 'reset' : 'login');

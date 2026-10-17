@@ -15,7 +15,7 @@ import { LegalNotice } from './presentation/LegalNotice';
 import { CookiesPolicy } from './presentation/CookiesPolicy';
 import { CookieBanner } from './presentation/CookieBanner';
 import { NotFound } from './presentation/NotFound';
-import { consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
+import { consumeExpiredEmailLink, consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
 import { takeLoginNext } from './utils/loginRedirect';
 
 function TelemetryTracker() {
@@ -44,6 +44,7 @@ function AuthRedirects() {
     const goToReset = () => {
       if (consumePasswordRecovery()) navigate('/login?mode=reset', { replace: true });
     };
+    if (consumeExpiredEmailLink()) navigate('/login?link=expired', { replace: true });
     goToReset();
     window.addEventListener(PASSWORD_RECOVERY_EVENT, goToReset);
     return () => window.removeEventListener(PASSWORD_RECOVERY_EVENT, goToReset);
