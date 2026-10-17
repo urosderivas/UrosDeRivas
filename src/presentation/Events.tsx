@@ -237,7 +237,8 @@ export function Events() {
             events.map(ev => {
               const isExpanded = expandedId === ev.id;
               const regStatus = userRegistrations[ev.id];
-              const isRegistered = regStatus !== undefined;
+              // Una inscripción cancelada (pago no completado) no bloquea: se puede volver a rellenar
+              const isRegistered = regStatus !== undefined && regStatus !== 'cancelled';
               const spotsLeft = ev.max_capacity ? Math.max(0, ev.max_capacity - (occupancy[ev.id] || 0)) : null;
               const isFull = spotsLeft === 0;
               const maxAttendees = spotsLeft === null ? MAX_ATTENDEES : Math.min(MAX_ATTENDEES, spotsLeft);
@@ -249,7 +250,7 @@ export function Events() {
               const renderBadge = () => {
                 if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }} title="Tu participación está asegurada">✅ Inscrito</div>;
                 if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }} title="Los administradores están revisando tu inscripción">⏳ Pendiente</div>;
-                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="Pago fallido o cancelado. Espera revisión del club.">❌ Cancelado</div>;
+                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="El pago no se completó. Puedes volver a inscribirte.">❌ Cancelado</div>;
                 return null;
               };
 
@@ -303,7 +304,6 @@ export function Events() {
                           <div className="campus-registered-box">
                             {regStatus === 'completed' && <p>✅ Tu inscripción está <b>Completada</b>.</p>}
                             {regStatus === 'pending' && <p>⏳ Tu inscripción está <b>Pendiente</b> de revisión por los administradores o de finalizar el pago online.</p>}
-                            {regStatus === 'cancelled' && <p>❌ Tu inscripción ha sido <b>Cancelada</b>. Espera a que un administrador la elimine para volver a intentar rellenarla.</p>}
                           </div>
                         ) : !user ? (
                           <div className="campus-login-box">
@@ -319,6 +319,9 @@ export function Events() {
                         ) : (
                           <div className="campus-registration-form">
                             <h4 className="form-header">📋 Inscripción</h4>
+                            {regStatus === 'cancelled' && (
+                              <p className="form-retry-note">Tu inscripción anterior no se completó porque el pago se canceló. Puedes volver a inscribirte.</p>
+                            )}
 
                             {/* Day picker */}
                             <div className="form-section">
