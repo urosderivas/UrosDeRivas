@@ -86,6 +86,16 @@ Crea un proyecto gratuito en Supabase y aplica las migraciones de `supabase/migr
 Si tu equipo deportivo pertenece a la red de Clupik (casi todas las federaciones territoriales lo están integrando):
 > En el código (ej. `Clasificaciones.tsx`), el `clubId` del Uros de Rivas es `67`. ¡Cámbialo al de tu club para heredar toda tu cantera, filiales y calendarios de tu territorial automáticamente!
 
+### Paso 2 bis: Datos del club
+Nombre legal, CIF, dirección, email de contacto e ID de Clupik están en `src/config.ts`. Es el único sitio que hay que tocar si cambia alguno; los textos legales, las facturas, las clasificaciones y el importador de Clupik lo leen de ahí.
+
+### Contenido que se gestiona desde la web
+Con una cuenta de admin, sin tocar código:
+- **Noticias** en Inicio: crear, editar y borrar; cada una puede llevar imagen, enlaces en el texto (`[texto](https://...)`) y un campus relacionado.
+- **Patrocinadores** en su propia página: añadir, editar, ocultar, ordenar y borrar.
+
+Las imágenes se suben al bucket público `media` de Supabase Storage (lo crea la migración `20261017120000_sponsors_and_news.sql`) o se puede pegar el enlace de una imagen ya publicada.
+
 ### Paso 3: Identidad Corporativa Custom
 Las variables fundamentales están centralizadas en `src/index.css`. Sustituye:
 ```css

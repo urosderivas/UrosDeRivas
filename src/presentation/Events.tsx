@@ -87,6 +87,16 @@ export function Events() {
     }
   }, [user, location.search]);
 
+  // Enlace directo a un campus (p. ej. desde una noticia): /events?campus=<id>
+  const linkedCampusId = new URLSearchParams(location.search).get('campus');
+  useEffect(() => {
+    if (!linkedCampusId || loading) return;
+    const ev = events.find(e => e.id === linkedCampusId);
+    if (!ev) return;
+    if (expandedId !== ev.id) handleExpand(ev);
+    document.getElementById(`campus-${ev.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [linkedCampusId, loading, events]);
+
   const handleSaveEvent = async (eventData: Omit<Event, 'id'>) => {
     if (editEvent) await adapter.updateEvent(editEvent.id, eventData);
     else await adapter.createEvent(eventData);
@@ -221,7 +231,7 @@ export function Events() {
               };
 
               return (
-                <div key={ev.id} className={`event-card animate-fade-in ${isExpanded ? 'event-expanded' : ''}`}>
+                <div key={ev.id} id={`campus-${ev.id}`} className={`event-card animate-fade-in ${isExpanded ? 'event-expanded' : ''}`}>
                   <AdminGuard roles={['admin', 'coach']}>
                     <div className="admin-card-actions">
                       <button className="btn-admin-edit" onClick={() => { setEditEvent(ev); setModalOpen(true); }} title="Editar">✏️</button>

@@ -1,15 +1,16 @@
 import './PolicyPages.css';
+import { CLUB, clubAddressLine } from '../config';
 
 export function LegalNotice() {
   return (
     <div className="policy-container">
       <div className="policy-content">
         <h1>Condiciones de uso y aviso legal</h1>
-        <p><strong>C.B. Uros de Rivas</strong> (en adelante, EL CLUB) es titular de esta web.</p>
+        <p><strong>{CLUB.legalName}</strong> (en adelante, EL CLUB) es titular de esta web.</p>
 
         <h2>1. Datos identificativos</h2>
         <p>
-          En cumplimiento con el deber de información recogido en artículo 10 de la Ley 34/2002, de 11 de julio, de Servicios de la Sociedad de la Información y del Comercio Electrónico: la empresa titular de esta web es C.B. Uros de Rivas. con domicilio en Calle de Aigües Tortes. 28522. Rivas-Vaciamadrid. Madrid, con número de C.I.F: GXXXXXXXXX. Correo electrónico de contacto: <a href="mailto:administracion@urosderivas.com">administracion@urosderivas.com</a>.
+          En cumplimiento con el deber de información recogido en artículo 10 de la Ley 34/2002, de 11 de julio, de Servicios de la Sociedad de la Información y del Comercio Electrónico: la empresa titular de esta web es {CLUB.legalName}, con domicilio en {clubAddressLine}, con número de C.I.F: {CLUB.cif}. Correo electrónico de contacto: <a href={`mailto:${CLUB.contactEmail}`}>{CLUB.contactEmail}</a>.
         </p>
 
         <h2>2. Usuarios</h2>

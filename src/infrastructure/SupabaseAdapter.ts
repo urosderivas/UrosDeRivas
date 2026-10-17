@@ -1,6 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
-import { User, MarketItem, Event, SystemLog, Order } from '../domain/entities';
+import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
 
 export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort {
   async getUser(): Promise<User | null> {
@@ -190,6 +190,72 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async deleteEvent(id: string): Promise<void> {
     const { error } = await supabase.from('events').delete().eq('id', id);
     if (error) throw error;
+  }
+
+  // ============================================
+  // SPONSORS & NEWS
+  // ============================================
+  async getSponsors(): Promise<Sponsor[]> {
+    const { data, error } = await supabase.from('sponsors').select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data.map((s: any) => ({
+      id: s.id, name: s.name, imageUrl: s.image_url, linkUrl: s.link_url || undefined,
+      sortOrder: s.sort_order, active: s.active !== false,
+    }));
+  }
+
+  async saveSponsor(sponsor: Omit<Sponsor, 'id'>, id?: string): Promise<void> {
+    const payload = {
+      name: sponsor.name, image_url: sponsor.imageUrl, link_url: sponsor.linkUrl || null,
+      sort_order: sponsor.sortOrder, active: sponsor.active,
+    };
+    const { error } = id
+      ? await supabase.from('sponsors').update(payload).eq('id', id)
+      : await supabase.from('sponsors').insert(payload);
+    if (error) throw error;
+  }
+
+  async deleteSponsor(id: string): Promise<void> {
+    const { error } = await supabase.from('sponsors').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  async getNews(): Promise<NewsPost[]> {
+    const { data, error } = await supabase.from('news').select('*')
+      .order('published_at', { ascending: false });
+    if (error) throw error;
+    return data.map((n: any) => ({
+      id: n.id, title: n.title, body: n.body || '', imageUrl: n.image_url || undefined,
+      eventId: n.event_id || undefined, publishedAt: n.published_at,
+    }));
+  }
+
+  async saveNews(post: Omit<NewsPost, 'id'>, id?: string): Promise<void> {
+    const payload: any = {
+      title: post.title, body: post.body, image_url: post.imageUrl || null,
+      event_id: post.eventId || null, published_at: post.publishedAt,
+    };
+    if (!id) payload.created_by = (await this.getUser())?.id;
+    const { error } = id
+      ? await supabase.from('news').update(payload).eq('id', id)
+      : await supabase.from('news').insert(payload);
+    if (error) throw error;
+  }
+
+  async deleteNews(id: string): Promise<void> {
+    const { error } = await supabase.from('news').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  /** Sube una imagen al bucket público "media" y devuelve su URL. */
+  async uploadImage(file: File, folder: 'sponsors' | 'news'): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
+    if (error) throw error;
+    return supabase.storage.from('media').getPublicUrl(path).data.publicUrl;
   }
 
   // ============================================

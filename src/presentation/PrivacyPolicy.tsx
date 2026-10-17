@@ -1,4 +1,5 @@
 import './PolicyPages.css';
+import { CLUB, clubAddressLine } from '../config';
 
 export function PrivacyPolicy() {
   return (
@@ -7,7 +8,7 @@ export function PrivacyPolicy() {
         <h1>Política de privacidad y Protección de datos</h1>
         
         <p>
-          <strong>C.B. Uros de Rivas</strong> con CIF: GXXXXXXXXX, conforme al Reglamento General de Protección de Datos (UE) 2016/679, cumple la legislación vigente en materia de protección de datos personales, respeta la privacidad de los usuarios y el secreto y seguridad de los datos personales, adoptando para ello las medidas técnicas y organizativas necesarias para evitar la pérdida, mal uso, alteración, acceso no autorizado y robo de los Datos Personales facilitados, habida cuenta del estado de la tecnología, la naturaleza de los datos y los riesgos a los que están expuestos.
+          <strong>{CLUB.legalName}</strong> con CIF: {CLUB.cif}, conforme al Reglamento General de Protección de Datos (UE) 2016/679, cumple la legislación vigente en materia de protección de datos personales, respeta la privacidad de los usuarios y el secreto y seguridad de los datos personales, adoptando para ello las medidas técnicas y organizativas necesarias para evitar la pérdida, mal uso, alteración, acceso no autorizado y robo de los Datos Personales facilitados, habida cuenta del estado de la tecnología, la naturaleza de los datos y los riesgos a los que están expuestos.
         </p>
 
         <p>
@@ -21,22 +22,22 @@ export function PrivacyPolicy() {
         <p>Y en virtud de la normativa vigente, se procede a facilitar la siguiente información:</p>
         
         <p>
-          La identidad responsable de los tratamientos de datos es <strong>C.B. Uros de Rivas</strong>, con domicilio en Calle de Aigües Tortes. 28522. Rivas-Vaciamadrid. Madrid, con el número de CIF GXXXXXXXXX y correo electrónico de contacto <a href="mailto:administracion@urosderivas.com">administracion@urosderivas.com</a>. Inscrita en el Registro Mercantil de Madrid, en el tomo…. Expedida el 01/01/2020 con el número 01012020.
+          La identidad responsable de los tratamientos de datos es <strong>{CLUB.legalName}</strong>, con domicilio en {clubAddressLine}, con el número de CIF {CLUB.cif} y correo electrónico de contacto <a href={`mailto:${CLUB.contactEmail}`}>{CLUB.contactEmail}</a>. Inscrita en el Registro Mercantil de Madrid, en el tomo…. Expedida el 01/01/2020 con el número 01012020.
         </p>
 
         <h2>Datos relativos a clientes, socios y proveedores</h2>
         <p>
-          El caso de que usted haya facilitado los datos personales, bien en su calidad de cliente, socio o de proveedor, C.B. Uros de Rivas los utilizará para el mantenimiento de la relación contractual existente.
+          El caso de que usted haya facilitado los datos personales, bien en su calidad de cliente, socio o de proveedor, {CLUB.legalName} los utilizará para el mantenimiento de la relación contractual existente.
         </p>
 
         <h2>Marketing y publicidad</h2>
         <p>
-          C.B. Uros de Rivas podrá enviarle información comercial que considere de su interés relativa a la actividad o los productos que usted haya adquirido, o cualquier otros relacionados.
+          {CLUB.legalName} podrá enviarle información comercial que considere de su interés relativa a la actividad o los productos que usted haya adquirido, o cualquier otros relacionados.
         </p>
 
         <h2>Comunicación de datos</h2>
         <p>
-          C.B. Uros de Rivas para la prestación de sus servicios podrá contratar a otras empresas para su ejecución, pudiendo tener éstas acceso a los datos de carácter personal... garantizando siempre los mismos estándares de calidad en materia de cumplimiento de protección de datos.
+          {CLUB.legalName} para la prestación de sus servicios podrá contratar a otras empresas para su ejecución, pudiendo tener éstas acceso a los datos de carácter personal... garantizando siempre los mismos estándares de calidad en materia de cumplimiento de protección de datos.
         </p>
 
         <h2>Base legitimadora y Plazos</h2>
@@ -56,7 +57,7 @@ export function PrivacyPolicy() {
           <li>Derecho a la portabilidad.</li>
         </ol>
         <p>
-          Para el ejercicio de estos derechos, puede dirigirse a C.B. Uros de Rivas en la siguiente dirección <a href="mailto:administracion@urosderivas.com">administracion@urosderivas.com</a>, previa acreditación de su identidad, o bien presentar una reclamación ante la AEPD (<a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>).
+          Para el ejercicio de estos derechos, puede dirigirse a {CLUB.legalName} en la siguiente dirección <a href={`mailto:${CLUB.contactEmail}`}>{CLUB.contactEmail}</a>, previa acreditación de su identidad, o bien presentar una reclamación ante la AEPD (<a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer">www.aepd.es</a>).
         </p>
       </div>
     </div>

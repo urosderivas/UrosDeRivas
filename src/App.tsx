@@ -7,6 +7,7 @@ import { Home } from './presentation/Home';
 import { Login } from './presentation/Login';
 import { Market } from './presentation/Market';
 import { Events } from './presentation/Events';
+import { Sponsors } from './presentation/Sponsors';
 import { Clasificaciones } from './presentation/Clasificaciones';
 import { AdminPanel } from './presentation/AdminPanel';
 import { PrivacyPolicy } from './presentation/PrivacyPolicy';
@@ -46,6 +47,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/market" element={<Market />} />
             <Route path="/events" element={<Events />} />
+            <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/clasificaciones" element={<Clasificaciones />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/login" element={<Login />} />

@@ -1,31 +1,60 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Pencil, Trash2 } from 'lucide-react';
+import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
+import { Event, NewsPost } from '../domain/entities';
+import { resolveImageUrl } from '../utils/media';
+import { useStore } from './store';
+import { AdminGuard } from './AdminGuard';
+import { NewsModal } from './NewsModal';
+import { RichText } from './components/RichText';
+import { ConfirmModal } from './components/ConfirmModal';
+import { MessageModal } from './components/MessageModal';
 import './Home.css';
+import './Content.css';
+
+const adapter = new SupabaseAdapter();
 
 export function Home() {
-  const sponsorsRef = useRef<HTMLDivElement>(null);
+  const { user } = useStore();
+  const isAdmin = user?.role === 'admin';
+  const [news, setNews] = useState<NewsPost[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editPost, setEditPost] = useState<NewsPost | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<NewsPost | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
+  const loadNews = async () => {
+    try {
+      setNews(await adapter.getNews());
+    } catch (e) {
+      console.error('Failed to load news', e);
+    }
+    setNewsLoading(false);
+  };
+
+  useEffect(() => { loadNews(); }, []);
+
+  // El admin necesita la lista de campus para poder enlazar una noticia a uno
   useEffect(() => {
-    const observerOptions = {
-      threshold: 0.15,
-      rootMargin: '0px 0px -50px 0px'
-    };
+    if (isAdmin) adapter.getEvents().then(setEvents).catch(console.error);
+  }, [isAdmin]);
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    }, observerOptions);
+  const handleSave = async (data: Omit<NewsPost, 'id'>) => {
+    await adapter.saveNews(data, editPost?.id);
+    await loadNews();
+  };
 
-    const revealElements = document.querySelectorAll('.reveal-item');
-    revealElements.forEach(el => observer.observe(el));
-
-    return () => observer.disconnect();
-  }, []);
+  const handleDelete = async (post: NewsPost) => {
+    try {
+      await adapter.deleteNews(post.id);
+      await loadNews();
+    } catch (e: any) {
+      setErrorMessage(e.message);
+    }
+  };
 
   return (
     <div className="home-container">
@@ -48,51 +77,53 @@ export function Home() {
         </div>
       </section>
 
-      <section className="sponsors-section">
-        <div className="sponsors-header reveal-item">
-          <h3>PATROCINADORES y COLABORADORES</h3>
-          <p className="sponsors-subtitle">Estamos muy agradecidos a todos los Patrocinadores y Colaboradores, pues sin ellos no seríamos lo que somos y los que somos. ¡Esperamos seguir creciendo!</p>
+      <section className="news-section">
+        <div className="news-header">
+          <h3>NOTICIAS</h3>
+          <AdminGuard>
+            <div className="content-toolbar">
+              <button className="content-admin-add" onClick={() => { setEditPost(null); setModalOpen(true); }}>+ Nueva noticia</button>
+            </div>
+          </AdminGuard>
         </div>
-        <div className="sponsors-container" ref={sponsorsRef}>
-          <div className="sponsors-grid">
-            {[
-              { img: 'everest.jpg', link: 'http://www.clinicadentaleverest.es/#content-content-inner', alt: 'Everest Clínica Dental' },
-              { img: 'dominos-1-copy.jpg', link: 'https://www.dominospizza.es/', alt: 'Dominos Pizza' },
-              { img: 'Secomoto-1-copy.jpg', link: 'https://www.secomoto.com/', alt: 'Secomoto' },
-              { img: 'Compo-web-copy-300x250.jpg', link: 'https://www.jarmauto.es/', alt: 'Jarmauto' },
-              { img: 'watan-copy-300x250.jpg', link: 'https://www.google.com/maps/place/Fisioterapia+Watan/@40.3540074', alt: 'Fisioterapia Watan' },
-              { img: 'Hospivet-1-300x250.jpg', link: 'http://www.hospivetrivas.es/', alt: 'Hospivet Rivas' },
-              { img: 'Papeleria-Numeros-copy-300x250.jpg', link: 'https://www.google.com/maps/place/Librer%C3%ADa+NUMEROS/@40.3609267', alt: 'Librería Números' },
-              { img: 'Altafit-300x250.jpg', link: 'https://altafitgymclub.com/gimnasios/madrid-rivas/', alt: 'Altafit Gym' },
-              { img: 'rotusil_logo_web-300x160.png', link: 'http://rotusil.com/', alt: 'Rotusil' },
-              { img: 'asisa.jpg', link: 'https://www.asisa.es/seguros-de-salud', alt: 'Asisa' },
-              { img: 'Ferrual-300x250.jpg', link: 'http://www.ferrual.com/', alt: 'Ferrual' },
-              { img: 'Educatech-copy-300x250.jpg', link: 'https://www.facebook.com/academiaeducatech/', alt: 'Academia Educatech' },
-              { img: 'Atmosfera-300x150-300x250.jpg', link: 'https://www.atmosferasport.es', alt: 'Atmosfera Sport' },
-              { img: 'AquaCare-300x150-300x250.jpg', link: 'https://www.aquacarerivas.com/', alt: 'AquaCare Rivas' },
-              { img: 'Somos-300x150-300x250.jpg', link: 'http://somosfisioterapiarivas.com/', alt: 'Somos Fisioterapia' },
-              { img: 'Mas-q-manitas-300x150-300x250.jpg', link: 'http://www.masqmanitas.es/paginas/introduccion.html', alt: 'Mas q Manitas' },
-              { img: 'moyra-300x150-300x250.jpg', link: 'https://www.centroestudiosmoyra.es/', alt: 'Centro Estudios Moyra' },
-              { img: 'Picco-300x150-300x250.jpg', link: 'https://www.doctoraanaluciapiccolaskowski.es/es/', alt: 'Dra. Ana Lucia Picco' },
-              { img: 'Ruben-300x150-300x250.jpg', link: 'http://www.libreriaruben.com/', alt: 'Librería Rubén' },
-              { img: 'Fast-300x150-300x250.jpg', link: 'http://fastmotor.cuidamostucoche.com/', alt: 'Fast Motor' },
-              { img: 'Academia-Nar-300x150-300x250.jpg', link: 'https://www.google.com/maps/place/Academia+Naranjo/@40.3256751,-3.5164271', alt: 'Academia Naranjo' },
-              { img: 'Universal-300x150-300x250.jpg', link: 'https://www.google.com/maps/place/Autoescuela+Universal/@40.3291921,-3.5120691', alt: 'Autoescuela Universal' },
-              { img: 'Especialidades-300x150-300x250.jpg', link: 'https://www.odontologosrivas.com/', alt: 'Odontólogos Rivas' },
-            ].map((s, idx) => (
-              <a
-                key={idx}
-                href={s.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="sponsor-item reveal-item"
-              >
-                <img src={`${import.meta.env.BASE_URL}assets/sponsors/${s.img}`} alt={s.alt} onError={e => e.currentTarget.style.display = 'none'} />
-              </a>
-            ))}
-          </div>
+
+        <div className="news-grid">
+          {!newsLoading && news.length === 0 && <p className="content-empty">Pronto publicaremos novedades del club.</p>}
+          {news.map(post => (
+            <article key={post.id} className="news-card animate-fade-in">
+              <AdminGuard>
+                <div className="content-card-actions">
+                  <button className="edit" title="Editar" onClick={() => { setEditPost(post); setModalOpen(true); }}><Pencil size={15} /></button>
+                  <button className="delete" title="Borrar" onClick={() => setConfirmDelete(post)}><Trash2 size={15} /></button>
+                </div>
+              </AdminGuard>
+              {post.imageUrl && <img className="news-image" src={resolveImageUrl(post.imageUrl)} alt="" onError={e => e.currentTarget.style.display = 'none'} />}
+              <div className="news-content">
+                <time className="news-date">{new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</time>
+                <h4 className="news-title">{post.title}</h4>
+                <RichText text={post.body} className="news-body" />
+                {post.eventId && (
+                  <Link to={`/events?campus=${post.eventId}`} className="news-campus-link">Ver campus →</Link>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="news-footer">
+          <Link to="/sponsors" className="btn-secondary">Nuestros patrocinadores</Link>
         </div>
       </section>
+
+      <NewsModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} initial={editPost} events={events} />
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        title="Confirmar Acción"
+        message={`¿Seguro que quieres borrar la noticia "${confirmDelete?.title}"?`}
+        onConfirm={() => { if (confirmDelete) handleDelete(confirmDelete); setConfirmDelete(null); }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+      <MessageModal isOpen={!!errorMessage} onClose={() => setErrorMessage('')} title="Error" message={errorMessage} />
     </div>
   );
 }

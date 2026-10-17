@@ -1,0 +1,62 @@
+/* Estilos comunes de las páginas que gestiona el admin (patrocinadores y noticias) */
+.content-toolbar {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.content-admin-add {
+  padding: 0.9rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 850;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  background: var(--accent-turquoise);
+  color: #000;
+  border: none;
+  transition: transform 0.3s;
+}
+
+.content-admin-add:hover { transform: translateY(-2px); }
+
+.content-card-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 20;
+}
+
+.content-card-actions button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.content-card-actions button:hover { transform: scale(1.15); }
+.content-card-actions .edit { background: rgba(255, 255, 255, 0.9); color: #000; }
+.content-card-actions .delete { background: #ff4444; color: #fff; }
+
+.content-image-preview {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 10px;
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.content-empty {
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 2rem 0;
+}

@@ -24,6 +24,7 @@ export function Navbar() {
           <Link to="/events" onClick={() => setIsOpen(false)}>CAMPUS</Link>
           <Link to="/market" onClick={() => setIsOpen(false)}>TIENDA</Link>
           <Link to="/clasificaciones" onClick={() => setIsOpen(false)}>CLASIFICACIONES</Link>
+          <Link to="/sponsors" onClick={() => setIsOpen(false)}>PATROCINADORES</Link>
           {user && (user.role === 'admin' || user.role === 'coach') && (
             <Link to="/admin" onClick={() => setIsOpen(false)}>ESTADÍSTICAS</Link>
           )}

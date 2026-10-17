@@ -86,3 +86,24 @@ export interface Order {
   stripe_session_id?: string;
   created_at: string;
 }
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  /** URL completa o ruta dentro de public/ (assets/sponsors/...) */
+  imageUrl: string;
+  linkUrl?: string;
+  sortOrder: number;
+  active: boolean;
+}
+
+export interface NewsPost {
+  id: string;
+  title: string;
+  /** Texto plano; los enlaces se escriben como [texto](https://...) */
+  body: string;
+  imageUrl?: string;
+  /** Campus relacionado (opcional) */
+  eventId?: string;
+  publishedAt: string;
+}
