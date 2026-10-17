@@ -421,3 +421,7 @@ verify_jwt = false
 
 [functions.verify-payment]
 verify_jwt = false
+
+# Stripe llama a esta función sin JWT; se protege con la firma del webhook.
+[functions.stripe-webhook]
+verify_jwt = false

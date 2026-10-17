@@ -60,6 +60,12 @@ Si deseas probar la aplicación del equipo localmente, o prepararte para despleg
    npx supabase secrets set ALLOWED_ORIGINS=https://tudominio.es,http://localhost:5173
    npx supabase functions deploy create-checkout-session --no-verify-jwt
    npx supabase functions deploy verify-payment --no-verify-jwt
+   npx supabase functions deploy stripe-webhook --no-verify-jwt
+   ```
+
+   **Webhook de Stripe** (para que los pagos consten al momento, sin pulsar "sincronizar"): en Stripe → Developers → Webhooks, añade el endpoint `https://<TU-ID-SUPABASE>.supabase.co/functions/v1/stripe-webhook` con los eventos `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` y `checkout.session.async_payment_failed`. Copia su *signing secret* y guárdalo:
+   ```bash
+   npx supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
    ```
 
 5. **Arranca el Servidor Vite**
