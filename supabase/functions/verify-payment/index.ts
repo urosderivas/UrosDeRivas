@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +15,29 @@ serve(async (req: Request) => {
   try {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("Stripe key not configured");
+
+    // Solo admins y entrenadores pueden consultar pagos en Stripe
+    const supabaseAdminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) throw new Error("Missing auth header");
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdminClient.auth.getUser(token);
+    if (authError || !user) throw new Error("Unauthorized");
+
+    const { data: roleRow } = await supabaseAdminClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!roleRow || !['admin', 'coach'].includes(roleRow.role)) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403,
+      });
+    }
 
     const stripe = new Stripe(stripeKey, {
       apiVersion: "2022-11-15",
@@ -51,7 +75,6 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({
       payment_status: session.payment_status, // 'paid' | 'unpaid' | 'no_payment_required'
       status: session.status, // 'complete' | 'expired' | 'open'
-      customer_email: session.customer_details?.email,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

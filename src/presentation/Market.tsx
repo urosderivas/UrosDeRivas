@@ -41,15 +41,6 @@ export function Market() {
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
       showMessage('Pago Completado', '¡Pago completado con éxito! Recibirás un correo de confirmación pronto.');
-      const sessionId = params.get('session_id');
-      if (sessionId) {
-        adapter.getOrders().then(orders => {
-          const match = orders.filter((o: any) => o.stripe_session_id === sessionId);
-          for (const order of match) {
-            if (order.status === 'pending') adapter.updateOrderStatus(order.id, 'completed').catch(console.error);
-          }
-        }).catch(console.error);
-      }
     }
     if (params.get('canceled')) {
       showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.');

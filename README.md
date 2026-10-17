@@ -56,6 +56,8 @@ Si deseas probar la aplicación del equipo localmente, o prepararte para despleg
    npx supabase db push
    # Recuerda inyectar tu API Key SECRETA de Stripe en Supabase:
    npx supabase secrets set STRIPE_SECRET_KEY=sk_tc_...
+   # Dominios a los que Stripe puede volver tras el pago (separados por comas)
+   npx supabase secrets set ALLOWED_ORIGINS=https://tudominio.es,http://localhost:5173
    npx supabase functions deploy create-checkout-session --no-verify-jwt
    npx supabase functions deploy verify-payment --no-verify-jwt
    ```

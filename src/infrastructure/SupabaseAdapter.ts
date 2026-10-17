@@ -215,32 +215,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     }));
   }
 
-  async createCampusRegistration(data: {
-    eventId: string;
-    selectedDays: string[];
-    numAttendees: number;
-    attendeeNames: string[];
-    amount: number;
-    customData: Record<string, string>;
-    stripeSessionId?: string;
-    status?: string;
-  }): Promise<void> {
-    const user = await this.getUser();
-    if (!user) throw new Error('No autenticado');
-    const { error } = await supabase.from('event_registrations').upsert({
-      event_id: data.eventId,
-      user_id: user.id,
-      selected_days: data.selectedDays,
-      num_attendees: data.numAttendees,
-      attendee_names: data.attendeeNames,
-      amount: data.amount,
-      status: data.status || 'pending',
-      stripe_session_id: data.stripeSessionId || `local_${Date.now()}`,
-      custom_data: data.customData,
-    }, { onConflict: 'event_id,user_id' });
-    if (error) throw error;
-  }
-
   async toggleEventRegistration(eventId: string, userId: string, isRegistered: boolean): Promise<void> {
     if (isRegistered) {
       const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
@@ -354,9 +328,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async createLog(actionType: string, metadata?: any): Promise<void> {
+    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada
     const user = await this.getUser();
-    const payload: any = { action_type: actionType, metadata };
-    if (user) payload.user_id = user.id;
+    if (!user) return;
+    const payload: any = { action_type: actionType, metadata, user_id: user.id };
 
     const { error } = await supabase.from('system_logs').insert(payload);
     // Silently fail for telemetry if needed, but log to console

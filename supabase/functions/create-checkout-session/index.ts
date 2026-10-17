@@ -9,6 +9,41 @@ const corsHeaders = {
 
 let stripe: Stripe;
 
+// Webs a las que Stripe puede redirigir tras el pago. Se configuran con el
+// secreto ALLOWED_ORIGINS (orígenes separados por comas); estos son los de por defecto.
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://migueltorresperez.github.io',
+  'https://urosderivas.github.io',
+  'http://localhost:5173',
+];
+
+const MAX_ATTENDEES = 20;
+const MAX_ITEM_QUANTITY = 99;
+
+function getAllowedOrigins(): string[] {
+  const configured = Deno.env.get('ALLOWED_ORIGINS');
+  if (!configured) return DEFAULT_ALLOWED_ORIGINS;
+  return configured.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+}
+
+function validateReturnUrl(returnUrl: unknown): string {
+  if (typeof returnUrl !== 'string') throw new Error("Missing returnUrl");
+  let url: URL;
+  try {
+    url = new URL(returnUrl);
+  } catch {
+    throw new Error("Invalid returnUrl");
+  }
+  if (!getAllowedOrigins().includes(url.origin)) {
+    throw new Error(`returnUrl origin not allowed: ${url.origin}`);
+  }
+  return `${url.origin}${url.pathname}`;
+}
+
+function isPositiveInt(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= max;
+}
+
 interface CartItemPayload {
   itemId: string;
   quantity: number;
@@ -52,8 +87,9 @@ serve(async (req: Request) => {
 
     const body = await req.json();
     const { checkoutType, cartItems, userEmail, returnUrl, campusRegistration } = body;
-    const origin = req.headers.get('origin') || 'https://migueltorresperez.github.io';
-    const safeReturnUrl = returnUrl || `${origin}/UrosDeRivas/market`;
+    const isLocalReservation = checkoutType === 'campus' && campusRegistration?.payLocal === true;
+    // Una reserva para pagar en mano no pasa por Stripe y no necesita URL de vuelta.
+    const safeReturnUrl = isLocalReservation ? '' : validateReturnUrl(returnUrl);
 
     if (checkoutType === 'campus') {
       if (!campusRegistration) throw new Error("Missing campus registration data");
@@ -61,17 +97,60 @@ serve(async (req: Request) => {
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('price_per_day, price_tiers, attendee_discounts')
+        .select('title, active, dates, price_per_day, price_tiers, attendee_discounts')
         .eq('id', campusRegistration.eventId)
         .single();
         
       if (eventError || !dbEvent) {
         throw new Error(`Failed to securely fetch event constraints: ${eventError?.message}`);
       }
+      if (dbEvent.active === false) throw new Error("Este campus ya no admite inscripciones.");
 
-      // 2. Replicate the calcCampusPrice algorithm inside the Edge Function securely
-      const numDays = Array.isArray(campusRegistration.selectedDays) ? campusRegistration.selectedDays.length : 0;
-      const numAttendees = Number(campusRegistration.numAttendees) || 1;
+      // 2. Validate the registration against the event before pricing it
+      const numAttendees = campusRegistration.numAttendees;
+      if (!isPositiveInt(numAttendees, MAX_ATTENDEES)) {
+        throw new Error(`El número de asistentes debe ser un entero entre 1 y ${MAX_ATTENDEES}.`);
+      }
+
+      const attendeeNames = campusRegistration.attendeeNames;
+      if (
+        !Array.isArray(attendeeNames) ||
+        attendeeNames.length !== numAttendees ||
+        attendeeNames.some((n: unknown) => typeof n !== 'string' || !n.trim())
+      ) {
+        throw new Error("Hace falta un nombre por cada asistente.");
+      }
+
+      const selectedDays = campusRegistration.selectedDays;
+      const eventDays = new Set<string>(dbEvent.dates || []);
+      if (
+        !Array.isArray(selectedDays) ||
+        selectedDays.length === 0 ||
+        new Set(selectedDays).size !== selectedDays.length ||
+        selectedDays.some((d: unknown) => typeof d !== 'string' || !eventDays.has(d))
+      ) {
+        throw new Error("Los días elegidos no coinciden con los del campus.");
+      }
+
+      const customData = campusRegistration.customData ?? {};
+      if (
+        typeof customData !== 'object' || Array.isArray(customData) ||
+        Object.values(customData).some((v) => typeof v !== 'string')
+      ) {
+        throw new Error("Datos adicionales no válidos.");
+      }
+
+      // Una inscripción ya pagada no se puede volver a abrir desde aquí
+      const { data: existing } = await supabaseAdminClient
+        .from('event_registrations')
+        .select('status')
+        .eq('event_id', campusRegistration.eventId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (existing?.status === 'completed') throw new Error("Ya tienes una inscripción pagada en este campus.");
+
+      // 3. Replicate the calcCampusPrice algorithm inside the Edge Function securely
+      const numDays = selectedDays.length;
       
       let safePricePerDay = Number(dbEvent.price_per_day) || 0;
       const sortedTiers = [...(dbEvent.price_tiers || [])].sort((a: any, b: any) => b.minDays - a.minDays);
@@ -96,13 +175,35 @@ serve(async (req: Request) => {
       const discount = subtotal * (discountPct / 100);
       const safeTotalAmount = subtotal - discount;
       
+      const registration = {
+        event_id: campusRegistration.eventId,
+        user_id: user.id,
+        selected_days: selectedDays,
+        num_attendees: numAttendees,
+        attendee_names: attendeeNames.map((n: string) => n.trim()),
+        amount: safeTotalAmount, // [SECURE] Override with backend calculation
+        status: 'pending',
+        custom_data: customData
+      };
+
+      if (isLocalReservation) {
+        const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
+          ...registration,
+          stripe_session_id: `local_${Date.now()}`
+        }, { onConflict: 'event_id,user_id' });
+
+        if (insertError) throw new Error("DB insert failed: " + insertError.message);
+
+        return new Response(JSON.stringify({ reserved: true, amount: safeTotalAmount }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
       const finalPrice = Math.max(Math.round(safeTotalAmount * 100), 1);
 
       const line_items = [{
         price_data: {
           currency: 'eur',
           product_data: { 
-            name: `Inscripción: ${campusRegistration.title}`, 
+            name: `Inscripción: ${dbEvent.title}`, 
             description: `${numAttendees} asist. | ${numDays} días`
           },
           unit_amount: finalPrice,
@@ -122,15 +223,8 @@ serve(async (req: Request) => {
 
       // Upsert registration as pending
       const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
-        event_id: campusRegistration.eventId,
-        user_id: user.id,
-        selected_days: campusRegistration.selectedDays,
-        num_attendees: numAttendees,
-        attendee_names: campusRegistration.attendeeNames,
-        amount: safeTotalAmount, // [SECURE] Override with backend calculation
-        status: 'pending',
-        stripe_session_id: session.id,
-        custom_data: campusRegistration.customData
+        ...registration,
+        stripe_session_id: session.id
       }, { onConflict: 'event_id,user_id' });
 
       if (insertError) throw new Error("DB insert failed: " + insertError.message);
@@ -166,6 +260,9 @@ serve(async (req: Request) => {
     for (const cartItem of cartItems as CartItemPayload[]) {
       const dbItem = dbItemsMap.get(cartItem.itemId);
       if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
+      if (!isPositiveInt(cartItem.quantity, MAX_ITEM_QUANTITY)) {
+        throw new Error(`La cantidad debe ser un entero entre 1 y ${MAX_ITEM_QUANTITY}.`);
+      }
 
       const rawPrice = dbItem.price || 0;
       const finalPrice = Math.max(Math.round(rawPrice * 100), 1);

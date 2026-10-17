@@ -19,6 +19,10 @@ function TelemetryTracker() {
   const location = useLocation();
   
   useEffect(() => {
+    // Solo se registran visitas si el usuario ha aceptado las cookies de estadística
+    let consent: string | null = null;
+    try { consent = localStorage.getItem('cookie_banner_accepted'); } catch { /* sin almacenamiento */ }
+    if (consent !== 'true') return;
     logActivity('page_visit', { path: location.pathname });
   }, [location, logActivity]);
   

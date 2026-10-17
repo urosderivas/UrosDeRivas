@@ -82,16 +82,6 @@ export function Events() {
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
       showMessage('Pago Completado', '¡Inscripción pagada con éxito! Has recibido tu reserva segura.');
-      // Auto-update if it was pending
-      const sessionId = params.get('session_id');
-      if (sessionId && user) {
-        // Find the event ID that corresponds to this session
-        adapter.checkStripePayment(sessionId).then(res => {
-          if (res.payment_status === 'paid') {
-            loadEvents(); // just reload, webhook or admin sync will handle DB if needed, but we can't reliably know ev.id without finding it among attendees.
-          }
-        }).catch(() => { });
-      }
     } else if (params.get('canceled')) {
       showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
     }
@@ -168,17 +158,15 @@ export function Events() {
         return;
       }
 
-      await adapter.createCampusRegistration({
+      const reservedAmount = await stripeAdapter.reserveCampusPayLocal({
         eventId: ev.id,
         selectedDays: regSelectedDays,
         numAttendees: regNumAttendees,
         attendeeNames: names,
-        amount: pricing.total,
-        customData: regCustomData,
-        status: 'pending',
+        customData: regCustomData
       });
       setUserRegistrations(prev => ({ ...prev, [ev.id]: 'pending' }));
-      showMessage('Reserva Confirmada', `✅ Inscripción reservada por €${pricing.total.toFixed(2)}. Paga en el campus.`);
+      showMessage('Reserva Confirmada', `✅ Inscripción reservada por €${reservedAmount.toFixed(2)}. Paga en el campus.`);
       setExpandedId(null);
     } catch (e: any) {
       showMessage('Error', e.message);
@@ -317,7 +305,7 @@ export function Events() {
                                 <button type="button" onClick={() => { const n = Math.max(1, regNumAttendees - 1); setRegNumAttendees(n); setRegAttendeeNames(prev => prev.slice(0, n)); }}
                                   className="btn-counter">−</button>
                                 <span className="counter-value">{regNumAttendees}</span>
-                                <button type="button" onClick={() => { const n = regNumAttendees + 1; setRegNumAttendees(n); setRegAttendeeNames(prev => [...prev, '']); }}
+                                <button type="button" onClick={() => { if (regNumAttendees >= 20) return; const n = regNumAttendees + 1; setRegNumAttendees(n); setRegAttendeeNames(prev => [...prev, '']); }}
                                   className="btn-counter">+</button>
                               </div>
                             </div>
