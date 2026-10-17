@@ -4,11 +4,13 @@ import { ShoppingCart, Pencil, Trash2 } from 'lucide-react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Event, NewsPost } from '../domain/entities';
 import { resolveImageUrl } from '../utils/media';
+import { CLUB } from '../config';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { NewsModal } from './NewsModal';
 import { RichText } from './components/RichText';
 import { ConfirmModal } from './components/ConfirmModal';
+import { NewsCarousel } from './components/NewsCarousel';
 import { MessageModal } from './components/MessageModal';
 import './Home.css';
 import './Content.css';
@@ -61,7 +63,7 @@ export function Home() {
       <section className="hero-section">
         <div className="hero-overlay"></div>
         <div className="hero-content">
-          <h2 className="hero-title">CLUB DEPORTIVO ELEMENTAL UROS DE RIVAS</h2>
+          <h2 className="hero-title">{CLUB.legalName.toUpperCase()}</h2>
           <p className="hero-subtitle">Únete a la familia Uros de Rivas. El mejor baloncesto local.</p>
           <div className="hero-buttons">
             <Link to="/events" className="btn-primary">Ir a Campus</Link>
@@ -87,8 +89,8 @@ export function Home() {
           </AdminGuard>
         </div>
 
-        <div className="news-grid">
-          {!newsLoading && news.length === 0 && <p className="content-empty">Pronto publicaremos novedades del club.</p>}
+        {!newsLoading && news.length === 0 && <p className="content-empty">Pronto publicaremos novedades del club.</p>}
+        <NewsCarousel count={news.length}>
           {news.map(post => (
             <article key={post.id} className="news-card animate-fade-in">
               <AdminGuard>
@@ -108,7 +110,7 @@ export function Home() {
               </div>
             </article>
           ))}
-        </div>
+        </NewsCarousel>
 
         <div className="news-footer">
           <Link to="/sponsors" className="btn-secondary">Nuestros patrocinadores</Link>

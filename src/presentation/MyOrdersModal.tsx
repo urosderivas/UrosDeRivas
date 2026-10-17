@@ -62,7 +62,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
         orders: groupOrders,
         paymentStatus,
       };
-      await InvoiceGenerator.generatePdfFactura(invoiceData);
+      await InvoiceGenerator.generateReceiptPdf(invoiceData);
     } catch (e) {
       console.error("Error generating invoice", e);
     }
@@ -166,7 +166,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     <FileText size={14} />
-                    {generatingPdf === groupId ? 'Generando...' : 'Factura'}
+                    {generatingPdf === groupId ? 'Generando...' : 'Justificante'}
                   </button>
                 </div>
               </li>

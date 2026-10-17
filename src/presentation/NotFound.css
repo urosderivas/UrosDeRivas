@@ -1,0 +1,32 @@
+.not-found {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.not-found-logo { height: 110px; opacity: 0.85; }
+
+.not-found h1 {
+  font-size: 5rem;
+  font-weight: 950;
+  color: var(--accent-gold);
+  line-height: 1;
+}
+
+.not-found p { color: var(--text-secondary); margin-bottom: 1rem; }
+
+.not-found .btn-primary {
+  padding: 0.9rem 2rem;
+  border-radius: 50px;
+  background: var(--accent-gold);
+  color: #000;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.not-found .btn-primary { width: auto; }

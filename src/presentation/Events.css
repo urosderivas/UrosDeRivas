@@ -60,7 +60,9 @@
 
 .event-image {
   flex: 0 0 280px; /* Reduced from 350 */
-  background-size: cover;
+  /* Dos capas: la imagen del campus y, debajo, el logo por si falta o no carga */
+  background-color: #111;
+  background-repeat: no-repeat;
   background-position: center;
   position: relative;
   overflow: hidden;
@@ -455,3 +457,54 @@
     width: 80%;
   }
 }
+
+/* Campus oculto (solo lo ven admins y entrenadores) */
+.event-card.event-hidden .event-card-clickable { opacity: 0.55; }
+.event-hidden-badge {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border: 1px dashed rgba(255, 255, 255, 0.5);
+  padding: 0.3rem 0.8rem;
+  border-radius: 50px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.event-spots { color: var(--accent-gold); font-weight: 700; }
+.event-spots.full { color: #ef4444; }
+
+.price-hint {
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.btn-pay-online:disabled, .btn-pay-local:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  filter: none;
+}
+.btn-pay-local:disabled:hover { background: transparent; color: var(--accent-gold); }
+
+.campus-login-box, .campus-full-box {
+  padding: 2rem;
+  border-radius: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  background: rgba(212, 175, 55, 0.05);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  color: #ddd;
+  font-size: 1.05rem;
+}
+.campus-login-box .btn-pay-local { flex: none; padding: 0.9rem 2.5rem; text-decoration: none; }
+.campus-full-box { background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; font-weight: 700; }

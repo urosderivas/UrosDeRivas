@@ -132,3 +132,9 @@
 .link-btn:hover {
   color: var(--accent-gold);
 }
+
+.forgot-link {
+  align-self: flex-end;
+  font-size: 0.85rem;
+  margin-top: -0.5rem;
+}

@@ -1,10 +1,10 @@
-// Datos del club en un solo sitio. Si cambia algo (CIF, dirección, email,
+// Datos del club en un solo sitio. Si cambia algo (nombre, CIF, dirección, email,
 // club de Clupik), se edita aquí y se publica: no hace falta tocar nada más.
 export const CLUB = {
-  /** Nombre legal, el que sale en los textos legales y en las facturas. */
-  legalName: 'C.B. Uros de Rivas',
-  /** Nombre largo en mayúsculas para la cabecera de las facturas. */
-  invoiceName: 'CLUB BALONCESTO UROS DE RIVAS',
+  /** Nombre del club: portada, pie, textos legales y justificantes. Pendiente de que Iván confirme el nombre legal. */
+  legalName: 'Club Deportivo Elemental Uros de Rivas',
+  /** Nombre corto (título de la web, vista previa al compartir). */
+  shortName: 'Uros de Rivas',
   /** CIF del club. Sustituir el valor de relleno antes de cobrar de verdad. */
   cif: 'GXXXXXXXXX',
   address: {

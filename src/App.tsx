@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
@@ -14,6 +14,9 @@ import { PrivacyPolicy } from './presentation/PrivacyPolicy';
 import { LegalNotice } from './presentation/LegalNotice';
 import { CookiesPolicy } from './presentation/CookiesPolicy';
 import { CookieBanner } from './presentation/CookieBanner';
+import { NotFound } from './presentation/NotFound';
+import { consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
+import { takeLoginNext } from './utils/loginRedirect';
 
 function TelemetryTracker() {
   const { logActivity } = useStore();
@@ -30,6 +33,31 @@ function TelemetryTracker() {
   return null;
 }
 
+// Redirecciones que llegan desde fuera de la web: el enlace de recuperar
+// contraseña lleva a la pantalla de nueva contraseña, y al volver de Google se
+// vuelve a la página desde la que se pidió iniciar sesión.
+function AuthRedirects() {
+  const { user } = useStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const goToReset = () => {
+      if (consumePasswordRecovery()) navigate('/login?mode=reset', { replace: true });
+    };
+    goToReset();
+    window.addEventListener(PASSWORD_RECOVERY_EVENT, goToReset);
+    return () => window.removeEventListener(PASSWORD_RECOVERY_EVENT, goToReset);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    const next = takeLoginNext();
+    if (next) navigate(next, { replace: true });
+  }, [user, navigate]);
+
+  return null;
+}
+
 function App() {
   const { initAuth } = useStore();
 
@@ -40,6 +68,7 @@ function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <TelemetryTracker />
+      <AuthRedirects />
       <div className="app-container" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Navbar />
         <main style={{ flex: 1 }}>
@@ -54,6 +83,7 @@ function App() {
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/legal" element={<LegalNotice />} />
             <Route path="/cookies" element={<CookiesPolicy />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         <Footer />

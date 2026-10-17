@@ -1,4 +1,4 @@
-import { useStore } from '../store';
+import { useStore, markCartCheckout } from '../store';
 import { X, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 import './CartSidebar.css';
 import { StripeAdapter } from '../../infrastructure/StripeAdapter';
@@ -30,6 +30,7 @@ export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) 
     setLoading(true);
     try {
       const url = await stripeAdapter.createCheckoutSessionFromCart(cart, user.email);
+      markCartCheckout();
       window.location.href = url;
     } catch(e: any) {
       notify("Error procesando pago", e.message);

@@ -315,12 +315,12 @@ export function AdminPanel() {
     setOrders(freshOrders);
   };
 
-  const generateFactura = (groupKey: string, groupOrders: Order[]) => {
+  const generateReceipt = (groupKey: string, groupOrders: Order[]) => {
     const first = groupOrders[0];
     const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
     const paymentStatus = isPaidStripe ? 'paid_stripe' : invoicePaymentStatus(groupKey, groupOrders);
 
-    InvoiceGenerator.generatePdfFactura({
+    InvoiceGenerator.generateReceiptPdf({
       orderGroupId: groupKey,
       clientName: first.buyer_name,
       clientEmail: first.buyer_email,
@@ -453,7 +453,7 @@ export function AdminPanel() {
               <th>Total (€)</th>
               <th>Estado</th>
               <th>Pago en mano</th>
-              <th>Factura</th>
+              <th>Justificante</th>
             </tr>
           </thead>
           <tbody>
@@ -529,7 +529,7 @@ export function AdminPanel() {
                         )}
                       </td>
                       <td>
-                        <button className="btn-secondary" onClick={() => generateFactura(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                        <button className="btn-secondary" onClick={() => generateReceipt(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                           📄 PDF
                         </button>
                         <button onClick={() => handleDeleteOrder(first.id, `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
@@ -648,7 +648,15 @@ export function AdminPanel() {
     } catch (e: any) { showMessage('Error', e.message); }
   };
 
-  const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
+  // Mostrar u ocultar un campus a los usuarios sin abrir el formulario de edición
+  const handleToggleEventActive = async (ev: Event) => {
+    try {
+      const updated = await adapter.updateEvent(ev.id, { active: !ev.active });
+      setEvents(prev => prev.map(e => e.id === ev.id ? updated : e));
+    } catch (e: any) { showMessage('Error', e.message); }
+  };
+
+    const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
     setSyncingStripe(true);
     // Auto-fetch attendees for all events if missing
     let updatedAttendees = { ...attendees };
@@ -806,7 +814,13 @@ export function AdminPanel() {
                         : new Date(ev.date).toLocaleDateString()}
                     </td>
                     <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
-                    <td><span className={`status-badge ${ev.active ? 'completed' : 'cancelled'}`}>{ev.active ? 'SÍ' : 'NO'}</span></td>
+                    <td>
+                      <button type="button" className={`status-badge status-toggle ${ev.active ? 'completed' : 'cancelled'}`}
+                        title={ev.active ? 'Visible para los usuarios. Pulsa para ocultarlo.' : 'Oculto. Pulsa para mostrarlo a los usuarios.'}
+                        onClick={e => { e.stopPropagation(); handleToggleEventActive(ev); }}>
+                        {ev.active ? 'SÍ' : 'NO'}
+                      </button>
+                    </td>
                     <td>
                       <div className="attendee-count-badge">
                         {expandedEvents[ev.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -829,7 +843,7 @@ export function AdminPanel() {
                                   <th>Total (€)</th>
                                   <th>Estado</th>
                                   <th>Pago en mano</th>
-                                  <th>Factura</th>
+                                  <th>Justificante</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -840,7 +854,7 @@ export function AdminPanel() {
                                   const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
                                   const allCompleted = att.status === 'completed';
 
-                                  // Build mock Order for Factura
+                                  // Build mock Order for the receipt
                                   const dummyOrder = {
                                     id: att.event_id + '_' + att.user_id,
                                     user_id: att.user_id,
@@ -917,7 +931,7 @@ export function AdminPanel() {
                                         )}
                                       </td>
                                       <td>
-                                        <button className="btn-secondary" onClick={() => generateFactura(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                                        <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                                           📄 PDF
                                         </button>
                                         <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {

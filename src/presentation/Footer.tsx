@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { CLUB } from '../config';
 import './Footer.css';
 
 export function Footer() {
@@ -6,8 +7,8 @@ export function Footer() {
     <footer className="footer">
       <div className="footer-content">
         <div className="footer-brand">
-          <img src="https://www.urosderivas.com/logo.png" alt="Uros de Rivas" className="footer-logo" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          <h3>CLUB DEPORTIVO ELEMENTAL UROS DE RIVAS</h3>
+          <img src={`${import.meta.env.BASE_URL}assets/navbar_black_bull.png`} alt={CLUB.shortName} className="footer-logo" />
+          <h3>{CLUB.legalName.toUpperCase()}</h3>
         </div>
 
         <div className="footer-socials">

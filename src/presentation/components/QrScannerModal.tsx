@@ -87,10 +87,10 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="📷 Escanear Factura QR">
+    <Modal isOpen={isOpen} onClose={handleClose} title="📷 Escanear justificante (QR)">
       <div style={{ textAlign: 'center' }}>
         <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '16px' }}>
-          Apunta la cámara al código QR de la factura del cliente para verificar el estado de pago.
+          Apunta la cámara al código QR del justificante de pago del cliente para verificar el estado de pago.
         </p>
 
         <div

@@ -43,7 +43,8 @@ export interface Event {
   price_tiers: { minDays: number; pricePerDay: number }[];
   attendee_discounts: { minAttendees: number; discountPct: number }[];
   custom_fields?: CustomField[];
-  max_capacity?: number;
+  /** Plazas (asistentes) en total; null o vacío = sin límite */
+  max_capacity?: number | null;
   active: boolean;
 }
 
