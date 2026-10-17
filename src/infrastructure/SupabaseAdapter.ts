@@ -53,6 +53,19 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
   }
 
+  /** Envía el correo para elegir una contraseña nueva; el enlace vuelve a la portada. */
+  async sendPasswordReset(email: string): Promise<void> {
+    const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+    if (error) throw error;
+  }
+
+  /** Cambia la contraseña de la sesión actual (la que abre el enlace del correo). */
+  async updatePassword(password: string): Promise<void> {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  }
+
   async signOut(): Promise<void> {
     await supabase.auth.signOut();
   }
@@ -250,7 +263,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   /** Sube una imagen al bucket público "media" y devuelve su URL. */
-  async uploadImage(file: File, folder: 'sponsors' | 'news'): Promise<string> {
+  async uploadImage(file: File, folder: 'sponsors' | 'news' | 'events' | 'products'): Promise<string> {
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
     const path = `${folder}/${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
@@ -289,6 +302,15 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       const { error } = await supabase.from('event_registrations').insert({ event_id: eventId, user_id: userId });
       if (error) throw error;
     }
+  }
+
+  /** Asistentes inscritos por campus (sin canceladas). Vacío si la función aún no existe. */
+  async getCampusOccupancy(): Promise<Record<string, number>> {
+    const { data, error } = await supabase.rpc('get_campus_occupancy');
+    if (error || !Array.isArray(data)) return {};
+    const map: Record<string, number> = {};
+    for (const r of data) map[r.event_id] = Number(r.taken) || 0;
+    return map;
   }
 
   async getUserRegistrations(userId: string): Promise<Record<string, string>> {

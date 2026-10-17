@@ -1,18 +1,38 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { rememberLoginNext, safeNextPath } from '../utils/loginRedirect';
 import './Login.css';
 
+type Mode = 'login' | 'register' | 'forgot' | 'reset';
+
 export function Login() {
-  const { signIn, signUp, signInWithGoogle } = useStore();
+  const { signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword } = useStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Página a la que volver tras iniciar sesión (p. ej. el campus en el que se quería inscribir)
+  const next = safeNextPath(searchParams.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
+  const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'reset' ? 'reset' : 'login');
+  const isRegister = mode === 'register';
+
+  // El enlace del correo de recuperación puede llegar con la página de login ya abierta
+  useEffect(() => {
+    if (searchParams.get('mode') === 'reset') setMode('reset');
+  }, [searchParams]);
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError('');
+    setSuccess('');
+    setPassword('');
+    setConfirmPassword('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +40,31 @@ export function Login() {
     setSuccess('');
     setLoading(true);
 
-    if (isRegister) {
+    if (mode === 'forgot') {
+      try {
+        await sendPasswordReset(email);
+        // Mismo mensaje exista o no la cuenta, para no revelar qué emails están registrados
+        setSuccess('Si hay una cuenta con ese email, te hemos enviado un enlace para elegir una contraseña nueva. Revisa también la carpeta de spam.');
+      } catch (err: any) {
+        setError(err.message || 'No se pudo enviar el correo.');
+      }
+    } else if (mode === 'reset') {
+      if (password.length < 6) {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+      } else if (password !== confirmPassword) {
+        setError('Las contraseñas no coinciden.');
+      } else {
+        try {
+          await updatePassword(password);
+          setSuccess('✅ Contraseña cambiada. Ya has iniciado sesión.');
+          setTimeout(() => navigate('/', { replace: true }), 1500);
+        } catch (err: any) {
+          setError(err.message?.includes('session')
+            ? 'El enlace ha caducado. Pide uno nuevo desde «¿Olvidaste tu contraseña?».'
+            : err.message || 'No se pudo cambiar la contraseña.');
+        }
+      }
+    } else if (isRegister) {
       // Register flow
       if (password.length < 6) {
         setError('La contraseña debe tener al menos 6 caracteres.');
@@ -34,10 +78,8 @@ export function Login() {
       }
       try {
         await signUp(email, password);
+        switchMode('login');
         setSuccess('✅ Cuenta creada. Revisa tu email para confirmar tu cuenta antes de iniciar sesión.');
-        setIsRegister(false);
-        setPassword('');
-        setConfirmPassword('');
       } catch (err: any) {
         setError(err.message || 'Error al crear la cuenta.');
       }
@@ -45,7 +87,7 @@ export function Login() {
       // Login flow
       try {
         await signIn(email, password);
-        navigate('/');
+        navigate(next || '/');
       } catch (err: any) {
         if (err.message?.includes('Invalid login credentials')) {
           setError('Email o contraseña incorrectos.');
@@ -63,6 +105,7 @@ export function Login() {
     setError('');
     setLoading(true);
     try {
+      rememberLoginNext(next);
       await signInWithGoogle();
       // Google Auth redirects away, so no local navigation is needed here immediately.
     } catch (err: any) {
@@ -74,17 +117,21 @@ export function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h2>{isRegister ? 'Crear Cuenta' : 'Acceso al Club'}</h2>
+        <h2>{{ login: 'Acceso al Club', register: 'Crear Cuenta', forgot: 'Recuperar contraseña', reset: 'Nueva contraseña' }[mode]}</h2>
         <p>
-          {isRegister
-            ? 'Regístrate con tu email para inscribirte en campus, comprar en la tienda y más.'
-            : 'Inicia sesión para acceder a todas las funcionalidades del club.'}
+          {{
+            login: 'Inicia sesión para acceder a todas las funcionalidades del club.',
+            register: 'Regístrate con tu email para inscribirte en campus, comprar en la tienda y más.',
+            forgot: 'Escribe el email de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.',
+            reset: 'Elige la contraseña nueva para tu cuenta.',
+          }[mode]}
         </p>
 
         {error && <div className="error-message">{error}</div>}
         {success && <div className="success-message">{success}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
+          {mode !== 'reset' && (
           <div className="form-group">
             <label>Email</label>
             <input
@@ -95,8 +142,10 @@ export function Login() {
               placeholder="tu@email.com"
             />
           </div>
+          )}
+          {mode !== 'forgot' && (
           <div className="form-group">
-            <label>Contraseña</label>
+            <label>{mode === 'reset' ? 'Contraseña nueva' : 'Contraseña'}</label>
             <input
               type="password"
               required
@@ -106,8 +155,15 @@ export function Login() {
               minLength={6}
             />
           </div>
+          )}
 
-          {isRegister && (
+          {mode === 'login' && (
+            <button type="button" className="link-btn forgot-link" onClick={() => switchMode('forgot')}>
+              ¿Olvidaste tu contraseña?
+            </button>
+          )}
+
+          {(isRegister || mode === 'reset') && (
             <div className="form-group">
               <label>Confirmar Contraseña</label>
               <input
@@ -124,11 +180,10 @@ export function Login() {
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading
               ? 'Procesando...'
-              : isRegister
-                ? 'Crear Cuenta'
-                : 'Iniciar Sesión'}
+              : { login: 'Iniciar Sesión', register: 'Crear Cuenta', forgot: 'Enviar enlace', reset: 'Guardar contraseña' }[mode]}
           </button>
 
+          {(mode === 'login' || isRegister) && (<>
           <div className="auth-separator">o continuar con</div>
 
           <button type="button" className="btn-secondary google-btn" onClick={handleGoogleAuth} disabled={loading}>
@@ -140,12 +195,13 @@ export function Login() {
             </svg>
             Google
           </button>
+          </>)}
 
           <div className="auth-toggle">
-            {isRegister ? (
-              <p>¿Ya tienes cuenta? <button type="button" className="link-btn" onClick={() => { setIsRegister(false); setError(''); setSuccess(''); }}>Inicia sesión</button></p>
-            ) : (
-              <p>¿No tienes cuenta? <button type="button" className="link-btn" onClick={() => { setIsRegister(true); setError(''); setSuccess(''); }}>Regístrate</button></p>
+            {mode === 'login' ? (
+              <p>¿No tienes cuenta? <button type="button" className="link-btn" onClick={() => switchMode('register')}>Regístrate</button></p>
+            ) : mode !== 'reset' && (
+              <p>{isRegister ? '¿Ya tienes cuenta?' : '¿Te has acordado?'} <button type="button" className="link-btn" onClick={() => switchMode('login')}>Inicia sesión</button></p>
             )}
           </div>
         </form>

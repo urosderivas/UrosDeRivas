@@ -8,12 +8,14 @@ interface Props {
   label: string;
   value: string;
   onChange: (url: string) => void;
-  folder: 'sponsors' | 'news';
+  folder: 'sponsors' | 'news' | 'events' | 'products';
   required?: boolean;
+  /** false si el formulario ya enseña la imagen en otro sitio */
+  preview?: boolean;
 }
 
 /** Campo de imagen: se puede subir un archivo o pegar una URL. */
-export function ImageField({ label, value, onChange, folder, required }: Props) {
+export function ImageField({ label, value, onChange, folder, required, preview = true }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,7 +35,7 @@ export function ImageField({ label, value, onChange, folder, required }: Props) 
   return (
     <div className="form-group">
       <label>{label}{!required && <span className="label-hint"> (opcional)</span>}</label>
-      {value && <img src={resolveImageUrl(value)} alt="" className="content-image-preview" />}
+      {preview && value && <img src={resolveImageUrl(value)} alt="" className="content-image-preview" />}
       <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploading}
         onChange={e => handleFile(e.target.files?.[0])} />
       <input value={value} onChange={e => onChange(e.target.value)} placeholder="o pega aquí la URL de la imagen" />

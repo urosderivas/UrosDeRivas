@@ -26,7 +26,7 @@ export function invoicePaymentStatus(groupKey: string, orders: Order[]): Invoice
 }
 
 export class InvoiceGenerator {
-  private static readonly CLUB_NAME = CLUB.invoiceName;
+  private static readonly CLUB_NAME = CLUB.legalName.toUpperCase();
   private static readonly CLUB_CIF = CLUB.cif;
   private static readonly CLUB_ADDRESS = clubAddressLine;
   private static readonly IVA_RATE = 0.21;
@@ -47,7 +47,7 @@ export class InvoiceGenerator {
     }
   }
 
-  public static async generatePdfFactura(data: InvoiceData): Promise<void> {
+  public static async generateReceiptPdf(data: InvoiceData): Promise<void> {
     const doc = new jsPDF();
     const { orderGroupId, clientName, clientEmail, orders, paymentStatus } = data;
     const issueDate = data.date || new Date();
@@ -89,17 +89,21 @@ export class InvoiceGenerator {
     doc.setFont('helvetica', 'normal');
     doc.text(`Email: ${clientEmail}`, 14, 55);
 
+    // Justificante de pago, no factura: una factura exige numeración correlativa
     doc.setFont('helvetica', 'bold');
-    doc.text(`Factura Nº: ${shortId}`, 130, 50);
+    doc.setFontSize(11);
+    doc.text('JUSTIFICANTE DE PAGO', 130, 50);
+    doc.setFontSize(10);
+    doc.text(`Nº: ${shortId}`, 130, 55);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Fecha: ${issueDate.toLocaleDateString('es-ES')}`, 130, 55);
+    doc.text(`Fecha: ${issueDate.toLocaleDateString('es-ES')}`, 130, 60);
 
     // Stripe session reference
     if (orderGroupId.startsWith('cs_')) {
       doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
       // Use maxWidth to prevent cropping on long Stripe IDs
-      doc.text(`Ref. Stripe: ${orderGroupId}`, 130, 60, { maxWidth: 65 });
+      doc.text(`Ref. Stripe: ${orderGroupId}`, 130, 65, { maxWidth: 65 });
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
     }
@@ -113,7 +117,7 @@ export class InvoiceGenerator {
     });
 
     autoTable(doc, {
-      startY: 68,
+      startY: 74,
       head: [['Concepto', 'Cantidad', 'Precio Unitario', 'Importe']],
       body: tableData,
       theme: 'grid',
@@ -186,6 +190,6 @@ export class InvoiceGenerator {
     doc.text(`Documento generado automáticamente — ${CLUB.legalName}`, 14, 285);
     doc.setTextColor(0, 0, 0);
 
-    doc.save(`Factura_${shortId}.pdf`);
+    doc.save(`Justificante_${shortId}.pdf`);
   }
 }

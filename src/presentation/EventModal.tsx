@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { CalendarDays, Plus, X, Trash2 } from 'lucide-react';
 import { Event, CustomField } from '../domain/entities';
 import { Modal } from './components/Modal';
+import { ImageField } from './components/ImageField';
+import { resolveImageUrl } from '../utils/media';
 import './MarketItemModal.css';
 
 interface Props {
@@ -72,7 +74,7 @@ export function EventModal({ isOpen, onClose, onSave, initial }: Props) {
         title, date: dates[0], dates, location, imageUrl, description,
         schedule, type: 'campus', price_per_day: pricePerDay,
         price_tiers: priceTiers, attendee_discounts: attendeeDiscounts,
-        custom_fields: customFields, max_capacity: maxCapacity || undefined,
+        custom_fields: customFields, max_capacity: maxCapacity === '' ? null : maxCapacity,
         active,
       });
       onClose();
@@ -103,7 +105,7 @@ export function EventModal({ isOpen, onClose, onSave, initial }: Props) {
         <div className="modal-preview-row">
           <div className="modal-image-preview">
             {imageUrl
-              ? <img src={imageUrl} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
+              ? <img src={resolveImageUrl(imageUrl)} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
               : <div className="preview-placeholder"><CalendarDays size={40} /></div>}
           </div>
           <div className="modal-main-fields">
@@ -124,11 +126,8 @@ export function EventModal({ isOpen, onClose, onSave, initial }: Props) {
           </div>
         </div>
 
-        {/* Image URL */}
-        <div className="form-group">
-          <label>URL de Imagen / Cartel</label>
-          <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-        </div>
+        {/* Imagen / cartel: subir archivo o pegar URL */}
+        <ImageField label="Imagen / Cartel" value={imageUrl} onChange={setImageUrl} folder="events" preview={false} />
 
         {/* Dates picker */}
         <div className="form-group">
@@ -166,7 +165,7 @@ export function EventModal({ isOpen, onClose, onSave, initial }: Props) {
               <input type="number" min="0" step="0.01" value={pricePerDay} onChange={e => setPricePerDay(Number(e.target.value))} />
             </div>
             <div className="form-group">
-              <label>Aforo máximo</label>
+              <label>Aforo máximo (asistentes)</label>
               <input type="number" min="1" value={maxCapacity} onChange={e => setMaxCapacity(e.target.value ? Number(e.target.value) : '')} placeholder="Ilimitado" />
             </div>
           </div>

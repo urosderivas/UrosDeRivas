@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
@@ -8,10 +8,22 @@ import { EventModal } from './EventModal';
 import { Event, CustomField } from '../domain/entities';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { fallbackImageUrl, resolveImageUrl } from '../utils/media';
 import './Events.css';
 
 const adapter = new SupabaseAdapter();
 const stripeAdapter = new StripeAdapter();
+const MAX_ATTENDEES = 20;
+
+/** Imagen del campus con el logo del club debajo, que se ve si la imagen falta o no carga. */
+function campusBackground(imageUrl?: string): CSSProperties {
+  const fallback = `url("${fallbackImageUrl}")`;
+  if (!imageUrl) return { backgroundImage: fallback, backgroundSize: '140px' };
+  return {
+    backgroundImage: `url("${resolveImageUrl(imageUrl).replace(/"/g, '%22')}"), ${fallback}`,
+    backgroundSize: 'cover, 140px',
+  };
+}
 
 // Price calculation helper
 function calcCampusPrice(
@@ -43,7 +55,9 @@ function calcCampusPrice(
 
 export function Events() {
   const { user } = useStore();
+  const canManage = user?.role === 'admin' || user?.role === 'coach';
   const [events, setEvents] = useState<Event[]>([]);
+  const [occupancy, setOccupancy] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,8 +79,10 @@ export function Events() {
   const loadEvents = async () => {
     setLoading(true);
     try {
-      const fetched = await adapter.getEvents();
-      setEvents(fetched.filter(e => e.active));
+      const [fetched, taken] = await Promise.all([adapter.getEvents(), adapter.getCampusOccupancy()]);
+      // Los campus ocultos solo los ven admins y entrenadores, para poder editarlos y reactivarlos
+      setEvents(canManage ? fetched : fetched.filter(e => e.active));
+      setOccupancy(taken);
       if (user) {
         const regs = await adapter.getUserRegistrations(user.id);
         setUserRegistrations(regs);
@@ -222,6 +238,10 @@ export function Events() {
               const isExpanded = expandedId === ev.id;
               const regStatus = userRegistrations[ev.id];
               const isRegistered = regStatus !== undefined;
+              const spotsLeft = ev.max_capacity ? Math.max(0, ev.max_capacity - (occupancy[ev.id] || 0)) : null;
+              const isFull = spotsLeft === 0;
+              const maxAttendees = spotsLeft === null ? MAX_ATTENDEES : Math.min(MAX_ATTENDEES, spotsLeft);
+              const isFree = ev.price_per_day === 0 && (ev.price_tiers || []).every(t => t.pricePerDay === 0);
               const dateRange = ev.dates.length > 0
                 ? `${new Date(ev.dates[0] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${new Date(ev.dates[ev.dates.length - 1] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -234,7 +254,7 @@ export function Events() {
               };
 
               return (
-                <div key={ev.id} id={`campus-${ev.id}`} className={`event-card animate-fade-in ${isExpanded ? 'event-expanded' : ''}`}>
+                <div key={ev.id} id={`campus-${ev.id}`} className={`event-card animate-fade-in ${isExpanded ? 'event-expanded' : ''} ${ev.active ? '' : 'event-hidden'}`}>
                   <AdminGuard roles={['admin', 'coach']}>
                     <div className="admin-card-actions">
                       <button className="btn-admin-edit" onClick={() => { setEditEvent(ev); setModalOpen(true); }} title="Editar">✏️</button>
@@ -243,18 +263,11 @@ export function Events() {
                   </AdminGuard>
 
                   <div className="event-card-clickable" onClick={() => handleExpand(ev)} style={{ cursor: 'pointer' }}>
-                    {ev.imageUrl ? (
-                      <div className="event-image" style={{ backgroundImage: `url(${ev.imageUrl})` }}>
-                        <div className="event-type-badge badge-campus">CAMPUS</div>
-                        {renderBadge()}
-                      </div>
-                    ) : (
-                      <div className="event-image event-image-placeholder">
-                        <div className="event-type-badge badge-campus">CAMPUS</div>
-                        {renderBadge()}
-                        <span className="placeholder-icon">🏀</span>
-                      </div>
-                    )}
+                    <div className="event-image" style={campusBackground(ev.imageUrl)}>
+                      <div className="event-type-badge badge-campus">CAMPUS</div>
+                      {!ev.active && <div className="event-hidden-badge" title="Los usuarios no lo ven. Edítalo y marca «Campus activo» para mostrarlo.">Oculto</div>}
+                      {renderBadge()}
+                    </div>
                     <div className="event-info">
                       <h3>{ev.title}</h3>
                       <div className="event-meta">
@@ -263,6 +276,11 @@ export function Events() {
                         {ev.schedule && <span>🕐 {ev.schedule}</span>}
                         {ev.price_per_day > 0 && (
                           <span className="event-price-tag">💰 Desde {ev.price_per_day.toFixed(2)}€/día</span>
+                        )}
+                        {spotsLeft !== null && (
+                          <span className={`event-spots ${isFull ? 'full' : ''}`}>
+                            👥 {isFull ? 'Completo' : `Quedan ${spotsLeft} ${spotsLeft === 1 ? 'plaza' : 'plazas'}`}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -286,6 +304,17 @@ export function Events() {
                             {regStatus === 'completed' && <p>✅ Tu inscripción está <b>Completada</b>.</p>}
                             {regStatus === 'pending' && <p>⏳ Tu inscripción está <b>Pendiente</b> de revisión por los administradores o de finalizar el pago online.</p>}
                             {regStatus === 'cancelled' && <p>❌ Tu inscripción ha sido <b>Cancelada</b>. Espera a que un administrador la elimine para volver a intentar rellenarla.</p>}
+                          </div>
+                        ) : !user ? (
+                          <div className="campus-login-box">
+                            <p>🔒 Inicia sesión para inscribirte en este campus.</p>
+                            <Link to={`/login?next=${encodeURIComponent(`/events?campus=${ev.id}`)}`} className="btn-pay-local">
+                              Iniciar sesión
+                            </Link>
+                          </div>
+                        ) : isFull ? (
+                          <div className="campus-full-box">
+                            <p>Este campus está completo.</p>
                           </div>
                         ) : (
                           <div className="campus-registration-form">
@@ -318,7 +347,7 @@ export function Events() {
                                 <button type="button" onClick={() => { const n = Math.max(1, regNumAttendees - 1); setRegNumAttendees(n); setRegAttendeeNames(prev => prev.slice(0, n)); }}
                                   className="btn-counter">−</button>
                                 <span className="counter-value">{regNumAttendees}</span>
-                                <button type="button" onClick={() => { if (regNumAttendees >= 20) return; const n = regNumAttendees + 1; setRegNumAttendees(n); setRegAttendeeNames(prev => [...prev, '']); }}
+                                <button type="button" onClick={() => { if (regNumAttendees >= maxAttendees) return; const n = regNumAttendees + 1; setRegNumAttendees(n); setRegAttendeeNames(prev => [...prev, '']); }}
                                   className="btn-counter">+</button>
                               </div>
                             </div>
@@ -381,26 +410,28 @@ export function Events() {
                                      </div>
                                    )}
  
-                                   {/* Action buttons */}
+                                   {regSelectedDays.length === 0 && (
+                                     <p className="price-hint">
+                                       {isFree ? 'Elige los días a los que vas a ir.' : 'Elige los días para ver el precio.'}
+                                     </p>
+                                   )}
+
+                                   {/* Action buttons: desactivados hasta elegir días */}
                                    <div className="form-actions-stack">
-                                     {p.total > 0 && (
-                                       <button onClick={() => handleRegister(ev, false)} disabled={regSubmitting}
+                                     {!isFree && (
+                                       <button onClick={() => handleRegister(ev, false)} disabled={regSubmitting || regSelectedDays.length === 0}
                                          className="btn-pay-online">
                                          {regSubmitting ? 'Procesando...' : '💳 Pagar Online con Stripe'}
                                        </button>
                                      )}
-                                     <button onClick={() => handleRegister(ev, true)} disabled={regSubmitting}
+                                     <button onClick={() => handleRegister(ev, true)} disabled={regSubmitting || regSelectedDays.length === 0}
                                        className="btn-pay-local">
-                                       {regSubmitting ? 'Procesando...' : p.total === 0 ? '✅ Inscribirse (Gratis)' : '🏪 Reservar y Pagar en Campus'}
+                                       {regSubmitting ? 'Procesando...' : isFree ? '✅ Inscribirse (Gratis)' : '🏪 Reservar y Pagar en Campus'}
                                      </button>
                                    </div>
                                  </>
                                );
                              })()}
- 
-                             {!user && (
-                               <p className="login-prompt">🔒 Inicia sesión para inscribirte.</p>
-                             )}
                           </div>
                         )}
                       </div>

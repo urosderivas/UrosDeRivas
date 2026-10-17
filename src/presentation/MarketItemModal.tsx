@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, ShoppingBag } from 'lucide-react';
 import { MarketItem, CustomField } from '../domain/entities';
+import { ImageField } from './components/ImageField';
+import { resolveImageUrl } from '../utils/media';
 import './MarketItemModal.css';
 
 
@@ -111,7 +113,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
             <div className="modal-preview-row">
               <div className="modal-image-preview">
                 {imageUrl
-                  ? <img src={imageUrl} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
+                  ? <img src={resolveImageUrl(imageUrl)} alt="preview" onError={e => { e.currentTarget.src = ''; }} />
                   : <div className="preview-placeholder"><ShoppingBag size={40} /></div>
                 }
               </div>
@@ -129,10 +131,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>URL de Imagen *</label>
-              <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-            </div>
+            <ImageField label="Imagen *" value={imageUrl} onChange={setImageUrl} folder="products" required preview={false} />
 
             <div className="form-group">
               <label>Descripción</label>

@@ -127,7 +127,7 @@ serve(async (req: Request) => {
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('title, active, dates, price_per_day, price_tiers, attendee_discounts')
+        .select('title, active, dates, price_per_day, price_tiers, attendee_discounts, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
         
@@ -178,6 +178,23 @@ serve(async (req: Request) => {
         .eq('user_id', user.id)
         .maybeSingle();
       if (existing?.status === 'completed') throw new Error("Ya tienes una inscripción pagada en este campus.");
+
+      // Aforo: cuentan las inscripciones no canceladas de los demás (la propia se sustituye)
+      if (dbEvent.max_capacity) {
+        const { data: others, error: capacityError } = await supabaseAdminClient
+          .from('event_registrations')
+          .select('num_attendees, status')
+          .eq('event_id', campusRegistration.eventId)
+          .neq('user_id', user.id);
+        if (capacityError) throw new Error(`No se pudo comprobar el aforo: ${capacityError.message}`);
+        const taken = (others || [])
+          .filter((r: any) => r.status !== 'cancelled')
+          .reduce((sum: number, r: any) => sum + (Number(r.num_attendees) || 0), 0);
+        const left = Number(dbEvent.max_capacity) - taken;
+        if (numAttendees > left) {
+          throw new Error(left > 0 ? `Solo quedan ${left} plazas en este campus.` : "Este campus está completo.");
+        }
+      }
 
       // 3. Replicate the calcCampusPrice algorithm inside the Edge Function securely
       const numDays = selectedDays.length;

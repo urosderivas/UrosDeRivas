@@ -203,15 +203,65 @@
   letter-spacing: 3px;
 }
 
-.news-grid {
-  max-width: 1200px;
+.news-section .content-empty { text-align: center; }
+
+/* Ordenador: fila centrada si caben todas; si no, carrusel (NewsCarousel) */
+.news-carousel {
+  position: relative;
+  max-width: 1240px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 2rem;
 }
 
-.news-grid .content-empty { grid-column: 1 / -1; }
+.news-track {
+  display: flex;
+  gap: 2rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 0.5rem 0.25rem 1rem;
+}
+
+.news-track::-webkit-scrollbar { display: none; }
+
+/* Los márgenes automáticos centran la fila cuando sobra sitio y no estorban al desplazar */
+.news-track > :first-child { margin-left: auto; }
+.news-track > :last-child { margin-right: auto; }
+
+.news-track > .news-card {
+  flex: 0 0 340px;
+  scroll-snap-align: start;
+}
+
+.news-carousel.is-overflowing { padding: 0 60px; }
+
+/* Con carrusel, los bordes se difuminan para que se note que hay más noticias */
+.news-carousel.is-overflowing .news-track {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
+  padding-inline: 2rem;
+  scroll-padding-inline: 2rem;
+}
+
+.news-arrow {
+  position: absolute;
+  top: 40%;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--accent-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s, color 0.3s;
+}
+
+.news-arrow:hover { background: var(--accent-gold); color: #000; }
+.news-arrow.prev { left: 0; }
+.news-arrow.next { right: 0; }
 
 .news-card {
   position: relative;
@@ -281,5 +331,8 @@
 
 @media (max-width: 600px) {
   .news-header h3 { font-size: 1.8rem; }
-  .news-grid { grid-template-columns: 1fr; }
+  /* Móvil: una noticia debajo de otra, como antes */
+  .news-track { flex-direction: column; overflow: visible; scroll-snap-type: none; padding: 0; }
+  .news-track > :first-child, .news-track > :last-child { margin: 0; }
+  .news-track > .news-card { flex: none; }
 }
