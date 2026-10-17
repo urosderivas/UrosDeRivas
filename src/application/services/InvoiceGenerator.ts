@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order } from '../../domain/entities';
+import { CLUB, clubAddressLine } from '../../config';
 
 export interface InvoiceData {
   orderGroupId: string;
@@ -13,9 +14,9 @@ export interface InvoiceData {
 }
 
 export class InvoiceGenerator {
-  private static readonly CLUB_NAME = 'CLUB BALONCESTO UROS DE RIVAS';
-  private static readonly CLUB_CIF = 'GXXXXXXXXX';
-  private static readonly CLUB_ADDRESS = 'Calle de Aigües Tortes, 28522 - Rivas-Vaciamadrid, Madrid';
+  private static readonly CLUB_NAME = CLUB.invoiceName;
+  private static readonly CLUB_CIF = CLUB.cif;
+  private static readonly CLUB_ADDRESS = clubAddressLine;
   private static readonly IVA_RATE = 0.21;
 
   private static async getBase64ImageFromUrl(imageUrl: string): Promise<string | null> {
@@ -169,7 +170,7 @@ export class InvoiceGenerator {
     // Footer mark
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text('Documento generado automáticamente — C.B. Uros de Rivas', 14, 285);
+    doc.text(`Documento generado automáticamente — ${CLUB.legalName}`, 14, 285);
     doc.setTextColor(0, 0, 0);
 
     doc.save(`Factura_${shortId}.pdf`);

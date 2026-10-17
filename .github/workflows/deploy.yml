@@ -1,0 +1,74 @@
+# Compila la web y la publica en GitHub Pages en cada push a master.
+# En los pull requests solo compila, para avisar si algo no compila.
+#
+# Configuración (Settings → Secrets and variables → Actions → Variables):
+#   VITE_SUPABASE_URL                     URL del proyecto de Supabase
+#   VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY clave pública (sb_publishable_...)
+#                                         Las dos son públicas (van dentro de la web); si no
+#                                         se configuran se usan las del proyecto actual.
+#   CUSTOM_DOMAIN                         dominio propio, p. ej. www.urosderivas.es
+#                                         (vacío: se publica en <org>.github.io/<repo>/)
+# Y en Settings → Pages → Source: "GitHub Actions".
+
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://osekoolekqyzbpepyxze.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || 'sb_publishable_xgzUre4A7bkfPh2G0t-CnQ_sjUOF3IA' }}
+          BASE_PATH: ${{ vars.CUSTOM_DOMAIN && '/' || format('/{0}/', github.event.repository.name) }}
+
+      - name: Prepare for GitHub Pages
+        run: |
+          # Pages sirve 404.html en cualquier ruta que no exista (/market, /campus...),
+          # así que una copia de la app hace que funcionen los enlaces directos.
+          cp dist/index.html dist/404.html
+          if [ -n "${{ vars.CUSTOM_DOMAIN }}" ]; then
+            echo "${{ vars.CUSTOM_DOMAIN }}" > dist/CNAME
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

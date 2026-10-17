@@ -7,6 +7,7 @@ import { Home } from './presentation/Home';
 import { Login } from './presentation/Login';
 import { Market } from './presentation/Market';
 import { Events } from './presentation/Events';
+import { Sponsors } from './presentation/Sponsors';
 import { Clasificaciones } from './presentation/Clasificaciones';
 import { AdminPanel } from './presentation/AdminPanel';
 import { PrivacyPolicy } from './presentation/PrivacyPolicy';
@@ -19,6 +20,10 @@ function TelemetryTracker() {
   const location = useLocation();
   
   useEffect(() => {
+    // Solo se registran visitas si el usuario ha aceptado las cookies de estadística
+    let consent: string | null = null;
+    try { consent = localStorage.getItem('cookie_banner_accepted'); } catch { /* sin almacenamiento */ }
+    if (consent !== 'true') return;
     logActivity('page_visit', { path: location.pathname });
   }, [location, logActivity]);
   
@@ -42,6 +47,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/market" element={<Market />} />
             <Route path="/events" element={<Events />} />
+            <Route path="/sponsors" element={<Sponsors />} />
             <Route path="/clasificaciones" element={<Clasificaciones />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/login" element={<Login />} />

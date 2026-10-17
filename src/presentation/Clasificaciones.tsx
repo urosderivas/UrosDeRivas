@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import './Clasificaciones.css';
+import { CLUPIK } from '../config';
 
 interface ClupikGame {
   id: string;
@@ -84,12 +85,12 @@ const SearchableSelect = ({ options, value, onChange, placeholder }: any) => {
 
 export function Clasificaciones() {
   const [tab, setTab] = useState<'partidos' | 'clasificacion'>('partidos');
-  const [clubId, setClubId] = useState<string>('67');
+  const [clubId, setClubId] = useState<string>(CLUPIK.clubId);
   const [matches, setMatches] = useState<ClupikGame[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Maintain a dynamic unique list of encountered clubs globally
-  const [knownClubs, setKnownClubs] = useState<{ id: string, name: string }[]>([{ id: '67', name: 'Uros de Rivas' }]);
+  const [knownClubs, setKnownClubs] = useState<{ id: string, name: string }[]>([{ id: CLUPIK.clubId, name: CLUPIK.clubName }]);
 
   // Standings State
   const [dynamicStandings, setDynamicStandings] = useState<StandingTeam[]>([]);
@@ -122,9 +123,9 @@ export function Clasificaciones() {
 
         // Fallback: If external club returns 0 matches (no native Clupik presence),
         // we revert to the Uros master feed and filter locally for games involving them.
-        if (gamesList.length === 0 && clubId !== '67') {
+        if (gamesList.length === 0 && clubId !== CLUPIK.clubId) {
           try {
-            const fbRes = await fetch(`https://api.clupik.com/games?clubId=67&from=${fromDate.toISOString()}&to=${toDate.toISOString()}&firstLoad=false&overrideClubId=67&expand=localTeam,localTeam.club,visitorTeam,visitorTeam.club,organization,competition,group,stadium`);
+            const fbRes = await fetch(`https://api.clupik.com/games?clubId=${CLUPIK.clubId}&from=${fromDate.toISOString()}&to=${toDate.toISOString()}&firstLoad=false&overrideClubId=${CLUPIK.clubId}&expand=localTeam,localTeam.club,visitorTeam,visitorTeam.club,organization,competition,group,stadium`);
             if (fbRes.ok) {
               const fbJson = await fbRes.json();
               const fbGames: ClupikGame[] = Array.isArray(fbJson) ? fbJson : (fbJson.games || fbJson.data || []);
@@ -625,7 +626,7 @@ export function Clasificaciones() {
                       </thead>
                       <tbody>
                         {dynamicStandings.sort((a, b) => a.rankingOrder - b.rankingOrder).map(s => {
-                          const isPrimaryClub = s.team?.club?.id === clubId || s.team?.name.toUpperCase().includes('UROS DE RIVAS');
+                          const isPrimaryClub = s.team?.club?.id === clubId || s.team?.name.toUpperCase().includes(CLUPIK.clubName.toUpperCase());
                           return (
                             <tr key={s.team.id || s.rankingOrder} className={isPrimaryClub ? 'row-highlight' : ''}>
                               <td>{s.rankingOrder}</td>

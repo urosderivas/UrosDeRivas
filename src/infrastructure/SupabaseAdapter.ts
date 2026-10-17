@@ -1,6 +1,6 @@
 import { supabase } from '../utils/supabase';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
-import { User, MarketItem, Event, SystemLog, Order } from '../domain/entities';
+import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
 
 export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort {
   async getUser(): Promise<User | null> {
@@ -193,6 +193,72 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   // ============================================
+  // SPONSORS & NEWS
+  // ============================================
+  async getSponsors(): Promise<Sponsor[]> {
+    const { data, error } = await supabase.from('sponsors').select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data.map((s: any) => ({
+      id: s.id, name: s.name, imageUrl: s.image_url, linkUrl: s.link_url || undefined,
+      sortOrder: s.sort_order, active: s.active !== false,
+    }));
+  }
+
+  async saveSponsor(sponsor: Omit<Sponsor, 'id'>, id?: string): Promise<void> {
+    const payload = {
+      name: sponsor.name, image_url: sponsor.imageUrl, link_url: sponsor.linkUrl || null,
+      sort_order: sponsor.sortOrder, active: sponsor.active,
+    };
+    const { error } = id
+      ? await supabase.from('sponsors').update(payload).eq('id', id)
+      : await supabase.from('sponsors').insert(payload);
+    if (error) throw error;
+  }
+
+  async deleteSponsor(id: string): Promise<void> {
+    const { error } = await supabase.from('sponsors').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  async getNews(): Promise<NewsPost[]> {
+    const { data, error } = await supabase.from('news').select('*')
+      .order('published_at', { ascending: false });
+    if (error) throw error;
+    return data.map((n: any) => ({
+      id: n.id, title: n.title, body: n.body || '', imageUrl: n.image_url || undefined,
+      eventId: n.event_id || undefined, publishedAt: n.published_at,
+    }));
+  }
+
+  async saveNews(post: Omit<NewsPost, 'id'>, id?: string): Promise<void> {
+    const payload: any = {
+      title: post.title, body: post.body, image_url: post.imageUrl || null,
+      event_id: post.eventId || null, published_at: post.publishedAt,
+    };
+    if (!id) payload.created_by = (await this.getUser())?.id;
+    const { error } = id
+      ? await supabase.from('news').update(payload).eq('id', id)
+      : await supabase.from('news').insert(payload);
+    if (error) throw error;
+  }
+
+  async deleteNews(id: string): Promise<void> {
+    const { error } = await supabase.from('news').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  /** Sube una imagen al bucket público "media" y devuelve su URL. */
+  async uploadImage(file: File, folder: 'sponsors' | 'news'): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
+    if (error) throw error;
+    return supabase.storage.from('media').getPublicUrl(path).data.publicUrl;
+  }
+
+  // ============================================
   // CAMPUS REGISTRATIONS
   // ============================================
   async getCampusRegistrations(eventId: string): Promise<any[]> {
@@ -213,32 +279,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       stripe_session_id: regMap[d.user_id]?.stripe_session_id,
       custom_data: regMap[d.user_id]?.custom_data || {},
     }));
-  }
-
-  async createCampusRegistration(data: {
-    eventId: string;
-    selectedDays: string[];
-    numAttendees: number;
-    attendeeNames: string[];
-    amount: number;
-    customData: Record<string, string>;
-    stripeSessionId?: string;
-    status?: string;
-  }): Promise<void> {
-    const user = await this.getUser();
-    if (!user) throw new Error('No autenticado');
-    const { error } = await supabase.from('event_registrations').upsert({
-      event_id: data.eventId,
-      user_id: user.id,
-      selected_days: data.selectedDays,
-      num_attendees: data.numAttendees,
-      attendee_names: data.attendeeNames,
-      amount: data.amount,
-      status: data.status || 'pending',
-      stripe_session_id: data.stripeSessionId || `local_${Date.now()}`,
-      custom_data: data.customData,
-    }, { onConflict: 'event_id,user_id' });
-    if (error) throw error;
   }
 
   async toggleEventRegistration(eventId: string, userId: string, isRegistered: boolean): Promise<void> {
@@ -354,9 +394,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async createLog(actionType: string, metadata?: any): Promise<void> {
+    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada
     const user = await this.getUser();
-    const payload: any = { action_type: actionType, metadata };
-    if (user) payload.user_id = user.id;
+    if (!user) return;
+    const payload: any = { action_type: actionType, metadata, user_id: user.id };
 
     const { error } = await supabase.from('system_logs').insert(payload);
     // Silently fail for telemetry if needed, but log to console

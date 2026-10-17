@@ -11,6 +11,7 @@ import './AdminPanel.css';
 import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
 import { QrScannerModal } from './components/QrScannerModal';
+import { CLUPIK } from '../config';
 
 const adapter = new SupabaseAdapter();
 
@@ -80,7 +81,7 @@ export function AdminPanel() {
     if (!window.confirm("¿Importar todo el catálogo de Clupik a la base local?\n\nEsto añadirá variables automáticas (Jugador, Equipo) y detendrá la conexión externa en tiempo real.")) return;
     try {
       setLoading(true);
-      const res = await fetch('https://api.clupik.com/clubs/67/shop/products/public/home?limit=100');
+      const res = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/products/public/home?limit=100`);
       if (!res.ok) throw new Error("API Clupik inaccesible");
       const data = await res.json();
       const clupikItems = data.value || data.data || data || [];
@@ -89,7 +90,7 @@ export function AdminPanel() {
       for (const cItem of clupikItems) {
         let detailData = cItem;
         try {
-          const detailRes = await fetch(`https://api.clupik.com/clubs/67/shop/product/${cItem.id}`);
+          const detailRes = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/product/${cItem.id}`);
           if (detailRes.ok) {
             const rawDetail = await detailRes.json();
             detailData = rawDetail.data || rawDetail;
@@ -98,7 +99,7 @@ export function AdminPanel() {
 
         const rawId = cItem.id.toString().replace('clupik_', '');
         const price = detailData.minPrice ? detailData.minPrice / 100 : (detailData.price ? detailData.price / 100 : 0);
-        const imageUrl = `https://api.clupik.com/clubs/67/shop/image/${rawId}?format=large`;
+        const imageUrl = `https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/image/${rawId}?format=large`;
         const name = detailData.title || cItem.title;
         const desc = detailData.description || '';
 
@@ -624,7 +625,7 @@ export function AdminPanel() {
 
   const handleImportClupikEvents = async () => {
     try {
-      const res = await fetch('https://api.clupik.com/clubs/67/publications?expand=user&languageId=709&languageCode=es&limit=15');
+      const res = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/publications?expand=user&languageId=${CLUPIK.languageId}&languageCode=es&limit=15`);
       if (!res.ok) throw new Error('No se pudo conectar con Clupik');
       const data = await res.json();
       const pubs = Array.isArray(data) ? data : [];
@@ -639,7 +640,7 @@ export function AdminPanel() {
         // Only import if title contains 'campus' (case insensitive)
         if (!title.toLowerCase().includes('campus')) continue;
         await adapter.createEvent({
-          title, date: pubDate, dates: [], location: 'Club Uros de Rivas',
+          title, date: pubDate, dates: [], location: `Club ${CLUPIK.clubName}`,
           imageUrl, description, schedule: '', type: 'campus',
           price_per_day: 0, price_tiers: [], attendee_discounts: [],
           custom_fields: [], active: false,

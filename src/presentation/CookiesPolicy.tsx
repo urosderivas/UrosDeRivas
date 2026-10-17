@@ -1,4 +1,5 @@
 import './PolicyPages.css';
+import { CLUB } from '../config';
 
 export function CookiesPolicy() {
   return (
@@ -32,7 +33,7 @@ export function CookiesPolicy() {
 
         <h2>TRATAMIENTO DE DATOS PERSONALES</h2>
         <p>
-          <strong>C.B. Uros de Rivas</strong> es el Responsable del tratamiento de los datos personales del Interesado y le informa de que estos datos serán tratados de conformidad con lo dispuesto en el Reglamento (UE) 2016/679 (GDPR).
+          <strong>{CLUB.legalName}</strong> es el Responsable del tratamiento de los datos personales del Interesado y le informa de que estos datos serán tratados de conformidad con lo dispuesto en el Reglamento (UE) 2016/679 (GDPR).
         </p>
         <p>
           <strong>Fines del tratamiento:</strong> asegurar la correcta navegación, obtener métricas anónimas sobre el desempeño de la web y en su caso permitir compartir a través de redes sociales y medir nuestra publicidad.
