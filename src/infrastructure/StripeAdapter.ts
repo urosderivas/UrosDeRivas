@@ -1,6 +1,15 @@
 import { supabase } from '../utils/supabase';
 import { PaymentPort } from '../application/ports';
 
+// Sesión de Stripe en curso, para poder cancelarla si el usuario vuelve sin pagar
+const PENDING_SESSION_KEY = 'pending_checkout_session';
+
+function rememberSession(sessionId: unknown) {
+  try {
+    if (typeof sessionId === 'string') sessionStorage.setItem(PENDING_SESSION_KEY, sessionId);
+  } catch { /* sin sessionStorage la sesión caduca sola en Stripe */ }
+}
+
 export class StripeAdapter implements PaymentPort {
   /**
    * Invokes a secure Supabase Edge Function to generate a Stripe Checkout URL.
@@ -44,6 +53,7 @@ export class StripeAdapter implements PaymentPort {
     }
 
     if (!data?.url) throw new Error("Url de Stripe inválida.");
+    rememberSession(data.sessionId);
     return data.url;
   }
 
@@ -90,6 +100,24 @@ export class StripeAdapter implements PaymentPort {
     }
 
     if (!data?.url) throw new Error("Url de Stripe inválida.");
+    rememberSession(data.sessionId);
     return data.url;
+  }
+
+  /** El usuario ha vuelto de Stripe sin pagar: cierra esa sesión y cancela lo pendiente. */
+  async cancelPendingCheckout(): Promise<void> {
+    let sessionId: string | null = null;
+    try { sessionId = sessionStorage.getItem(PENDING_SESSION_KEY); } catch { /* nada que cancelar */ }
+    if (!sessionId) return;
+
+    const { error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { cancelSessionId: sessionId }
+    });
+    if (error) {
+      // Si falla, Stripe la caducará igualmente y el webhook la cancelará
+      console.error("Error cancelling Stripe session:", error);
+      return;
+    }
+    try { sessionStorage.removeItem(PENDING_SESSION_KEY); } catch { /* ignorar */ }
   }
 }

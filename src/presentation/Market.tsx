@@ -43,7 +43,9 @@ export function Market() {
       showMessage('Pago Completado', '¡Pago completado con éxito! Recibirás un correo de confirmación pronto.');
     }
     if (params.get('canceled')) {
-      showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.');
+      stripeAdapter.cancelPendingCheckout().finally(() =>
+        showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.')
+      );
     }
   }, [fetchItems, location.search]);
 

@@ -83,7 +83,10 @@ export function Events() {
     if (params.get('success')) {
       showMessage('Pago Completado', '¡Inscripción pagada con éxito! Has recibido tu reserva segura.');
     } else if (params.get('canceled')) {
-      showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
+      stripeAdapter.cancelPendingCheckout().finally(() => {
+        loadEvents();
+        showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
+      });
     }
   }, [user, location.search]);
 
