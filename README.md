@@ -95,13 +95,13 @@ Las variables fundamentales están centralizadas en `src/index.css`. Sustituye:
 *Sube los escudos de tu equipo en `public/assets/*` y cambia las referencias principales en el `Navbar.tsx` y `Home.tsx`.*
 
 ### Paso 4: Despliegue Público Gratuito y Automatizado
-El código expone unos `scripts` listos para ser publicados estáticamente en GitHub Pages:
-1. En `vite.config.ts`, cambia la url `base` a tu Repositorio de GitHub: `base: '/TuRepositorio/'`.
-2. Actualiza tu `package.json`: `"homepage": "https://<TU-USUARIO>.github.io/TuRepositorio/"`.
-3. Ejecuta el empaque hacia el mundo:
-   ```bash
-   npm run deploy
-   ```
+La web se publica sola en GitHub Pages con cada push a `master` (`.github/workflows/deploy.yml`). En los pull requests solo se compila, para avisar si algo se ha roto. Para activarlo una vez:
+1. En el repo, **Settings → Pages → Source**: elige *GitHub Actions*.
+2. En **Settings → Secrets and variables → Actions → Variables**, crea `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` (la clave pública `sb_publishable_…`).
+3. Con dominio propio, crea también la variable `CUSTOM_DOMAIN` (por ejemplo `www.tuclub.es`), apunta el DNS del dominio a GitHub Pages siguiendo [su guía](https://docs.github.com/es/pages/configuring-a-custom-domain-for-your-github-pages-site) y añade el dominio en Settings → Pages. Sin esa variable la web se publica en `https://<organización>.github.io/<repo>/`.
+4. Añade la URL final en Supabase (**Authentication → URL Configuration**: *Site URL* y *Redirect URLs*) y en el secreto `ALLOWED_ORIGINS` de las Edge Functions, para que funcionen el login y la vuelta desde Stripe.
+
+Para probar una compilación en local: `npm run build` (o `BASE_PATH=/MiRepo/ npm run build` si se sirve desde una subcarpeta).
 
 **¡Felicidades!** Tienes un sitio web oficial de grandísima fiabilidad técnica en el aire 🌍.
 
