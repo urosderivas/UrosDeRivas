@@ -13,6 +13,18 @@ export interface InvoiceData {
   paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending';
 }
 
+/**
+ * Estado de pago de un grupo de pedidos. Los pagados por Stripe pasan a
+ * "processing" (pendiente de entrega) en cuanto llega el webhook, así que
+ * cuentan ya como pagados; el resto solo cuando un admin los completa.
+ */
+export function invoicePaymentStatus(groupKey: string, orders: Order[]): InvoiceData['paymentStatus'] {
+  if (groupKey.startsWith('cs_')) {
+    return orders.every(o => o.status === 'processing' || o.status === 'completed') ? 'paid_stripe' : 'pending';
+  }
+  return orders.every(o => o.status === 'completed') ? 'paid_hand' : 'pending';
+}
+
 export class InvoiceGenerator {
   private static readonly CLUB_NAME = CLUB.invoiceName;
   private static readonly CLUB_CIF = CLUB.cif;
@@ -39,7 +51,8 @@ export class InvoiceGenerator {
     const doc = new jsPDF();
     const { orderGroupId, clientName, clientEmail, orders, paymentStatus } = data;
     const issueDate = data.date || new Date();
-    const shortId = orderGroupId.substring(0, 8).toUpperCase();
+    // Las sesiones de Stripe empiezan todas por "cs_test_"/"cs_live_": el final es lo que las distingue
+    const shortId = orderGroupId.slice(-8).toUpperCase();
 
     // 1. Load Logo — use the black bull on a light grey rect for visibility
     const logoUrl = `${import.meta.env.BASE_URL}assets/navbar_black_bull.png`;

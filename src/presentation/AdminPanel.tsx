@@ -8,7 +8,7 @@ import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import './AdminPanel.css';
-import { InvoiceGenerator } from '../application/services/InvoiceGenerator';
+import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
 import { QrScannerModal } from './components/QrScannerModal';
 import { CLUPIK } from '../config';
@@ -318,11 +318,7 @@ export function AdminPanel() {
   const generateFactura = (groupKey: string, groupOrders: Order[]) => {
     const first = groupOrders[0];
     const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
-    const allCompleted = groupOrders.every(o => o.status === 'completed');
-
-    let paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending' = 'pending';
-    if (isPaidStripe) paymentStatus = 'paid_stripe';
-    else if (allCompleted) paymentStatus = 'paid_hand';
+    const paymentStatus = isPaidStripe ? 'paid_stripe' : invoicePaymentStatus(groupKey, groupOrders);
 
     InvoiceGenerator.generatePdfFactura({
       orderGroupId: groupKey,

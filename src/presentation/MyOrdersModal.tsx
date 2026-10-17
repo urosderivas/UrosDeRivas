@@ -4,7 +4,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
 import { ShoppingBag, FileText } from 'lucide-react';
-import { InvoiceGenerator, InvoiceData } from '../application/services/InvoiceGenerator';
+import { InvoiceGenerator, InvoiceData, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
@@ -53,11 +53,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   const handleGenerateInvoice = async (groupOrders: Order[], groupId: string) => {
     setGeneratingPdf(groupId);
     try {
-      const isStripe = groupId.startsWith('cs_');
-      const allCompleted = groupOrders.every(o => o.status === 'completed');
-      let paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending' = 'pending';
-      if (isStripe && allCompleted) paymentStatus = 'paid_stripe';
-      else if (!isStripe && allCompleted) paymentStatus = 'paid_hand';
+      const paymentStatus = invoicePaymentStatus(groupId, groupOrders);
 
       const invoiceData: InvoiceData = {
         orderGroupId: groupId,
