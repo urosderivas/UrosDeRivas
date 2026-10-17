@@ -40,7 +40,7 @@ export function Market() {
     fetchItems();
     const params = new URLSearchParams(location.search);
     if (params.get('success')) {
-      showMessage('Pago Completado', '¡Pago completado con éxito! Recibirás un correo de confirmación pronto.');
+      showMessage('Pago Completado', '¡Pago completado con éxito! El club se pondrá en contacto contigo para la entrega. Puedes seguir el estado en "Mis pedidos".');
     }
     if (params.get('canceled')) {
       stripeAdapter.cancelPendingCheckout().finally(() =>
