@@ -49,7 +49,10 @@ Si deseas probar la aplicación del equipo localmente, o prepararte para despleg
    ```
 
 4. **Despliegue de Base de Datos y Edge Functions** (Requerido para E-Commerce)
+
+   El esquema completo (tablas, RLS, funciones y triggers) está versionado en `supabase/migrations/`. Cualquier cambio en la base de datos se hace con una migración nueva (`npx supabase migration new <nombre>`), nunca a mano en el panel.
    ```bash
+   npx supabase link --project-ref <TU-ID-SUPABASE>
    npx supabase db push
    # Recuerda inyectar tu API Key SECRETA de Stripe en Supabase:
    npx supabase secrets set STRIPE_SECRET_KEY=sk_tc_...
@@ -69,7 +72,7 @@ Si deseas probar la aplicación del equipo localmente, o prepararte para despleg
 La magia de este sistema reside en nuestro adaptador inteligente y su arquitectura acoplable. No necesitas pagar mil herramientas: puedes centralizar las cuotas, el merchandising y tus campus de verano bajo UN ÚNICO entorno sin costes de servidor ni mantenimiento (GitHub Pages + Servidor Supabase Gratuito).
 
 ### Paso 1: Configura tu Supabase
-Crea un proyecto gratuito en Supabase, vuelca el archivo local `supabase_schema.sql` en tu *SQL Editor* para montar todas las tablas del mercado, usuarios y campus. Configura tus secretos de Stripe.
+Crea un proyecto gratuito en Supabase y aplica las migraciones de `supabase/migrations/` con `npx supabase db push` (o pega `supabase/migrations/20261017000000_baseline.sql` en el *SQL Editor*) para montar todas las tablas del mercado, usuarios y campus. Configura tus secretos de Stripe.
 
 ### Paso 2: Cambia tu ID de Clupik (Opcional)
 Si tu equipo deportivo pertenece a la red de Clupik (casi todas las federaciones territoriales lo están integrando):
@@ -100,3 +103,16 @@ El código expone unos `scripts` listos para ser publicados estáticamente en Gi
 
 Este proyecto está liberado bajo licencia libre **[MIT License](LICENSE)**. 
 Eres completamente libre de utilizar este código fuente, hacer un *fork*, vender tus desarrollos derivados, o desplegarlo en producción para cuantas academias deportivas, gimnasios o equipos consideres oportuno de manera comercial o altruista.
+
+---
+
+## 🗄️ Migraciones en el proyecto de Supabase actual
+
+El proyecto de producción se creó a mano, antes de versionar el esquema, así que su historial de migraciones está vacío. `20261017000000_baseline.sql` es una copia exacta de lo que ya tiene; no hay que ejecutarla allí, solo marcarla como aplicada una vez:
+
+```bash
+npx supabase link --project-ref <TU-ID-SUPABASE>
+npx supabase migration repair --status applied 20261017000000
+```
+
+A partir de ahí, `npx supabase db push` solo aplica las migraciones nuevas.
