@@ -508,3 +508,13 @@
 }
 .campus-login-box .btn-pay-local { flex: none; padding: 0.9rem 2.5rem; text-decoration: none; }
 .campus-full-box { background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; font-weight: 700; }
+
+.form-retry-note {
+  margin: -0.5rem 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 0.95rem;
+}
