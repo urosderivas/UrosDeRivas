@@ -164,23 +164,24 @@ export function AdminPanel() {
     });
   };
 
-  const handleUpdateOrderStatus = async (id: string, newStatus: Order['status']) => {
+  // Cambia el estado de todas las líneas de un pedido (un pedido del carrito tiene varias)
+  const handleUpdateOrderStatus = async (ids: string[], newStatus: Order['status']) => {
     try {
-      await adapter.updateOrderStatus(id, newStatus);
-      setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
+      await Promise.all(ids.map(id => adapter.updateOrderStatus(id, newStatus)));
+      setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, status: newStatus } : o));
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleDeleteOrder = async (id: string, itemName: string, buyer: string) => {
+  const handleDeleteOrder = async (ids: string[], itemName: string, buyer: string) => {
     setConfirmPrompt({
       open: true,
       message: `¿Eliminar permanentemente el pedido de "${itemName}" realizado por ${buyer}? Esta acción no reembolsa el pago en Stripe, únicamente elimina este registro del sistema y libera el bloqueo de base de datos.`,
       action: async () => {
         try {
-          await adapter.deleteOrder(id);
-          setOrders(orders.filter(o => o.id !== id));
+          await Promise.all(ids.map(id => adapter.deleteOrder(id)));
+          setOrders(prev => prev.filter(o => !ids.includes(o.id)));
           showMessage('Éxito', 'Pedido eliminado correctamente.');
         } catch (e: any) {
           showMessage('Error al borrar pedido', e.message);
@@ -294,10 +295,11 @@ export function AdminPanel() {
             const result = batchResults[order.stripe_session_id];
             newStatuses[order.id] = result.payment_status;
 
-            // Auto-update DB based on Stripe status (only if still pending)
+            // Auto-update DB based on Stripe status (only if still pending). An open
+            // session is also "unpaid" while the buyer is still paying: cancel only expired ones.
             if (result.payment_status === 'paid' && order.status === 'pending') {
               await adapter.updateOrderStatus(order.id, 'processing');
-            } else if (result.payment_status === 'unpaid' && order.status === 'pending') {
+            } else if (result.status === 'expired' && order.status === 'pending') {
               await adapter.updateOrderStatus(order.id, 'cancelled');
             }
           } else if (!order.stripe_session_id) {
@@ -501,7 +503,7 @@ export function AdminPanel() {
                           className="status-dropdown"
                           value={allCompleted ? 'completed' : first.status}
                           onChange={(e) => {
-                            groupOrders.forEach(o => handleUpdateOrderStatus(o.id, e.target.value as Order['status']));
+                            handleUpdateOrderStatus(groupOrders.map(o => o.id), e.target.value as Order['status']);
                           }}
                         >
                           <option value="pending">Pendiente</option>
@@ -522,7 +524,7 @@ export function AdminPanel() {
                             title="Marcar como pagado en mano"
                             onChange={(e) => {
                               const newStatus = e.target.checked ? 'completed' : 'pending';
-                              groupOrders.forEach(o => handleUpdateOrderStatus(o.id, newStatus as Order['status']));
+                              handleUpdateOrderStatus(groupOrders.map(o => o.id), newStatus as Order['status']);
                             }}
                             style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                           />
@@ -532,7 +534,7 @@ export function AdminPanel() {
                         <button className="btn-secondary" onClick={() => generateReceipt(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                           📄 PDF
                         </button>
-                        <button onClick={() => handleDeleteOrder(first.id, `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
+                        <button onClick={() => handleDeleteOrder(groupOrders.map(o => o.id), `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
                           <Trash2 size={16} />
                         </button>
                       </td>
@@ -695,7 +697,7 @@ export function AdminPanel() {
             newStatuses[att.stripe_session_id] = result.payment_status;
             if (result.payment_status === 'paid' && att.status === 'pending') {
               await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
-            } else if (result.payment_status === 'unpaid' && att.status === 'pending') {
+            } else if (result.status === 'expired' && att.status === 'pending') {
               await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
             }
           }

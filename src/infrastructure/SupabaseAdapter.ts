@@ -26,7 +26,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
     if (!data.user) throw new Error("No user returned");
     const userResult = await this.getUser();
-    if (!userResult) throw new Error("Failed to get profile");
+    if (!userResult) throw new Error("No se pudo cargar tu perfil. Vuelve a intentarlo.");
     return userResult;
   }
 
@@ -103,8 +103,8 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async updateItem(id: string, item: Partial<MarketItem>): Promise<MarketItem> {
     const payload: any = {};
     if (item.name) payload.name = item.name;
-    if (item.price) payload.price = item.price;
-    if (item.imageUrl) payload.image_url = item.imageUrl;
+    if (item.price !== undefined) payload.price = item.price;
+    if (item.imageUrl !== undefined) payload.image_url = item.imageUrl || null;
     if (item.description !== undefined) payload.description = item.description;
     if (item.sizes !== undefined) payload.sizes = item.sizes;
     if (item.custom_fields !== undefined) payload.custom_fields = item.custom_fields;
@@ -292,16 +292,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       stripe_session_id: regMap[d.user_id]?.stripe_session_id,
       custom_data: regMap[d.user_id]?.custom_data || {},
     }));
-  }
-
-  async toggleEventRegistration(eventId: string, userId: string, isRegistered: boolean): Promise<void> {
-    if (isRegistered) {
-      const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('event_registrations').insert({ event_id: eventId, user_id: userId });
-      if (error) throw error;
-    }
   }
 
   /** Asistentes inscritos por campus (sin canceladas). Vacío si la función aún no existe. */

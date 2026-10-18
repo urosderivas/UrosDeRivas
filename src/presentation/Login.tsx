@@ -6,6 +6,17 @@ import './Login.css';
 
 type Mode = 'login' | 'register' | 'forgot' | 'reset';
 
+/** Mensajes de Supabase Auth que puede ver un usuario, en español. */
+function authErrorMessage(err: any, fallback: string): string {
+  const msg: string = err?.message || '';
+  if (/rate limit/i.test(msg)) return 'Se han enviado demasiados correos seguidos. Espera un rato (hasta una hora) y vuelve a intentarlo.';
+  if (/already registered/i.test(msg)) return 'Ya hay una cuenta con ese email. Inicia sesión o recupera la contraseña.';
+  if (/should be different/i.test(msg)) return 'La contraseña nueva tiene que ser distinta de la anterior.';
+  if (/password should be/i.test(msg)) return 'La contraseña es demasiado débil. Usa al menos 6 caracteres.';
+  if (/valid email|invalid format/i.test(msg)) return 'Ese email no es válido.';
+  return fallback;
+}
+
 export function Login() {
   const { signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword } = useStore();
   const navigate = useNavigate();
@@ -48,7 +59,7 @@ export function Login() {
         // Mismo mensaje exista o no la cuenta, para no revelar qué emails están registrados
         setSuccess('Si hay una cuenta con ese email, te hemos enviado un enlace para elegir una contraseña nueva. Revisa también la carpeta de spam.');
       } catch (err: any) {
-        setError(err.message || 'No se pudo enviar el correo.');
+        setError(authErrorMessage(err, 'No se pudo enviar el correo.'));
       }
     } else if (mode === 'reset') {
       if (password.length < 6) {
@@ -63,7 +74,7 @@ export function Login() {
         } catch (err: any) {
           setError(err.message?.includes('session')
             ? 'El enlace ha caducado. Pide uno nuevo desde «¿Olvidaste tu contraseña?».'
-            : err.message || 'No se pudo cambiar la contraseña.');
+            : authErrorMessage(err, 'No se pudo cambiar la contraseña.'));
         }
       }
     } else if (isRegister) {
@@ -83,7 +94,7 @@ export function Login() {
         switchMode('login');
         setSuccess('✅ Cuenta creada. Revisa tu email para confirmar tu cuenta antes de iniciar sesión.');
       } catch (err: any) {
-        setError(err.message || 'Error al crear la cuenta.');
+        setError(authErrorMessage(err, 'Error al crear la cuenta.'));
       }
     } else {
       // Login flow
@@ -96,7 +107,7 @@ export function Login() {
         } else if (err.message?.includes('Email not confirmed')) {
           setError('Confirma tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');
         } else {
-          setError(err.message || 'Error al iniciar sesión.');
+          setError(authErrorMessage(err, 'Error al iniciar sesión.'));
         }
       }
     }
@@ -111,7 +122,7 @@ export function Login() {
       await signInWithGoogle();
       // Google Auth redirects away, so no local navigation is needed here immediately.
     } catch (err: any) {
-      setError(err.message || 'Error initiating Google Auth');
+      setError(authErrorMessage(err, 'No se pudo iniciar sesión con Google.'));
       setLoading(false);
     }
   };
