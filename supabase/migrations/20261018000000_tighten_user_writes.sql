@@ -4,10 +4,11 @@
 --
 -- Antes, un usuario podía insertar filas propias con el stripe_session_id de un
 -- pago suyo de otra cosa, y el webhook las marcaba todas como pagadas.
+--
+-- Se usa alter policy en vez de drop/create: así se aplica sin borrar nada.
 
-drop policy if exists "Users can insert own pending orders" on public.orders;
-create policy "Users can insert own pending orders" on public.orders
-  for insert with check (
+alter policy "Users can insert own pending orders" on public.orders
+  with check (
     (select auth.uid()) = user_id
     and status = 'pending'
     and stripe_session_id like 'local\_%'
@@ -31,18 +32,24 @@ begin
 end;
 $$;
 
-drop trigger if exists set_local_order_amount on public.orders;
-create trigger set_local_order_amount
+create or replace trigger set_local_order_amount
   before insert on public.orders
   for each row execute function public.set_local_order_amount();
 
 -- Las inscripciones solo las crea la Edge Function y solo las borra un admin o
 -- entrenador desde el panel; un usuario ya no puede borrar una inscripción pagada.
-drop policy if exists "Users can register themselves pending" on public.event_registrations;
-drop policy if exists "Users can unregister themselves" on public.event_registrations;
+alter policy "Users can register themselves pending" on public.event_registrations
+  with check (false);
+alter policy "Users can register themselves pending" on public.event_registrations
+  rename to "Users cannot insert registrations";
+alter policy "Users can unregister themselves" on public.event_registrations
+  using (false);
+alter policy "Users can unregister themselves" on public.event_registrations
+  rename to "Users cannot delete registrations";
 
 -- Cada usuario ve solo su propio rol (antes cualquiera, sin sesión, veía quién es admin).
 -- Las políticas que comprueban "es admin" siguen funcionando porque miran la fila propia.
-drop policy if exists "Anyone can read user roles" on public.user_roles;
-create policy "Users can read own role" on public.user_roles
-  for select using (user_id = (select auth.uid()));
+alter policy "Anyone can read user roles" on public.user_roles
+  using (user_id = (select auth.uid()));
+alter policy "Anyone can read user roles" on public.user_roles
+  rename to "Users can read own role";
