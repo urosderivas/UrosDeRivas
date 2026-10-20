@@ -19,7 +19,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
     const fetchOrders = async () => {
       try {
         const data = await adapter.getOrders();
-        let allOrders = data || [];
+        // Un admin puede leer todos los pedidos; aquí solo van los suyos
+        let allOrders = (data || []).filter(o => !user || o.user_id === user.id);
         
         if (user) {
           const campusRegs = await adapter.getUserFullRegistrations(user.id);

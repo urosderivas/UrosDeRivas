@@ -10,6 +10,16 @@ function rememberSession(sessionId: unknown) {
   } catch { /* sin sessionStorage la sesión caduca sola en Stripe */ }
 }
 
+// La función responde con { error: "..." } y un 400; supabase-js deja esa respuesta
+// en error.context sin leer, así que hay que sacar el mensaje de ahí.
+async function functionErrorMessage(error: any, fallback: string): Promise<string> {
+  try {
+    const body = await error?.context?.json?.();
+    if (typeof body?.error === 'string' && body.error) return body.error;
+  } catch { /* respuesta sin JSON */ }
+  return fallback;
+}
+
 export class StripeAdapter implements PaymentPort {
   /**
    * Invokes a secure Supabase Edge Function to generate a Stripe Checkout URL.
@@ -24,7 +34,7 @@ export class StripeAdapter implements PaymentPort {
     if (error) {
       console.error("Error invoking Stripe Edge Function:", error);
       // Supabase Edge Functions return an error object that might contain the message
-      const errMsg = error.context?.error || error.message || "No se pudo iniciar la sesión de pago segura";
+      const errMsg = await functionErrorMessage(error, "No se pudo iniciar la sesión de pago segura");
       throw new Error(errMsg);
     }
 
@@ -48,7 +58,7 @@ export class StripeAdapter implements PaymentPort {
 
     if (error) {
       console.error("Error invoking Stripe Edge Function:", error);
-      const errMsg = error.context?.error || error.message || "Error al procesar inscripción.";
+      const errMsg = await functionErrorMessage(error, "Error al procesar inscripción.");
       throw new Error(errMsg);
     }
 
@@ -68,7 +78,7 @@ export class StripeAdapter implements PaymentPort {
 
     if (error) {
       console.error("Error invoking Stripe Edge Function:", error);
-      const errMsg = error.context?.error || error.message || "Error al reservar la inscripción.";
+      const errMsg = await functionErrorMessage(error, "Error al reservar la inscripción.");
       throw new Error(errMsg);
     }
 
@@ -90,7 +100,7 @@ export class StripeAdapter implements PaymentPort {
 
     if (error) {
       console.error("Error invoking Stripe Edge Function:", error);
-      const errMsg = error.context?.error || error.message || "Error al procesar carrito.";
+      const errMsg = await functionErrorMessage(error, "Error al procesar carrito.");
       throw new Error(errMsg);
     }
 
