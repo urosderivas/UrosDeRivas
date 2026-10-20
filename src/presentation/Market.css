@@ -8,38 +8,51 @@
 .market-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4rem;
-  padding-bottom: 2rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.market-kicker {
+  color: var(--accent-gold);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
 }
 
 .market-header h1 {
-  font-size: 3.5rem;
-  font-weight: 950;
-  background: linear-gradient(135deg, var(--accent-gold) 0%, #FFFFFF 50%, var(--accent-gold) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-size: 200% auto;
-  letter-spacing: -2px;
-  animation: shine 4s linear infinite;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+  color: #fff;
+}
+
+.market-count {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.25rem;
 }
 
-/* Ficha compacta: foto, nombre, descripción corta y precio. Las opciones
-   (talla, datos) se piden en la ventana de compra al pulsar la ficha. */
+/* Ficha estilo tienda online: foto grande sobre blanco, nombre, precio y botón
+   a todo el ancho. Las opciones (talla, datos) se piden al abrir el producto. */
 .product-card {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
+  background: #111;
+  border-radius: 6px;
   overflow: hidden;
   position: relative;
-  transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.4s, box-shadow 0.4s;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
@@ -47,20 +60,19 @@
 }
 
 .product-card:hover, .product-card:focus-visible {
-  transform: translateY(-6px);
-  border-color: var(--accent-gold);
-  box-shadow: 0 16px 32px rgba(0,0,0,0.7), 0 0 16px rgba(212, 175, 55, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6);
   outline: none;
 }
 
 /* Las fotos de la tienda vienen sobre fondo blanco: el marco blanco las integra */
 .product-image-wrap {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1;
   display: flex;
   justify-content: center;
   align-items: center;
   background: #fff;
-  padding: 0.75rem;
+  padding: 1rem;
   overflow: hidden;
 }
 
@@ -68,35 +80,29 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  transition: transform 0.5s ease;
 }
 
 .product-img.img-fallback { width: 55%; }
 
 .product-card:hover .product-img {
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
 
 .product-info {
-  padding: 1rem 1.1rem 1.1rem;
+  padding: 1rem;
   color: #fff;
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .product-name {
-  font-size: 1.1rem;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 700;
   line-height: 1.3;
   color: #fff;
-}
-
-.product-desc {
-  font-size: 0.85rem;
-  color: #999;
-  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -104,26 +110,38 @@
   overflow: hidden;
 }
 
-.product-footer-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-  padding-top: 0.75rem;
-  gap: 0.75rem;
+.product-desc {
+  font-size: 0.8rem;
+  color: #8a8a8a;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .product-price {
-  font-size: 1.3rem;
+  font-size: 1.35rem;
   font-weight: 900;
   color: #fff;
   white-space: nowrap;
+  margin-top: auto;
+  padding-top: 0.4rem;
 }
 
 .btn-buy.product-open {
-  padding: 0.55rem 1.1rem;
-  font-size: 0.75rem;
-  letter-spacing: 1px;
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  letter-spacing: 1.5px;
+}
+
+.product-card:hover .btn-buy.product-open {
+  background: #fff;
+  border-color: #fff;
 }
 
 /* Ventana de compra */
@@ -299,6 +317,7 @@
   align-items: center;
   gap: 12px;
   padding: 0.75rem 1.8rem;
+  border-radius: 4px;
 }
 
 .btn-cart-toggle:hover {
@@ -367,12 +386,13 @@
 }
 
 @media (max-width: 992px) {
-  .market-header h1 { font-size: 2.5rem; }
+  .market-header h1 { font-size: 2.4rem; }
 }
 
 @media (max-width: 600px) {
-  .market-header { flex-direction: column; gap: 20px; text-align: center; }
-  .market-header h1 { font-size: 2rem; }
+  .market-container { padding-top: 2rem; }
+  .market-header { align-items: center; margin-bottom: 1.5rem; }
+  .market-header h1 { font-size: 1.8rem; }
   .cart-label { display: none; }
   .hidden-mobile { display: none; }
   /* Dos fichas por fila en el móvil */
@@ -380,8 +400,8 @@
   .product-info { padding: 0.75rem; }
   .product-name { font-size: 0.95rem; }
   .product-desc { font-size: 0.78rem; }
-  .product-footer-actions { flex-direction: column; align-items: stretch; gap: 0.5rem; }
   .product-price { font-size: 1.1rem; }
+  .btn-buy.product-open { padding: 0.6rem 0.5rem; font-size: 0.7rem; letter-spacing: 1px; }
   .btn-buy.product-open { text-align: center; }
   .product-card:hover { transform: none; }
   .product-modal { grid-template-columns: 1fr; }

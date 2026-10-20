@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ShoppingCart, Pencil, Trash2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Trophy, Handshake } from 'lucide-react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Event, NewsPost } from '../domain/entities';
 import { resolveImageUrl } from '../utils/media';
@@ -12,13 +12,30 @@ import { RichText } from './components/RichText';
 import { ConfirmModal } from './components/ConfirmModal';
 import { NewsCarousel } from './components/NewsCarousel';
 import { MessageModal } from './components/MessageModal';
+import { HeroSlider, HeroSlide } from './components/HeroSlider';
+import { ProductCard } from './components/ProductCard';
+import './Market.css';
 import './Home.css';
 import './Content.css';
 
 const adapter = new SupabaseAdapter();
 
+const TILES = [
+  { to: '/events', label: 'Campus', text: 'Inscríbete en los campus del club', Icon: CalendarDays },
+  { to: '/market', label: 'Tienda', text: 'Equipaciones y merchandising', Icon: ShoppingBag },
+  { to: '/clasificaciones', label: 'Clasificaciones', text: 'Partidos y resultados', Icon: Trophy },
+  { to: '/sponsors', label: 'Patrocinadores', text: 'Quienes nos apoyan', Icon: Handshake },
+];
+
+// Texto de una noticia para el banner: sin enlaces markdown y recortado
+function slideText(body: string): string {
+  const plain = body.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+  return plain.length > 140 ? plain.slice(0, 137).trimEnd() + '…' : plain;
+}
+
 export function Home() {
-  const { user } = useStore();
+  const { user, items, fetchItems } = useStore();
+  const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const [news, setNews] = useState<NewsPost[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
@@ -37,7 +54,30 @@ export function Home() {
     setNewsLoading(false);
   };
 
-  useEffect(() => { loadNews(); }, []);
+  useEffect(() => { loadNews(); fetchItems(); }, [fetchItems]);
+
+  // Portada fija del club y, detrás, las noticias más recientes que tienen foto
+  const slides: HeroSlide[] = [
+    {
+      key: 'club',
+      image: `${import.meta.env.BASE_URL}assets/background.png`,
+      kicker: 'Baloncesto en Rivas-Vaciamadrid',
+      title: CLUB.shortName,
+      text: 'Únete a la familia Uros de Rivas. El mejor baloncesto local.',
+      buttons: [
+        { label: 'Ir a Campus', to: '/events', primary: true },
+        { label: 'Tienda oficial', to: '/market' },
+      ],
+    },
+    ...news.filter(post => post.imageUrl).slice(0, 3).map(post => ({
+      key: post.id,
+      image: resolveImageUrl(post.imageUrl!),
+      kicker: new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+      title: post.title,
+      text: slideText(post.body),
+      buttons: post.eventId ? [{ label: 'Ver campus', to: `/events?campus=${post.eventId}`, primary: true }] : [],
+    })),
+  ];
 
   // El admin necesita la lista de campus para poder enlazar una noticia a uno
   useEffect(() => {
@@ -60,28 +100,35 @@ export function Home() {
 
   return (
     <div className="home-container">
-      <section className="hero-section">
-        <div className="hero-overlay"></div>
-        <div className="hero-content">
-          <h2 className="hero-title">{CLUB.legalName.toUpperCase()}</h2>
-          <p className="hero-subtitle">Únete a la familia Uros de Rivas. El mejor baloncesto local.</p>
-          <div className="hero-buttons">
-            <Link to="/events" className="btn-primary">Ir a Campus</Link>
-            <Link to="/market" className="btn-secondary">
-              <ShoppingCart size={20} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-              Tienda Oficial
-            </Link>
-          </div>
-        </div>
-        <div className="scroll-indicator">
-          <i className="fas fa-chevron-down"></i>
-          <span>↓</span>
-        </div>
+      <HeroSlider slides={slides} />
+
+      <section className="home-tiles">
+        {TILES.map(({ to, label, text, Icon }) => (
+          <Link key={to} to={to} className="home-tile">
+            <Icon size={26} />
+            <span className="home-tile-label">{label}</span>
+            <span className="home-tile-text">{text}</span>
+          </Link>
+        ))}
       </section>
+
+      {items.length > 0 && (
+        <section className="home-shop">
+          <div className="home-section-head">
+            <h3>Tienda oficial</h3>
+            <Link to="/market" className="home-see-all">Ver toda la tienda <ArrowRight size={16} /></Link>
+          </div>
+          <div className="home-shop-row">
+            {items.slice(0, 4).map(item => (
+              <ProductCard key={item.id} item={item} onOpen={() => navigate(`/market?producto=${item.id}`)} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="news-section">
         <div className="news-header">
-          <h3>NOTICIAS</h3>
+          <h3>Noticias</h3>
           <AdminGuard>
             <div className="content-toolbar">
               <button className="content-admin-add" onClick={() => { setEditPost(null); setModalOpen(true); }}>+ Nueva noticia</button>

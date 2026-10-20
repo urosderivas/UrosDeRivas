@@ -25,3 +25,9 @@ export const CLUPIK = {
 };
 
 export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCode} - ${CLUB.address.city}, ${CLUB.address.province}`;
+
+/** Avisos fijos de la barra superior. Se suman a los campus con inscripciones abiertas. */
+export const PROMO_MESSAGES: { text: string; to?: string }[] = [
+  { text: 'Pago seguro con tarjeta o en mano en el club' },
+  { text: 'Equipaciones y merchandising oficial en la tienda', to: '/market' },
+];

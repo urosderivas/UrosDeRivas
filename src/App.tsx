@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-ro
 import { useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
+import { PromoBar } from './presentation/components/PromoBar';
 import { Footer } from './presentation/Footer';
 import { Home } from './presentation/Home';
 import { Login } from './presentation/Login';
@@ -71,6 +72,7 @@ function App() {
       <TelemetryTracker />
       <AuthRedirects />
       <div className="app-container" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <PromoBar />
         <Navbar />
         <main style={{ flex: 1 }}>
           <Routes>

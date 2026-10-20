@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useStore } from './store';
-import { Menu, X, User, ShoppingBag } from 'lucide-react';
+import { Menu, X, User, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
 import { MyOrdersModal } from './MyOrdersModal';
 import './Navbar.css';
 
 export function Navbar() {
-  const { user, signOut } = useStore();
+  const { user, signOut, cart } = useStore();
+  const cartCount = cart.reduce((n, c) => n + c.quantity, 0);
   const [isOpen, setIsOpen] = useState(false);
   const [ordersOpen, setOrdersOpen] = useState(false);
 
@@ -47,6 +48,11 @@ export function Navbar() {
             </Link>
           )}
         </div>
+
+        <Link to="/market?carrito=1" onClick={() => setIsOpen(false)} className="nav-cart" title="Carrito" aria-label="Carrito">
+          <ShoppingCart size={22} />
+          {cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}
+        </Link>
 
         <button className="mobile-toggle" onClick={() => setIsOpen(!isOpen)}>
           {isOpen ? <X size={24} /> : <Menu size={24} />}
