@@ -32,7 +32,7 @@ export interface PaymentPort {
 }
 
 export interface OrderPort {
-  getOrders(): Promise<any[]>;
+  getOrders(userId?: string): Promise<any[]>;
   updateOrderStatus(id: string, status: string): Promise<any>;
   deleteOrder(id: string): Promise<void>;
 }

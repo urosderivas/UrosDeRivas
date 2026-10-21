@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { Order } from '../../domain/entities';
 import { CLUB, clubAddressLine } from '../../config';
 import { clubLogoUrl } from '../../utils/media';
@@ -176,19 +177,13 @@ export class InvoiceGenerator {
 
     // Anti-falsification QR Code
     try {
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=uros_id_${orderGroupId}`;
-      const qrRes = await fetch(qrUrl);
-      const qrBlob = await qrRes.blob();
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(qrBlob);
-      });
+      // Se genera en el navegador: el código no sale a ningún servicio externo
+      const base64 = await QRCode.toDataURL(`uros_id_${orderGroupId}`, { width: 200, margin: 1 });
       doc.addImage(base64, 'PNG', 14, startY - 5, 25, 25);
       doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
       doc.text(`ID Validación: ${shortId}`, 14, startY + 23);
-    } catch (e) { console.error("Could not fetch QR code", e); }
+    } catch (e) { console.error("Could not generate QR code", e); }
 
     // Footer mark
     doc.setFontSize(8);

@@ -4,7 +4,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
 import { ShoppingBag, FileText } from 'lucide-react';
-import { InvoiceGenerator, InvoiceData, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
+import type { InvoiceData } from '../application/services/InvoiceGenerator';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
@@ -18,9 +18,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const data = await adapter.getOrders();
-        // Un admin puede leer todos los pedidos; aquí solo van los suyos
-        let allOrders = (data || []).filter(o => !user || o.user_id === user.id);
+        // Un admin puede leer todos los pedidos; aquí solo se piden los suyos
+        let allOrders = user ? await adapter.getOrders(user.id) : [];
         
         if (user) {
           const campusRegs = await adapter.getUserFullRegistrations(user.id);
@@ -54,6 +53,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   const handleGenerateInvoice = async (groupOrders: Order[], groupId: string) => {
     setGeneratingPdf(groupId);
     try {
+      // El generador de PDF pesa mucho: se descarga solo al pedir un justificante
+      const { InvoiceGenerator, invoicePaymentStatus } = await import('../application/services/InvoiceGenerator');
       const paymentStatus = invoicePaymentStatus(groupId, groupOrders);
 
       const invoiceData: InvoiceData = {

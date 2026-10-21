@@ -60,6 +60,45 @@ interface DbItem {
   name: string;
   price: number;
   image_url?: string;
+  sizes?: string[] | null;
+  custom_fields?: { name: string; type: 'text' | 'categorical'; options?: string[]; required: boolean }[] | null;
+}
+
+const MAX_CART_LINES = 50;
+const MAX_OPTION_LENGTH = 100;
+
+/**
+ * Comprueba las opciones elegidas (talla, nombre del jugador...) contra las del producto:
+ * solo campos que existen, valores de la lista en los de elegir, textos cortos y los obligatorios puestos.
+ * Devuelve el texto que se guarda en el pedido, o lanza un error en español.
+ */
+function validateOptions(item: DbItem, raw: unknown): string {
+  if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) throw new Error("Opciones no válidas.");
+  const options = (raw || {}) as Record<string, unknown>;
+  const fields = [...(item.custom_fields || [])];
+  // Tallas antiguas (columna sizes) como campo "Talla" obligatorio, igual que en la web
+  if (item.sizes?.length && !fields.some(f => f.name === 'Talla')) {
+    fields.push({ name: 'Talla', type: 'categorical', options: item.sizes, required: true });
+  }
+  const parts: string[] = [];
+  for (const key of Object.keys(options)) {
+    if (!fields.some(f => f.name === key)) throw new Error(`Las opciones de "${item.name}" han cambiado: quítalo del carrito y vuelve a añadirlo.`);
+  }
+  for (const field of fields) {
+    const value = options[field.name];
+    if (value != null && typeof value !== 'string') throw new Error(`"${field.name}" no es válido.`);
+    const text = (value || '').trim();
+    if (!text) {
+      if (field.required) throw new Error(`Falta "${field.name}" en "${item.name}".`);
+      continue;
+    }
+    if (text.length > MAX_OPTION_LENGTH) throw new Error(`"${field.name}" es demasiado largo (máximo ${MAX_OPTION_LENGTH} caracteres).`);
+    if (field.type === 'categorical' && !(field.options || []).some(o => String(o).trim() === text)) {
+      throw new Error(`"${text}" no es una opción de "${field.name}".`);
+    }
+    parts.push(`${field.name}: ${text}`);
+  }
+  return parts.join(' | ');
 }
 
 async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminClient: any): Promise<Response> {
@@ -300,6 +339,9 @@ serve(async (req: Request) => {
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
       throw new Error("Cart is empty");
     }
+    if (cartItems.length > MAX_CART_LINES) {
+      throw new Error(`El carrito no puede tener más de ${MAX_CART_LINES} productos distintos.`);
+    }
 
     // Fetch all required items from database securely
     const itemIds = (cartItems as CartItemPayload[]).map((c) => c.itemId);
@@ -332,8 +374,7 @@ serve(async (req: Request) => {
       const rawPrice = dbItem.price || 0;
       const finalPrice = Math.max(Math.round(rawPrice * 100), 1);
       
-      const textOptionsList = Object.entries(cartItem.options || {}).map(([k,v]) => `${k}: ${v}`);
-      const textOptionsStr = textOptionsList.join(' | ');
+      const textOptionsStr = validateOptions(dbItem, cartItem.options);
 
       // Only create Stripe line item for items with real prices
       if (rawPrice > 0) {

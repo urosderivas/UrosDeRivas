@@ -87,7 +87,7 @@ export function ProductModal({ item, isLoggedIn, buying, onClose, onAddToCart, o
                   ))}
                 </div>
               ) : (
-                <input type="text" className="market-text-input"
+                <input type="text" className="market-text-input" maxLength={100}
                   value={options[field.name] || ''} onChange={e => setOption(field.name, e.target.value)} />
               )}
             </div>

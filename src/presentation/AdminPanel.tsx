@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState, Fragment, lazy, Suspense } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
 import { isFreeEvent, startingPrice } from '../domain/pricing';
@@ -11,8 +11,10 @@ import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight } from 'l
 import './AdminPanel.css';
 import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
-import { QrScannerModal } from './components/QrScannerModal';
 import { CLUPIK } from '../config';
+
+// El escáner (html5-qrcode) solo se descarga al abrirlo
+const QrScannerModal = lazy(() => import('./components/QrScannerModal').then(m => ({ default: m.QrScannerModal })));
 
 const adapter = new SupabaseAdapter();
 
@@ -278,13 +280,10 @@ export function AdminPanel() {
     setSyncingStripe(true);
     const target = ordersList || orders;
 
-    // Extract all pending Stripe session IDs
-    const sessionIdsToVerify: string[] = [];
-    for (const order of target) {
-      if (order.stripe_session_id && order.stripe_session_id.startsWith('cs_')) {
-        sessionIdsToVerify.push(order.stripe_session_id);
-      }
-    }
+    // Sesiones de Stripe sin repetir (un carrito con varios artículos comparte sesión)
+    const sessionIdsToVerify = [...new Set(
+      target.map(o => o.stripe_session_id).filter((id): id is string => !!id && id.startsWith('cs_'))
+    )];
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
 
@@ -292,6 +291,7 @@ export function AdminPanel() {
     if (sessionIdsToVerify.length > 0) {
       try {
         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+        const updates: Promise<unknown>[] = [];
         for (const order of target) {
           if (order.stripe_session_id && batchResults[order.stripe_session_id]) {
             const result = batchResults[order.stripe_session_id];
@@ -300,14 +300,15 @@ export function AdminPanel() {
             // Auto-update DB based on Stripe status (only if still pending). An open
             // session is also "unpaid" while the buyer is still paying: cancel only expired ones.
             if (result.payment_status === 'paid' && order.status === 'pending') {
-              await adapter.updateOrderStatus(order.id, 'processing');
+              updates.push(adapter.updateOrderStatus(order.id, 'processing'));
             } else if (result.status === 'expired' && order.status === 'pending') {
-              await adapter.updateOrderStatus(order.id, 'cancelled');
+              updates.push(adapter.updateOrderStatus(order.id, 'cancelled'));
             }
           } else if (!order.stripe_session_id) {
             newStatuses[order.id] = 'no_session';
           }
         }
+        await Promise.all(updates);
       } catch (err) {
         console.error("Batch verification failed:", err);
       }
@@ -391,9 +392,13 @@ export function AdminPanel() {
         `📌 Estado BD: ${statusEmoji} ${result.status}`,
         '',
         `💳 ${paymentLine}`,
-      ].join('\n');
+      ];
+      // En la tienda "Completado" significa entregado: avisar para no entregarlo dos veces
+      if (result.type === 'order' && result.status === 'completed') {
+        msg.push('', '⚠️ YA ENTREGADO: este pedido ya se marcó como entregado. No lo entregues otra vez.');
+      }
 
-      showMessage('🔍 Resultado de Verificación', msg);
+      showMessage('🔍 Resultado de Verificación', msg.join('\n'));
     } catch (err: any) {
       showMessage('Error', `No se pudo verificar: ${err.message}`);
     }
@@ -656,36 +661,33 @@ export function AdminPanel() {
     const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
     setSyncingStripe(true);
     // Auto-fetch attendees for all events if missing
-    let updatedAttendees = { ...attendees };
+    const updatedAttendees = { ...attendees };
     const targetEvents = eventsList || events;
-    for (const ev of targetEvents) {
-      if (!updatedAttendees[ev.id]) {
-        try {
-          updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
-        } catch (e) { }
-      }
-    }
+    await Promise.all(targetEvents.filter(ev => !updatedAttendees[ev.id]).map(async ev => {
+      try {
+        updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
+      } catch (e) { }
+    }));
     setAttendees(updatedAttendees);
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
 
     // Collect all Stripe session IDs from all attendees
-    const sessionIdsToVerify: string[] = [];
     const attMap: any[] = [];
-
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
         if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
-          sessionIdsToVerify.push(att.stripe_session_id);
           attMap.push({ evId, att });
         }
       }
     }
+    const sessionIdsToVerify = [...new Set<string>(attMap.map(({ att }) => att.stripe_session_id))];
 
     // Process all in a single batch
     if (sessionIdsToVerify.length > 0) {
       try {
         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+        const updates: Promise<unknown>[] = [];
         for (const { evId, att } of attMap) {
           const result = batchResults[att.stripe_session_id];
           if (result) {
@@ -693,12 +695,13 @@ export function AdminPanel() {
             // Corregir el estado es cosa de admins (el webhook de Stripe ya lo hace solo)
             if (!isAdmin) continue;
             if (result.payment_status === 'paid' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
+              updates.push(adapter.updateRegistrationStatus(evId, att.user_id, 'completed'));
             } else if (result.status === 'expired' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
+              updates.push(adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled'));
             }
           }
         }
+        await Promise.all(updates);
       } catch (err) {
         console.error("Batch campus verification failed", err);
       }
@@ -706,11 +709,11 @@ export function AdminPanel() {
 
     setStripeStatuses(newStatuses);
     // Reload UI for the updated ones
-    for (const ev of targetEvents) {
-      if (updatedAttendees[ev.id]) {
+    await Promise.all(targetEvents.filter(ev => updatedAttendees[ev.id]).map(async ev => {
+      try {
         updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
-      }
-    }
+      } catch (e) { }
+    }));
     setAttendees({ ...updatedAttendees });
     setSyncingStripe(false);
   };
@@ -1065,11 +1068,15 @@ export function AdminPanel() {
         }}
         onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
       />
-      <QrScannerModal
-        isOpen={qrScannerOpen}
-        onClose={() => setQrScannerOpen(false)}
-        onResult={handleQrResult}
-      />
+      {qrScannerOpen && (
+        <Suspense fallback={null}>
+          <QrScannerModal
+            isOpen={qrScannerOpen}
+            onClose={() => setQrScannerOpen(false)}
+            onResult={handleQrResult}
+          />
+        </Suspense>
+      )}
     </AdminGuard>
   );
 }

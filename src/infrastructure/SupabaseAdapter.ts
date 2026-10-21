@@ -2,6 +2,31 @@ import { supabase } from '../utils/supabase';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
 import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
 
+/** Registros de actividad que enseña el panel (los más recientes) */
+const LOGS_SHOWN = 500;
+const MAX_IMAGE_SIDE = 1600;
+
+/**
+ * Reduce una foto a como mucho 1600 px de lado y la guarda en WebP. Si no se
+ * puede (formato raro, GIF animado) o no sale más pequeña, se sube la original.
+ */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.82));
+    return blob && blob.type === 'image/webp' && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
 /** Errores de la base de datos al guardar un evento, en palabras para el admin. */
 function eventSaveError(error: any): Error {
   const text = `${error?.message || ''} ${error?.details || ''}`;
@@ -263,9 +288,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
 
   /** Sube una imagen al bucket público "media" y devuelve su URL. */
   async uploadImage(file: File, folder: 'sponsors' | 'news' | 'events' | 'products'): Promise<string> {
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    // Las fotos del móvil pesan varios MB: se reducen antes de subirlas
+    const upload = await shrinkImage(file);
+    const ext = upload.type === 'image/webp' ? 'webp' : (file.name.split('.').pop() || 'jpg').toLowerCase();
     const path = `${folder}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
+    const { error } = await supabase.storage.from('media').upload(path, upload, { contentType: upload.type });
     if (error) throw error;
     return supabase.storage.from('media').getPublicUrl(path).data.publicUrl;
   }
@@ -387,7 +414,8 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async getLogs(): Promise<SystemLog[]> {
-    const { data, error } = await supabase.from('system_logs').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('system_logs').select('*')
+      .order('created_at', { ascending: false }).limit(LOGS_SHOWN);
     if (error) throw error;
     return data;
   }
@@ -398,21 +426,25 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async createLog(actionType: string, metadata?: any): Promise<void> {
-    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada
-    const user = await this.getUser();
-    if (!user) return;
-    const payload: any = { action_type: actionType, metadata, user_id: user.id };
+    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada.
+    // getSession lee la sesión guardada, sin pedirla otra vez al servidor.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const payload: any = { action_type: actionType, metadata, user_id: session.user.id };
 
     const { error } = await supabase.from('system_logs').insert(payload);
     // Silently fail for telemetry if needed, but log to console
     if (error) console.error("Telemetry error", error);
   }
 
-  async getOrders(): Promise<Order[]> {
-    const { data, error } = await supabase.from('orders').select(`
+  /** Todos los pedidos que puede ver quien llama (un admin, los de todos), o solo los de userId. */
+  async getOrders(userId?: string): Promise<Order[]> {
+    let query = supabase.from('orders').select(`
       *,
       market_items ( name )
-    `).order('created_at', { ascending: false });
+    `);
+    if (userId) query = query.eq('user_id', userId);
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
     
     return data.map((o: any) => ({
@@ -462,19 +494,20 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { data: orderData } = await supabase
       .from('orders')
       .select('*, market_items(name)')
-      .eq('stripe_session_id', sessionId)
-      .limit(1);
+      .eq('stripe_session_id', sessionId);
 
     if (orderData && orderData.length > 0) {
+      // Un carrito son varias filas con la misma sesión: se enseña el pedido entero
       const o = orderData[0];
+      const statuses = [...new Set(orderData.map((r: any) => r.status))];
       return {
         found: true,
         type: 'order',
-        status: o.status,
+        status: statuses.length === 1 ? statuses[0] : statuses.join(' / '),
         buyer_name: o.buyer_name,
         buyer_email: o.buyer_email,
-        item_name: o.market_items?.name || 'Producto',
-        amount: o.amount,
+        item_name: orderData.map((r: any) => `${r.quantity > 1 ? r.quantity + '× ' : ''}${r.market_items?.name || 'Producto'}`).join(', '),
+        amount: orderData.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0),
         stripe_session_id: sessionId,
       };
     }

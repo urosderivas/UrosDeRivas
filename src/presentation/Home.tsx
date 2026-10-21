@@ -156,7 +156,7 @@ export function Home() {
                   <button className="delete" title="Borrar" onClick={() => setConfirmDelete(post)}><Trash2 size={15} /></button>
                 </div>
               </AdminGuard>
-              {post.imageUrl && <img className="news-image" src={resolveImageUrl(post.imageUrl)} alt="" onError={e => e.currentTarget.style.display = 'none'} />}
+              {post.imageUrl && <img className="news-image" src={resolveImageUrl(post.imageUrl)} alt="" loading="lazy" onError={e => e.currentTarget.style.display = 'none'} />}
               <div className="news-content">
                 <time className="news-date">{new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</time>
                 <h4 className="news-title">{post.title}</h4>

@@ -74,7 +74,7 @@ export function Sponsors() {
                 rel="noopener noreferrer"
                 className="sponsor-item"
               >
-                <img src={resolveImageUrl(s.imageUrl)} alt={s.name} onError={e => e.currentTarget.style.display = 'none'} />
+                <img src={resolveImageUrl(s.imageUrl)} alt={s.name} loading="lazy" onError={e => e.currentTarget.style.display = 'none'} />
               </a>
               {!s.active && <span className="sponsor-hidden-badge">Oculto</span>}
               <AdminGuard>

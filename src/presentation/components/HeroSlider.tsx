@@ -30,13 +30,20 @@ export function HeroSlider({ slides }: { slides: HeroSlide[] }) {
 
   useEffect(() => { if (index >= count) setIndex(0); }, [index, count]);
 
+  // Las fotos de fondo se descargan al llegar a su diapositiva (y la siguiente,
+  // para que entre sin parpadeo), no todas al abrir la portada.
+  const [reached, setReached] = useState<Set<number>>(() => new Set([0, 1]));
+  useEffect(() => {
+    setReached(prev => prev.has(index) && prev.has((index + 1) % count) ? prev : new Set([...prev, index, (index + 1) % count]));
+  }, [index, count]);
+
   const go = (direction: 1 | -1) => setIndex(i => (i + direction + count) % count);
 
   return (
     <section className="hero-slider" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       {slides.map((slide, i) => (
         <div key={slide.key} className={`hero-slide ${slide.image ? '' : 'hero-slide-plain'} ${i === index ? 'active' : ''}`} aria-hidden={i !== index}>
-          {slide.image && <div className="hero-slide-bg" style={{ backgroundImage: `url("${slide.image}")` }} />}
+          {slide.image && <div className="hero-slide-bg" style={reached.has(i) ? { backgroundImage: `url("${slide.image}")` } : undefined} />}
           {slide.image && <div className="hero-slide-shade" />}
           <div className="hero-slide-content">
             {slide.kicker && <p className="hero-kicker">{slide.kicker}</p>}

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
 import { PromoBar } from './presentation/components/PromoBar';
@@ -10,7 +10,6 @@ import { Login } from './presentation/Login';
 import { Market } from './presentation/Market';
 import { Events } from './presentation/Events';
 import { Sponsors } from './presentation/Sponsors';
-import { AdminPanel } from './presentation/AdminPanel';
 import { PrivacyPolicy } from './presentation/PrivacyPolicy';
 import { LegalNotice } from './presentation/LegalNotice';
 import { CookiesPolicy } from './presentation/CookiesPolicy';
@@ -18,6 +17,9 @@ import { CookieBanner } from './presentation/CookieBanner';
 import { NotFound } from './presentation/NotFound';
 import { consumeExpiredEmailLink, consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
 import { takeLoginNext } from './utils/loginRedirect';
+
+// El panel (con el PDF, el Excel y el escáner QR) solo lo descargan los admins
+const AdminPanel = lazy(() => import('./presentation/AdminPanel').then(m => ({ default: m.AdminPanel })));
 
 function TelemetryTracker() {
   const { logActivity } = useStore();
@@ -81,7 +83,7 @@ function App() {
             <Route path="/events" element={<Events key="campus" kind="campus" />} />
             <Route path="/torneos" element={<Events key="torneo" kind="torneo" />} />
             <Route path="/sponsors" element={<Sponsors />} />
-            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><AdminPanel /></Suspense>} />
             <Route path="/login" element={<Login />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/legal" element={<LegalNotice />} />
