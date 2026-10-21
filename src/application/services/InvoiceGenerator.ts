@@ -10,20 +10,21 @@ export interface InvoiceData {
   clientEmail: string;
   orders: Order[];
   date?: Date;
-  /** 'paid_stripe' | 'paid_hand' | 'pending' */
-  paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending';
+  paymentStatus: 'paid_stripe' | 'free' | 'paid' | 'pending';
 }
 
 /**
  * Estado de pago de un grupo de pedidos. Los pagados por Stripe pasan a
  * "processing" (pendiente de entrega) en cuanto llega el webhook, así que
- * cuentan ya como pagados; el resto solo cuando un admin los completa.
+ * cuentan ya como pagados. Los gratuitos no tienen pago; los pedidos antiguos
+ * sin pago online solo cuentan como pagados si un admin los completó.
  */
 export function invoicePaymentStatus(groupKey: string, orders: Order[]): InvoiceData['paymentStatus'] {
   if (groupKey.startsWith('cs_')) {
     return orders.every(o => o.status === 'processing' || o.status === 'completed') ? 'paid_stripe' : 'pending';
   }
-  return orders.every(o => o.status === 'completed') ? 'paid_hand' : 'pending';
+  if (groupKey.startsWith('free_')) return 'free';
+  return orders.every(o => o.status === 'completed') ? 'paid' : 'pending';
 }
 
 export class InvoiceGenerator {
@@ -161,8 +162,11 @@ export class InvoiceGenerator {
     if (paymentStatus === 'paid_stripe') {
       statusLabel = 'PAGADO (Stripe):';
       doc.setTextColor(34, 139, 34); // green
-    } else if (paymentStatus === 'paid_hand') {
-      statusLabel = 'PAGADO EN MANO:';
+    } else if (paymentStatus === 'free') {
+      statusLabel = 'GRATUITO:';
+      doc.setTextColor(34, 139, 34); // green
+    } else if (paymentStatus === 'paid') {
+      statusLabel = 'PAGADO:';
       doc.setTextColor(34, 139, 34); // green
     }
 

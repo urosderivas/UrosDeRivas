@@ -378,10 +378,8 @@ export function AdminPanel() {
       } else if (sessionId.startsWith('free_')) {
         paymentLine = '✅ Gratis (sin pago)';
       } else {
-        // Pedidos y reservas de antes de que todo se pagara con tarjeta
-        paymentLine = result.status === 'completed'
-          ? '✅ Pagado en mano (pedido antiguo)'
-          : '❌ No pagado (pedido antiguo para pagar en mano)';
+        // Pedidos e inscripciones antiguos, de antes de que todo se pagara con tarjeta
+        paymentLine = '⚠️ Sin pago online (registro antiguo)';
       }
 
       const msg = [
@@ -408,7 +406,6 @@ export function AdminPanel() {
       const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
       const isStripeOrder = o.stripe_session_id && o.stripe_session_id.startsWith('cs_');
       const isPaidStripe = stripeStatuses[o.id] === 'paid';
-      const allCompleted = o.status === 'completed';
 
       return {
         'Reserva ID / Sesión': o.stripe_session_id || o.id,
@@ -421,7 +418,7 @@ export function AdminPanel() {
         'Precio Unitario': unitPrice,
         'Importe Total': o.amount,
         'Estado': o.status,
-        'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+        'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : o.stripe_session_id?.startsWith('free_') ? 'Gratis' : 'Sin pago online'
       };
     }));
     const wb = XLSX.utils.book_new();
@@ -524,10 +521,8 @@ export function AdminPanel() {
                         ) : groupId.startsWith('free_') ? (
                           <span style={{ fontSize: '0.75rem', color: '#888' }}>Gratis</span>
                         ) : (
-                          // Pedidos de antes de quitar el pago en mano: se gestionan con el estado
-                          <span style={{ fontSize: '0.75rem', color: '#888' }} title="Pedido antiguo para pagar en mano">
-                            {allCompleted ? '✅ En mano' : 'En mano (antiguo)'}
-                          </span>
+                          // Pedidos antiguos sin pago online: se gestionan con el estado
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Sin pago online</span>
                         )}
                       </td>
                       <td>
@@ -752,7 +747,6 @@ export function AdminPanel() {
         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
           const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
           const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
-          const allCompleted = a.status === 'completed';
 
           return {
             'Reserva (Stripe)': a.stripe_session_id || 'Manual',
@@ -763,7 +757,7 @@ export function AdminPanel() {
             'Importe': a.amount || 0,
             'Estado': a.status || 'pending',
             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
-            'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+            'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : a.stripe_session_id?.startsWith('free_') ? 'Gratis' : 'Sin pago online'
           };
         }));
         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0, 31) || 'Campus';
@@ -860,7 +854,6 @@ export function AdminPanel() {
                                   // stripeStatuses map might hold the checked status
                                   const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
                                   const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
-                                  const allCompleted = att.status === 'completed';
 
                                   // Build mock Order for the receipt
                                   const dummyOrder = {
@@ -927,14 +920,12 @@ export function AdminPanel() {
                                             {isPaidStripe ? '✅ Online' : 'Online'}
                                           </span>
                                         ) : (
-                                          // Reservas de antes de quitar el pago en mano: se gestionan con el estado
-                                          <span style={{ fontSize: '0.75rem', color: '#888' }} title="Reserva antigua para pagar en mano">
-                                            {allCompleted ? '✅ En mano' : 'En mano'}
-                                          </span>
+                                          // Inscripciones antiguas sin pago online: se gestionan con el estado
+                                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Sin pago online</span>
                                         )}
                                       </td>
                                       <td>
-                                        <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                                        <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || att.user_id, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                                           📄 PDF
                                         </button>
                                         {isAdmin && <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {

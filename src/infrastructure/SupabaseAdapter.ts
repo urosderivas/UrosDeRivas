@@ -455,9 +455,8 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     item_name: string;
     amount: number;
     stripe_session_id: string;
-    is_local: boolean;
   }> {
-    const empty = { found: false, type: null as any, status: '', buyer_name: '', buyer_email: '', item_name: '', amount: 0, stripe_session_id: sessionId, is_local: false };
+    const empty = { found: false, type: null as any, status: '', buyer_name: '', buyer_email: '', item_name: '', amount: 0, stripe_session_id: sessionId };
 
     // 1. Search in orders table
     const { data: orderData } = await supabase
@@ -477,7 +476,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         item_name: o.market_items?.name || 'Producto',
         amount: o.amount,
         stripe_session_id: sessionId,
-        is_local: sessionId.startsWith('local_'),
       };
     }
 
@@ -507,7 +505,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         item_name: r.events?.title || 'Campus',
         amount: r.amount || 0,
         stripe_session_id: sessionId,
-        is_local: sessionId.startsWith('local_'),
       };
     }
 
