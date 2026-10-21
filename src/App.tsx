@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
 import { PromoBar } from './presentation/components/PromoBar';
+import { SponsorsStrip } from './presentation/components/SponsorsStrip';
 import { Footer } from './presentation/Footer';
 import { Home } from './presentation/Home';
 import { Login } from './presentation/Login';
@@ -87,6 +88,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
+        <SponsorsStrip />
         <Footer />
         <CookieBanner />
       </div>

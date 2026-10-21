@@ -344,7 +344,7 @@
 /* Noticias (sustituyen a los patrocinadores, que ahora tienen su propia página) */
 .news-section {
   background-color: #050505;
-  padding: 4rem 1rem 6rem;
+  padding: 4rem 1rem 4rem;
 }
 
 .news-header {
@@ -481,11 +481,6 @@
   border-bottom: 1px solid currentColor;
 }
 
-.news-footer {
-  display: flex;
-  justify-content: center;
-  margin-top: 4rem;
-}
 
 @media (max-width: 600px) {
   .news-header h3 { font-size: 1.8rem; }

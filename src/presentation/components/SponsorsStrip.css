@@ -1,0 +1,88 @@
+.sponsors-strip {
+  background: #080808;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 2.5rem 0 3rem;
+}
+
+.sponsors-strip-head {
+  max-width: 1240px;
+  margin: 0 auto 1.5rem;
+  padding: 0 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.sponsors-strip-head h3 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.sponsors-strip-head a {
+  color: var(--accent-gold);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sponsors-strip-head a:hover { color: #fff; }
+
+/* Los bordes se difuminan para que los logos entren y salgan suavemente */
+.sponsors-strip-viewport {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.sponsors-strip-track {
+  display: flex;
+  gap: 1.25rem;
+  width: max-content;
+  animation: sponsorsScroll linear infinite;
+}
+
+.sponsors-strip-viewport:hover .sponsors-strip-track { animation-play-state: paused; }
+
+/* Los logos vienen sobre fondo blanco: la ficha blanca los integra */
+.sponsors-strip-item {
+  flex: 0 0 auto;
+  width: 170px;
+  height: 100px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.sponsors-strip-item:hover { transform: translateY(-3px); }
+
+.sponsors-strip-item img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* El hueco entre la última ficha y la primera copia también cuenta: se mueve media pista más medio hueco */
+@keyframes sponsorsScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50% - 0.625rem)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sponsors-strip-viewport { overflow-x: auto; }
+  .sponsors-strip-track { animation: none; }
+}
+
+@media (max-width: 600px) {
+  .sponsors-strip { padding: 2rem 0 2.5rem; }
+  .sponsors-strip-head h3 { font-size: 0.9rem; letter-spacing: 1px; }
+  .sponsors-strip-item { width: 130px; height: 80px; }
+}

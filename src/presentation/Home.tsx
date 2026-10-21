@@ -158,9 +158,6 @@ export function Home() {
           ))}
         </NewsCarousel>
 
-        <div className="news-footer">
-          <Link to="/sponsors" className="btn-secondary">Nuestros patrocinadores</Link>
-        </div>
       </section>
 
       <NewsModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} initial={editPost} events={events} />
