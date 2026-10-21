@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order } from '../../domain/entities';
 import { CLUB, clubAddressLine } from '../../config';
+import { clubLogoUrl } from '../../utils/media';
 
 export interface InvoiceData {
   orderGroupId: string;
@@ -54,15 +55,16 @@ export class InvoiceGenerator {
     // Las sesiones de Stripe empiezan todas por "cs_test_"/"cs_live_": el final es lo que las distingue
     const shortId = orderGroupId.slice(-8).toUpperCase();
 
-    // 1. Load Logo — use the black bull on a light grey rect for visibility
-    const logoUrl = `${import.meta.env.BASE_URL}assets/navbar_black_bull.png`;
+    // 1. Escudo del club sobre un recuadro gris claro
+    const logoUrl = clubLogoUrl;
     const logoBase64 = await this.getBase64ImageFromUrl(logoUrl);
 
     if (logoBase64) {
       // Light grey background rect behind the logo
       doc.setFillColor(240, 240, 240);
       doc.roundedRect(12, 12, 26, 26, 3, 3, 'F');
-      doc.addImage(logoBase64, 'PNG', 14, 14, 22, 22);
+      // El escudo es más alto que ancho (519 × 664): se centra sin deformarlo
+      doc.addImage(logoBase64, 'PNG', 16.4, 14, 17.2, 22);
     }
 
     // -- Header Section --

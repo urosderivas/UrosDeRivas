@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Trophy, Handshake } from 'lucide-react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Event, NewsPost } from '../domain/entities';
-import { resolveImageUrl } from '../utils/media';
+import { clubLogoUrl, resolveImageUrl } from '../utils/media';
 import { CLUB } from '../config';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
@@ -60,7 +60,7 @@ export function Home() {
   const slides: HeroSlide[] = [
     {
       key: 'club',
-      image: `${import.meta.env.BASE_URL}assets/background.png`,
+      logo: clubLogoUrl,
       kicker: 'Baloncesto en Rivas-Vaciamadrid',
       title: CLUB.shortName,
       text: 'Únete a la familia Uros de Rivas. El mejor baloncesto local.',

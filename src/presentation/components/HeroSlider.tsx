@@ -4,7 +4,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface HeroSlide {
   key: string;
-  image: string;
+  /** Foto de fondo a todo el ancho */
+  image?: string;
+  /** Imagen destacada a la derecha, sin fondo (p. ej. el escudo) */
+  logo?: string;
   kicker?: string;
   title: string;
   text?: string;
@@ -32,9 +35,9 @@ export function HeroSlider({ slides }: { slides: HeroSlide[] }) {
   return (
     <section className="hero-slider" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       {slides.map((slide, i) => (
-        <div key={slide.key} className={`hero-slide ${i === index ? 'active' : ''}`} aria-hidden={i !== index}>
-          <div className="hero-slide-bg" style={{ backgroundImage: `url("${slide.image}")` }} />
-          <div className="hero-slide-shade" />
+        <div key={slide.key} className={`hero-slide ${slide.image ? '' : 'hero-slide-plain'} ${i === index ? 'active' : ''}`} aria-hidden={i !== index}>
+          {slide.image && <div className="hero-slide-bg" style={{ backgroundImage: `url("${slide.image}")` }} />}
+          {slide.image && <div className="hero-slide-shade" />}
           <div className="hero-slide-content">
             {slide.kicker && <p className="hero-kicker">{slide.kicker}</p>}
             <h2 className="hero-slide-title">{slide.title}</h2>
@@ -46,6 +49,7 @@ export function HeroSlider({ slides }: { slides: HeroSlide[] }) {
               ))}
             </div>
           </div>
+          {slide.logo && <img className="hero-slide-logo" src={slide.logo} alt="" />}
         </div>
       ))}
       {count > 1 && (

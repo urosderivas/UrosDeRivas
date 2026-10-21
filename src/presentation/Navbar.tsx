@@ -4,6 +4,7 @@ import { Menu, X, User, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
 import { MyOrdersModal } from './MyOrdersModal';
 import './Navbar.css';
+import { clubLogoUrl } from '../utils/media';
 
 export function Navbar() {
   const { user, signOut, cart } = useStore();
@@ -16,7 +17,7 @@ export function Navbar() {
     <nav className="navbar">
       <div className="nav-container">
         <Link to="/" className="nav-brand">
-          <img src={`${import.meta.env.BASE_URL}assets/navbar_black_bull.png`} alt="Uros de Rivas" className="nav-logo" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          <img src={clubLogoUrl} alt="Uros de Rivas" className="nav-logo" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           <span>UROS DE RIVAS</span>
         </Link>
         

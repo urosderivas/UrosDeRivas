@@ -4,8 +4,11 @@ export function resolveImageUrl(url: string): string {
   return `${import.meta.env.BASE_URL}${url.replace(/^\//, '')}`;
 }
 
+/** Escudo del club (cabecera, pie, portada, justificantes). */
+export const clubLogoUrl = `${import.meta.env.BASE_URL}assets/logo_uros.png`;
+
 /** Logo del club, para cuando una imagen falta o no carga. */
-export const fallbackImageUrl = `${import.meta.env.BASE_URL}assets/navbar_black_bull.png`;
+export const fallbackImageUrl = clubLogoUrl;
 
 /** onError de <img>: cambia la imagen rota por el logo (una sola vez). */
 export function showFallbackImage(e: { currentTarget: HTMLImageElement }) {
