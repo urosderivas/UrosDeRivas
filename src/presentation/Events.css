@@ -518,3 +518,40 @@
   color: #fca5a5;
   font-size: 0.95rem;
 }
+
+/* Torneos y viajes */
+.badge-torneo { background: var(--accent-gold); color: #000; }
+
+/* Tabla de precios (asistentes × días) que ven las familias */
+.price-table-box { margin-top: 0.25rem; }
+.price-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.price-table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.price-table th, .price-table td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+.price-table thead th {
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--accent-gold);
+  font-weight: 800;
+}
+.price-table tbody th {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.price-table-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.full-event-dates {
+  margin: 0;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}

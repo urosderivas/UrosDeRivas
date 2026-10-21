@@ -2,6 +2,18 @@ import { supabase } from '../utils/supabase';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
 import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
 
+/** Errores de la base de datos al guardar un evento, en palabras para el admin. */
+function eventSaveError(error: any): Error {
+  const text = `${error?.message || ''} ${error?.details || ''}`;
+  if (text.includes('events_price_table_check')) {
+    return new Error('La tabla de precios está incompleta o no cuadra con las fechas. Revisa que todas las casillas tengan precio.');
+  }
+  if (text.includes('events_type_check')) {
+    return new Error('Este tipo de evento aún no está activado en la base de datos.');
+  }
+  return error instanceof Error ? error : new Error(error?.message || 'No se pudo guardar el evento.');
+}
+
 export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort {
   async getUser(): Promise<User | null> {
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -123,23 +135,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getEvents(): Promise<Event[]> {
     const { data, error } = await supabase.from('events').select('*').order('date', { ascending: false });
     if (error) throw error;
-    return data.map((e: any) => ({
-      id: e.id,
-      title: e.title,
-      date: e.date,
-      dates: e.dates || [],
-      location: e.location,
-      imageUrl: e.image_url,
-      description: e.description,
-      schedule: e.schedule,
-      type: e.type,
-      price_per_day: e.price_per_day || 0,
-      price_tiers: e.price_tiers || [],
-      attendee_discounts: e.attendee_discounts || [],
-      custom_fields: e.custom_fields || [],
-      max_capacity: e.max_capacity,
-      active: e.active !== false,
-    }));
+    return data.map((e: any) => this.mapEvent(e));
   }
 
   async createEvent(event: Omit<Event, 'id'>): Promise<Event> {
@@ -152,16 +148,17 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       image_url: event.imageUrl,
       description: event.description,
       schedule: event.schedule,
-      type: 'campus',
+      type: event.type || 'campus',
       price_per_day: event.price_per_day || 0,
       price_tiers: event.price_tiers || [],
       attendee_discounts: event.attendee_discounts || [],
+      price_table: event.price_table ?? null,
       custom_fields: event.custom_fields || [],
       max_capacity: event.max_capacity,
       active: event.active !== false,
       created_by: user?.id,
     }).select().single();
-    if (error) throw error;
+    if (error) throw eventSaveError(error);
     return this.mapEvent(data);
   }
 
@@ -177,14 +174,15 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (event.price_per_day !== undefined) payload.price_per_day = event.price_per_day;
     if (event.price_tiers !== undefined) payload.price_tiers = event.price_tiers;
     if (event.attendee_discounts !== undefined) payload.attendee_discounts = event.attendee_discounts;
+    if (event.price_table !== undefined) payload.price_table = event.price_table;
     if (event.custom_fields !== undefined) payload.custom_fields = event.custom_fields;
     if (event.max_capacity !== undefined) payload.max_capacity = event.max_capacity;
     if (event.active !== undefined) payload.active = event.active;
-    payload.type = 'campus';
+    if (event.type !== undefined) payload.type = event.type;
 
     const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
-    if (error) throw error;
-    if (!data || data.length === 0) throw new Error('No se pudo actualizar el campus. Puede que no tengas permisos si no eres el creador.');
+    if (error) throw eventSaveError(error);
+    if (!data || data.length === 0) throw new Error('No se pudo actualizar el evento. Puede que no tengas permisos si no eres el creador.');
     
     return this.mapEvent(data[0]);
   }
@@ -193,9 +191,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return {
       id: e.id, title: e.title, date: e.date, dates: e.dates || [],
       location: e.location, imageUrl: e.image_url, description: e.description,
-      schedule: e.schedule, type: e.type,
-      price_per_day: e.price_per_day || 0, price_tiers: e.price_tiers || [],
-      attendee_discounts: e.attendee_discounts || [], custom_fields: e.custom_fields || [],
+      schedule: e.schedule, type: e.type === 'torneo' ? 'torneo' : 'campus',
+      price_per_day: Number(e.price_per_day) || 0, price_tiers: e.price_tiers || [],
+      attendee_discounts: e.attendee_discounts || [], price_table: e.price_table ?? null,
+      custom_fields: e.custom_fields || [],
       max_capacity: e.max_capacity, active: e.active !== false,
     };
   }

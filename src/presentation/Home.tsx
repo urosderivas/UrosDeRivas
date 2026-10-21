@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Handshake } from 'lucide-react';
+import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Handshake, Trophy } from 'lucide-react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Event, NewsPost } from '../domain/entities';
 import { clubLogoUrl, resolveImageUrl } from '../utils/media';
 import { CLUB } from '../config';
+import { eventPath } from '../utils/eventLinks';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { NewsModal } from './NewsModal';
@@ -22,6 +23,7 @@ const adapter = new SupabaseAdapter();
 
 const TILES = [
   { to: '/events', label: 'Campus', text: 'Inscríbete en los campus del club', Icon: CalendarDays },
+  { to: '/torneos', label: 'Torneos y viajes', text: 'Torneos y salidas de fin de semana', Icon: Trophy },
   { to: '/market', label: 'Tienda', text: 'Equipaciones y merchandising', Icon: ShoppingBag },
   { to: '/sponsors', label: 'Patrocinadores', text: 'Quienes nos apoyan', Icon: Handshake },
 ];
@@ -33,9 +35,8 @@ function slideText(body: string): string {
 }
 
 export function Home() {
-  const { user, items, fetchItems } = useStore();
+  const { items, fetchItems } = useStore();
   const navigate = useNavigate();
-  const isAdmin = user?.role === 'admin';
   const [news, setNews] = useState<NewsPost[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
@@ -54,6 +55,21 @@ export function Home() {
   };
 
   useEffect(() => { loadNews(); fetchItems(); }, [fetchItems]);
+
+  // Para enlazar cada noticia con su campus, torneo o viaje (y para el formulario del admin)
+  useEffect(() => {
+    adapter.getEvents().then(setEvents).catch(console.error);
+  }, []);
+
+  const linkedEvent = (post: NewsPost) => {
+    if (!post.eventId) return null;
+    const ev = events.find(e => e.id === post.eventId);
+    // Mientras cargan los eventos se enlaza como campus; la página redirige si es un torneo
+    return {
+      to: ev ? eventPath(ev) : `/events?campus=${post.eventId}`,
+      label: ev?.type === 'torneo' ? 'Ver evento' : 'Ver campus',
+    };
+  };
 
   // Portada fija del club y, detrás, las noticias más recientes que tienen foto
   const slides: HeroSlide[] = [
@@ -74,14 +90,9 @@ export function Home() {
       kicker: new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
       title: post.title,
       text: slideText(post.body),
-      buttons: post.eventId ? [{ label: 'Ver campus', to: `/events?campus=${post.eventId}`, primary: true }] : [],
+      buttons: post.eventId ? [{ label: linkedEvent(post)!.label, to: linkedEvent(post)!.to, primary: true }] : [],
     })),
   ];
-
-  // El admin necesita la lista de campus para poder enlazar una noticia a uno
-  useEffect(() => {
-    if (isAdmin) adapter.getEvents().then(setEvents).catch(console.error);
-  }, [isAdmin]);
 
   const handleSave = async (data: Omit<NewsPost, 'id'>) => {
     await adapter.saveNews(data, editPost?.id);
@@ -151,7 +162,7 @@ export function Home() {
                 <h4 className="news-title">{post.title}</h4>
                 <RichText text={post.body} className="news-body" />
                 {post.eventId && (
-                  <Link to={`/events?campus=${post.eventId}`} className="news-campus-link">Ver campus →</Link>
+                  <Link to={linkedEvent(post)!.to} className="news-campus-link">{linkedEvent(post)!.label} →</Link>
                 )}
               </div>
             </article>

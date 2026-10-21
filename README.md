@@ -9,10 +9,10 @@ Este repositorio no solo contiene el ecosistema del club de baloncesto Uros de R
 El sistema ha evolucionado de un simple visor a una completa **Plataforma de E-Commerce y Gestión de Clubes** integral:
 
 - **E-Commerce y Tienda Nativa:** Sistema de carrito de compras funcional con soporte para variables (tallas, colores) y **campos de texto personalizados** (ej: *Dorsal a imprimir*, *Añadir nombre de Jugador/a*). Todo sincronizado con un backend transaccional.
-- **Gestor de Campus e Inscripciones:** Módulo especializado para eventos del club. Soporta:
-  - **Descuentos dinámicos:** Precios escalonados (por volumen de días elegidos) y descuentos por cantidad de hermanos/inscritos.
+- **Campus, torneos y viajes con inscripción:** dos pestañas (Campus y Torneos y viajes) que funcionan igual. Soporta:
+  - **Tabla de precios:** precio total según nº de asistentes y nº de días (o por evento completo), más una regla fija a partir de la última fila (+X € por asistente y día). La web y el cobro usan el mismo cálculo (`supabase/functions/_shared/pricing.ts`).
   - Generación de formularios personalizados flexibles.
-  - Reservas directas o pagos con verificación online.
+  - Pago con tarjeta (Stripe) verificado en el servidor; los eventos gratis se confirman sin pago.
 - **Integración Nativa de Stripe (Serverless):** Checkout integrado mediante **Supabase Edge Functions** (para procesar pagos de Stripe de forma segura y sin exponer tus CLAVES), con un innovador sistema de sincronización *Webhook-less* manual a demanda de la directiva.
 - **Panel de Administración Inteligente (Dashboard):** 
   - Gestión integral de **Pedidos** del club y **Asistentes al Campus**.
@@ -92,7 +92,8 @@ El escudo del club es `public/assets/logo_uros.png` (cabecera, pie, portada y ju
 
 ### Contenido que se gestiona desde la web
 Con una cuenta de admin, sin tocar código:
-- **Noticias** en Inicio: crear, editar y borrar; cada una puede llevar imagen, enlaces en el texto (`[texto](https://...)`) y un campus relacionado.
+- **Noticias** en Inicio: crear, editar y borrar; cada una puede llevar imagen, enlaces en el texto (`[texto](https://...)`) y un campus, torneo o viaje relacionado.
+- **Campus, torneos y viajes**: crear, editar, ocultar y borrar desde su pestaña. Las fechas se añaden de una en una o por rango, y la tabla de precios se puede rellenar rápido (precio por asistente y día) o copiar de otro evento.
 - **Patrocinadores** en su propia página: añadir, editar, ocultar, ordenar y borrar.
 
 Las imágenes se suben al bucket público `media` de Supabase Storage (lo crea la migración `20261017120000_sponsors_and_news.sql`) o se puede pegar el enlace de una imagen ya publicada.

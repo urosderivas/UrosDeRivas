@@ -1,3 +1,5 @@
+import type { PriceTable } from './pricing';
+
 export interface User {
   id: string;
   email: string;
@@ -29,6 +31,9 @@ export interface CartItem {
   selectedVariables: Record<string, string>;
 }
 
+/** campus: pestaña Campus; torneo: pestaña Torneos y viajes */
+export type EventType = 'campus' | 'torneo';
+
 export interface Event {
   id: string;
   title: string;
@@ -38,10 +43,13 @@ export interface Event {
   imageUrl?: string;
   description?: string;
   schedule?: string;
-  type: 'campus';
+  type: EventType;
+  /** Sistema de precios anterior; solo se usa si el evento no tiene price_table */
   price_per_day: number;
   price_tiers: { minDays: number; pricePerDay: number }[];
   attendee_discounts: { minAttendees: number; discountPct: number }[];
+  /** Precio total por nº de asistentes y nº de días (ver domain/pricing.ts) */
+  price_table?: PriceTable | null;
   custom_fields?: CustomField[];
   /** Plazas (asistentes) en total; null o vacío = sin límite */
   max_capacity?: number | null;
@@ -104,7 +112,7 @@ export interface NewsPost {
   /** Texto plano; los enlaces se escriben como [texto](https://...) */
   body: string;
   imageUrl?: string;
-  /** Campus relacionado (opcional) */
+  /** Campus, torneo o viaje relacionado (opcional) */
   eventId?: string;
   publishedAt: string;
 }

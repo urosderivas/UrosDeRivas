@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
+import { isFreeEvent, startingPrice } from '../domain/pricing';
 import { AdminGuard } from './AdminGuard';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
@@ -363,7 +364,7 @@ export function AdminPanel() {
       }
 
       // Build result message
-      const typeLabel = result.type === 'campus' ? '🏀 Inscripción Campus' : '🛒 Pedido Tienda';
+      const typeLabel = result.type === 'campus' ? '🏀 Inscripción (campus, torneo o viaje)' : '🛒 Pedido Tienda';
       const statusEmoji = result.status === 'completed' ? '✅' : result.status === 'cancelled' ? '❌' : '⏳';
 
       let paymentLine = '';
@@ -373,6 +374,8 @@ export function AdminPanel() {
           : stripeStatus === 'error'
             ? '⚠️ No se pudo verificar con Stripe'
             : '❌ NO PAGADO en Stripe';
+      } else if (sessionId.startsWith('free_')) {
+        paymentLine = '✅ Gratis (sin pago)';
       } else {
         paymentLine = result.status === 'completed'
           ? '✅ PAGADO EN MANO'
@@ -735,10 +738,11 @@ export function AdminPanel() {
 
     const wb = XLSX.utils.book_new();
     const eventsSummary = events.map(e => ({
-      'Campus': e.title,
+      'Evento': e.title,
+      'Tipo': e.type === 'torneo' ? 'Torneo / viaje' : 'Campus',
       'Fechas': (e.dates || []).join(', ') || new Date(e.date).toLocaleDateString(),
       'Ubicación': e.location,
-      'Precio/Día': e.price_per_day,
+      'Desde (€)': isFreeEvent(e) ? 0 : startingPrice(e),
       'Inscritos': updatedAttendees[e.id]?.length || 0
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), 'Resumen');
@@ -768,13 +772,13 @@ export function AdminPanel() {
         XLSX.utils.book_append_sheet(wb, sheet, cleanName);
       }
     });
-    XLSX.writeFile(wb, 'Reporte_Campus_Uros.xlsx');
+    XLSX.writeFile(wb, 'Reporte_Eventos_Uros.xlsx');
   };
 
   const renderEvents = () => (
     <div className="admin-table-container">
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-        <h3>Campus & Inscripciones</h3>
+        <h3>Campus, torneos e inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn-primary" onClick={() => handleSyncAllCampusStripe()} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
@@ -793,29 +797,32 @@ export function AdminPanel() {
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Campus</th>
+            <th>Evento</th>
             <th>Fechas</th>
-            <th>€/Día</th>
+            <th>Desde</th>
             <th>Activo</th>
             <th>Inscripciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={5} className="table-empty">Cargando campus...</td></tr> :
-            events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
+          {loading ? <tr><td colSpan={5} className="table-empty">Cargando eventos...</td></tr> :
+            events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay eventos guardados.</td></tr> :
               events.map(ev => (
                 <Fragment key={ev.id}>
                   <tr 
                     className={`clickable-row ${expandedEvents[ev.id] ? 'expanded' : ''}`}
                     onClick={() => handleLoadAttendees(ev.id)}
                   >
-                    <td><strong>{ev.title}</strong></td>
+                    <td>
+                      <strong>{ev.title}</strong>
+                      <div style={{ fontSize: '0.75rem', color: '#999' }}>{ev.type === 'torneo' ? 'Torneo / viaje' : 'Campus'}</div>
+                    </td>
                     <td style={{ fontSize: '0.8rem' }}>
                       {ev.dates && ev.dates.length > 0
                         ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
                         : new Date(ev.date).toLocaleDateString()}
                     </td>
-                    <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
+                    <td>{isFreeEvent(ev) ? 'Gratis' : `${startingPrice(ev)}€`}</td>
                     <td>
                       <button type="button" className={`status-badge status-toggle ${ev.active ? 'completed' : 'cancelled'}`}
                         title={ev.active ? 'Visible para los usuarios. Pulsa para ocultarlo.' : 'Oculto. Pulsa para mostrarlo a los usuarios.'}
@@ -851,6 +858,7 @@ export function AdminPanel() {
                               <tbody>
                                 {attendees[ev.id].map((att: any) => {
                                   const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
+                                  const isFreeReg = att.stripe_session_id?.startsWith('free_');
                                   // stripeStatuses map might hold the checked status
                                   const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
                                   const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
@@ -877,7 +885,7 @@ export function AdminPanel() {
                                   return (
                                     <tr key={att.user_id}>
                                       <td className="monospace">
-                                        {isLocal ? 'Reserva Manual' : att.stripe_session_id?.substring(0, 12) + '...'}
+                                        {isLocal ? 'Reserva Manual' : isFreeReg ? 'Gratis' : att.stripe_session_id?.substring(0, 12) + '...'}
                                         {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
                                         {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize: '0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
                                       </td>
@@ -912,7 +920,9 @@ export function AdminPanel() {
                                         </select>
                                       </td>
                                       <td style={{ textAlign: 'center' }}>
-                                        {!isLocal ? (
+                                        {isFreeReg ? (
+                                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Gratis</span>
+                                        ) : !isLocal ? (
                                           <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
                                             {isPaidStripe ? '✅ Online' : 'Online'}
                                           </span>

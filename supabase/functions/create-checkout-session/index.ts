@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
+import { eventPrice, eventTable, roundCents } from "../_shared/pricing.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -117,24 +118,28 @@ serve(async (req: Request) => {
     }
 
     const { checkoutType, cartItems, userEmail, returnUrl, campusRegistration } = body;
-    const isLocalReservation = checkoutType === 'campus' && campusRegistration?.payLocal === true;
-    // Una reserva para pagar en mano no pasa por Stripe y no necesita URL de vuelta.
-    const safeReturnUrl = isLocalReservation ? '' : validateReturnUrl(returnUrl);
 
+    // Inscripción a un campus, torneo o viaje (checkoutType 'campus' para todos los eventos)
     if (checkoutType === 'campus') {
       if (!campusRegistration) throw new Error("Missing campus registration data");
-      
+      // Ya no hay reservas para pagar en mano: todo se paga con tarjeta
+      if (campusRegistration.payLocal === true) {
+        throw new Error("El pago en mano ya no está disponible. Inscríbete pagando con tarjeta.");
+      }
+      const safeReturnUrl = validateReturnUrl(returnUrl);
+
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('title, active, dates, price_per_day, price_tiers, attendee_discounts, max_capacity')
+        .select('title, type, active, dates, price_per_day, price_tiers, attendee_discounts, price_table, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
         
       if (eventError || !dbEvent) {
         throw new Error(`Failed to securely fetch event constraints: ${eventError?.message}`);
       }
-      if (dbEvent.active === false) throw new Error("Este campus ya no admite inscripciones.");
+      const eventNoun = dbEvent.type === 'torneo' ? 'evento' : 'campus';
+      if (dbEvent.active === false) throw new Error(`Este ${eventNoun} ya no admite inscripciones.`);
 
       // 2. Validate the registration against the event before pricing it
       const numAttendees = campusRegistration.numAttendees;
@@ -159,7 +164,14 @@ serve(async (req: Request) => {
         new Set(selectedDays).size !== selectedDays.length ||
         selectedDays.some((d: unknown) => typeof d !== 'string' || !eventDays.has(d))
       ) {
-        throw new Error("Los días elegidos no coinciden con los del campus.");
+        throw new Error(`Los días elegidos no coinciden con los del ${eventNoun}.`);
+      }
+      // Con precio por evento completo no se eligen días: se va a todos
+      const table = eventTable(dbEvent);
+      // Una tabla rota nunca debe acabar cobrando con el sistema anterior (o gratis)
+      if (dbEvent.price_table != null && !table) throw new Error("El precio de este evento no está bien configurado.");
+      if (table && !table.byDays && selectedDays.length !== eventDays.size) {
+        throw new Error(`Este ${eventNoun} se paga completo: hay que inscribirse a todos sus días.`);
       }
 
       const customData = campusRegistration.customData ?? {};
@@ -177,7 +189,7 @@ serve(async (req: Request) => {
         .eq('event_id', campusRegistration.eventId)
         .eq('user_id', user.id)
         .maybeSingle();
-      if (existing?.status === 'completed') throw new Error("Ya tienes una inscripción pagada en este campus.");
+      if (existing?.status === 'completed') throw new Error(`Ya tienes una inscripción pagada en este ${eventNoun}.`);
 
       // Aforo: cuentan las inscripciones no canceladas de los demás (la propia se sustituye)
       if (dbEvent.max_capacity) {
@@ -192,36 +204,16 @@ serve(async (req: Request) => {
           .reduce((sum: number, r: any) => sum + (Number(r.num_attendees) || 0), 0);
         const left = Number(dbEvent.max_capacity) - taken;
         if (numAttendees > left) {
-          throw new Error(left > 0 ? `Solo quedan ${left} plazas en este campus.` : "Este campus está completo.");
+          throw new Error(left > 0 ? `Solo quedan ${left} plazas en este ${eventNoun}.` : `Este ${eventNoun} está completo.`);
         }
       }
 
-      // 3. Replicate the calcCampusPrice algorithm inside the Edge Function securely
+      // 3. Precio calculado aquí, nunca el que manda el navegador: con la tabla de
+      // precios del evento o, si no tiene, con el sistema anterior (_shared/pricing.ts)
       const numDays = selectedDays.length;
-      
-      let safePricePerDay = Number(dbEvent.price_per_day) || 0;
-      const sortedTiers = [...(dbEvent.price_tiers || [])].sort((a: any, b: any) => b.minDays - a.minDays);
-      for (const tier of sortedTiers) {
-        if (numDays >= tier.minDays) { 
-          safePricePerDay = Number(tier.pricePerDay); 
-          break; 
-        }
-      }
+      const safeTotalAmount = roundCents(eventPrice(dbEvent, numAttendees, numDays));
+      if (!Number.isFinite(safeTotalAmount) || safeTotalAmount < 0) throw new Error("El precio de este evento no está bien configurado.");
 
-      const subtotal = safePricePerDay * numDays * numAttendees;
-
-      let discountPct = 0;
-      const sortedDiscounts = [...(dbEvent.attendee_discounts || [])].sort((a: any, b: any) => b.minAttendees - a.minAttendees);
-      for (const d of sortedDiscounts) {
-        if (numAttendees >= d.minAttendees) { 
-          discountPct = Number(d.discountPct); 
-          break; 
-        }
-      }
-
-      const discount = subtotal * (discountPct / 100);
-      const safeTotalAmount = subtotal - discount;
-      
       const registration = {
         event_id: campusRegistration.eventId,
         user_id: user.id,
@@ -233,25 +225,31 @@ serve(async (req: Request) => {
         custom_data: customData
       };
 
-      if (isLocalReservation) {
+      // Evento gratis: no hay nada que cobrar, la inscripción queda confirmada
+      if (safeTotalAmount === 0) {
         const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
           ...registration,
-          stripe_session_id: `local_${Date.now()}`
+          status: 'completed',
+          stripe_session_id: `free_${crypto.randomUUID().substring(0, 8)}`
         }, { onConflict: 'event_id,user_id' });
 
         if (insertError) throw new Error("DB insert failed: " + insertError.message);
 
-        return new Response(JSON.stringify({ reserved: true, amount: safeTotalAmount }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        return new Response(JSON.stringify({ url: null, free: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
       }
 
-      const finalPrice = Math.max(Math.round(safeTotalAmount * 100), 1);
+      // Stripe no cobra menos de 0,50 €
+      if (safeTotalAmount < 0.5) throw new Error("El importe mínimo para pagar con tarjeta es 0,50 €.");
+      const finalPrice = Math.round(safeTotalAmount * 100);
 
       const line_items = [{
         price_data: {
           currency: 'eur',
           product_data: { 
             name: `Inscripción: ${dbEvent.title}`, 
-            description: `${numAttendees} asist. | ${numDays} días`
+            description: table && !table.byDays
+              ? `${numAttendees} asist. | evento completo`
+              : `${numAttendees} asist. | ${numDays} ${numDays === 1 ? 'día' : 'días'}`
           },
           unit_amount: finalPrice,
         },
@@ -279,6 +277,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
+    const safeReturnUrl = validateReturnUrl(returnUrl);
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
       throw new Error("Cart is empty");
     }

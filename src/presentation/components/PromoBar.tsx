@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SupabaseAdapter } from '../../infrastructure/SupabaseAdapter';
 import { PROMO_MESSAGES } from '../../config';
+import { eventPath } from '../../utils/eventLinks';
 import './PromoBar.css';
 
 const adapter = new SupabaseAdapter();
 const ROTATE_MS = 5000;
 
-/** Barra fina de avisos encima de la cabecera: campus abiertos y avisos fijos, uno cada vez. */
+/** Barra fina de avisos encima de la cabecera: campus, torneos y viajes abiertos y avisos fijos, uno cada vez. */
 export function PromoBar() {
   const [messages, setMessages] = useState(PROMO_MESSAGES);
   const [index, setIndex] = useState(0);
@@ -17,10 +18,10 @@ export function PromoBar() {
       .then(events => {
         const open = events
           .filter(e => e.active)
-          .map(e => ({ text: `Inscripciones abiertas: ${e.title}`, to: `/events?campus=${e.id}` }));
+          .map(e => ({ text: `Inscripciones abiertas: ${e.title}`, to: eventPath(e) }));
         setMessages([...open, ...PROMO_MESSAGES]);
       })
-      .catch(() => { /* sin campus, quedan los avisos fijos */ });
+      .catch(() => { /* sin eventos, quedan los avisos fijos */ });
   }, []);
 
   useEffect(() => {
