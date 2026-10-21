@@ -204,7 +204,8 @@ serve(async (req: Request) => {
           .reduce((sum: number, r: any) => sum + (Number(r.num_attendees) || 0), 0);
         const left = Number(dbEvent.max_capacity) - taken;
         if (numAttendees > left) {
-          throw new Error(left > 0 ? `Solo quedan ${left} plazas en este ${eventNoun}.` : `Este ${eventNoun} está completo.`);
+          if (left <= 0) throw new Error(`Este ${eventNoun} está completo.`);
+          throw new Error(left === 1 ? `Solo queda 1 plaza en este ${eventNoun}.` : `Solo quedan ${left} plazas en este ${eventNoun}.`);
         }
       }
 
