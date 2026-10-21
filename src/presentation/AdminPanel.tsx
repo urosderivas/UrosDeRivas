@@ -764,7 +764,6 @@ export function AdminPanel() {
             'Importe': a.amount || 0,
             'Estado': a.status || 'pending',
             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
-            'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
             'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
           };
         }));
@@ -851,7 +850,7 @@ export function AdminPanel() {
                                   <th>Desglose Inscripción</th>
                                   <th>Total (€)</th>
                                   <th>Estado</th>
-                                  <th>Pago en mano</th>
+                                  <th>Pago</th>
                                   <th>Justificante</th>
                                 </tr>
                               </thead>
@@ -885,7 +884,7 @@ export function AdminPanel() {
                                   return (
                                     <tr key={att.user_id}>
                                       <td className="monospace">
-                                        {isLocal ? 'Reserva Manual' : isFreeReg ? 'Gratis' : att.stripe_session_id?.substring(0, 12) + '...'}
+                                        {isLocal ? 'Reserva antigua' : isFreeReg ? 'Gratis' : att.stripe_session_id?.substring(0, 12) + '...'}
                                         {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
                                         {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize: '0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
                                       </td>
@@ -927,19 +926,10 @@ export function AdminPanel() {
                                             {isPaidStripe ? '✅ Online' : 'Online'}
                                           </span>
                                         ) : (
-                                          <input
-                                            type="checkbox"
-                                            checked={allCompleted}
-                                            title="Marcar como pagado en mano"
-                                            onChange={async (e) => {
-                                              const newStatus = e.target.checked ? 'completed' : 'pending';
-                                              try {
-                                                await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
-                                                handleLoadAttendees(ev.id, true);
-                                              } catch (err: any) { showMessage('Error', err.message); }
-                                            }}
-                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                          />
+                                          // Reservas de antes de quitar el pago en mano: se gestionan con el estado
+                                          <span style={{ fontSize: '0.75rem', color: '#888' }} title="Reserva antigua para pagar en mano">
+                                            {allCompleted ? '✅ En mano' : 'En mano'}
+                                          </span>
                                         )}
                                       </td>
                                       <td>
