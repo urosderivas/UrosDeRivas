@@ -20,7 +20,6 @@ El sistema ha evolucionado de un simple visor a una completa **Plataforma de E-C
   - 📥 **Importador Clupik Directo:** Permite volcar todo tu catálogo de ropa alojado en Clupik a tu base de datos local pre-calculando variables para independizar tu web.
   - 📊 **Exportador Excel (.xlsx):** Descarga de un clic de todos tus clientes, reservas y finanzas estructuradas.
   - 📄 **Generador de Facturas PDF (Anti-falsificación):** Creación de facturas locales instantáneas (jsPDF) insertando metadatos únicos y códigos QR verificables por directiva para pases de Campus o entregas de ropa en mano.
-- **Conector Nativo a la API de Clupik:** Sigue existiendo el motor centralizado para extraer calendarios, partidos en curso y cuadros de clasificación (`standings`) directamente desde los endpoints federativos.
 - **Despliegue Cero-Fricciones con GitHub Pages:** Preparado para compilarse y publicarse de manera gratuita y eficiente desde el ecosistema `gh-pages` ahorrando cientos de euros en hosting.
 
 ---
@@ -84,10 +83,12 @@ Crea un proyecto gratuito en Supabase y aplica las migraciones de `supabase/migr
 
 ### Paso 2: Cambia tu ID de Clupik (Opcional)
 Si tu equipo deportivo pertenece a la red de Clupik (casi todas las federaciones territoriales lo están integrando):
-> En el código (ej. `Clasificaciones.tsx`), el `clubId` del Uros de Rivas es `67`. ¡Cámbialo al de tu club para heredar toda tu cantera, filiales y calendarios de tu territorial automáticamente!
+> En `src/config.ts` (`CLUPIK.clubId`), el ID del Uros de Rivas es `67`. Los importadores de tienda y campus del panel de admin lo usan.
 
 ### Paso 2 bis: Datos del club
-Nombre legal, CIF, dirección, email de contacto e ID de Clupik están en `src/config.ts`. Es el único sitio que hay que tocar si cambia alguno; los textos legales, las facturas, las clasificaciones y el importador de Clupik lo leen de ahí.
+Nombre legal, CIF, dirección, email de contacto e ID de Clupik están en `src/config.ts`. Es el único sitio que hay que tocar si cambia alguno; los textos legales, los justificantes y los importadores de Clupik lo leen de ahí.
+
+El escudo del club es `public/assets/logo_uros.png` (cabecera, pie, portada y justificantes). Para cambiarlo basta con sustituir ese archivo por otro PNG con fondo transparente y el mismo nombre; el icono de la pestaña es `public/assets/favicon.png`.
 
 ### Contenido que se gestiona desde la web
 Con una cuenta de admin, sin tocar código:

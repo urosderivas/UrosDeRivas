@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Trophy, Handshake } from 'lucide-react';
+import { Pencil, Trash2, ArrowRight, CalendarDays, ShoppingBag, Handshake } from 'lucide-react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Event, NewsPost } from '../domain/entities';
 import { clubLogoUrl, resolveImageUrl } from '../utils/media';
@@ -23,7 +23,6 @@ const adapter = new SupabaseAdapter();
 const TILES = [
   { to: '/events', label: 'Campus', text: 'Inscríbete en los campus del club', Icon: CalendarDays },
   { to: '/market', label: 'Tienda', text: 'Equipaciones y merchandising', Icon: ShoppingBag },
-  { to: '/clasificaciones', label: 'Clasificaciones', text: 'Partidos y resultados', Icon: Trophy },
   { to: '/sponsors', label: 'Patrocinadores', text: 'Quienes nos apoyan', Icon: Handshake },
 ];
 
