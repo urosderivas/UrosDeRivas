@@ -378,9 +378,10 @@ export function AdminPanel() {
       } else if (sessionId.startsWith('free_')) {
         paymentLine = '✅ Gratis (sin pago)';
       } else {
+        // Pedidos y reservas de antes de que todo se pagara con tarjeta
         paymentLine = result.status === 'completed'
-          ? '✅ PAGADO EN MANO'
-          : '❌ NO pagado en mano';
+          ? '✅ Pagado en mano (pedido antiguo)'
+          : '❌ No pagado (pedido antiguo para pagar en mano)';
       }
 
       const msg = [
@@ -420,7 +421,6 @@ export function AdminPanel() {
         'Precio Unitario': unitPrice,
         'Importe Total': o.amount,
         'Estado': o.status,
-        'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
         'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
       };
     }));
@@ -458,7 +458,7 @@ export function AdminPanel() {
               <th>Desglose Pedido</th>
               <th>Total (€)</th>
               <th>Estado</th>
-              <th>Pago en mano</th>
+              <th>Pago</th>
               <th>Justificante</th>
             </tr>
           </thead>
@@ -521,17 +521,13 @@ export function AdminPanel() {
                           <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
                             {isPaidStripe ? '✅ Online' : 'Online'}
                           </span>
+                        ) : groupId.startsWith('free_') ? (
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Gratis</span>
                         ) : (
-                          <input
-                            type="checkbox"
-                            checked={allCompleted}
-                            title="Marcar como pagado en mano"
-                            onChange={(e) => {
-                              const newStatus = e.target.checked ? 'completed' : 'pending';
-                              handleUpdateOrderStatus(groupOrders.map(o => o.id), newStatus as Order['status']);
-                            }}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                          />
+                          // Pedidos de antes de quitar el pago en mano: se gestionan con el estado
+                          <span style={{ fontSize: '0.75rem', color: '#888' }} title="Pedido antiguo para pagar en mano">
+                            {allCompleted ? '✅ En mano' : 'En mano (antiguo)'}
+                          </span>
                         )}
                       </td>
                       <td>

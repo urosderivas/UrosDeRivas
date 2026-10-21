@@ -15,7 +15,7 @@ dominio del club).
   tabla de precios. Las familias se inscriben con nombre de cada asistente y pagan
   con tarjeta; si el evento es gratis, la inscripción se confirma sin pago.
 - **Tienda**: productos con tallas u opciones y campos de texto (dorsal, nombre…),
-  carrito y pago con tarjeta o pedido para pagar en mano en el club.
+  carrito y pago con tarjeta (la web no admite pagos en mano).
 - **Patrocinadores**: página propia y una cinta con sus logos encima del pie en el
   resto de páginas.
 - **Cuenta de usuario**: registro, inicio de sesión (también con Google),
