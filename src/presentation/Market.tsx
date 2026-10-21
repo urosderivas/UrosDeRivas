@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { StripeAdapter } from '../infrastructure/StripeAdapter';
@@ -22,6 +22,7 @@ const stripeAdapter = new StripeAdapter();
 export function Market() {
   const { user, items, loading, fetchItems, cart, addToCart, clearCart } = useStore();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
@@ -40,8 +41,11 @@ export function Market() {
   useEffect(() => {
     if (!productParam) return;
     const item = items.find(i => i.id === productParam);
-    if (item) setSelectedItem(item);
-  }, [productParam, items]);
+    if (!item) return;
+    setSelectedItem(item);
+    // Se quita del enlace para que no se vuelva a abrir al cerrarlo o recargar
+    navigate('/market', { replace: true });
+  }, [productParam, items, navigate]);
 
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
@@ -61,7 +65,12 @@ export function Market() {
         showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.')
       );
     }
-  }, [fetchItems, clearCart, location.search]);
+    // Avisos ya atendidos: se limpian del enlace para que otro clic en el carrito
+    // vuelva a abrirlo y recargar no repita el mensaje
+    if (params.get('success') || params.get('carrito') || params.get('canceled')) {
+      navigate('/market', { replace: true });
+    }
+  }, [fetchItems, clearCart, location.search, navigate]);
 
   const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
     if (editItem) {

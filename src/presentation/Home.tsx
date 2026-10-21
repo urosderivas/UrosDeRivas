@@ -67,7 +67,7 @@ export function Home() {
     // Mientras cargan los eventos se enlaza como campus; la página redirige si es un torneo
     return {
       to: ev ? eventPath(ev) : `/events?campus=${post.eventId}`,
-      label: ev?.type === 'torneo' ? 'Ver evento' : 'Ver campus',
+      label: ev?.type === 'campus' ? 'Ver campus' : 'Ver evento',
     };
   };
 

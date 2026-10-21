@@ -91,7 +91,7 @@ export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) 
                       <div className="qty-controls">
                         <button onClick={() => updateCartQuantity(item.cartItemId, Math.max(1, item.quantity - 1))}><Minus size={14}/></button>
                         <span>{item.quantity}</span>
-                        <button onClick={() => updateCartQuantity(item.cartItemId, item.quantity + 1)}><Plus size={14}/></button>
+                        <button onClick={() => updateCartQuantity(item.cartItemId, Math.min(99, item.quantity + 1))} disabled={item.quantity >= 99}><Plus size={14}/></button>
                       </div>
                       <button className="btn-icon delete" onClick={() => removeFromCart(item.cartItemId)}>
                         <Trash2 size={16} />

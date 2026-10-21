@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CalendarDays, Plus, X, Trash2 } from 'lucide-react';
 import { Event, CustomField, EventType } from '../domain/entities';
-import { eventTable, legacyPrice } from '../domain/pricing';
+import { MAX_TABLE_DAYS, eventTable, legacyPrice, roundCents } from '../domain/pricing';
 import { Modal } from './components/Modal';
 import { PriceTableEditor, PriceTableDraft, draftToTable } from './components/PriceTableEditor';
 import { ImageField } from './components/ImageField';
@@ -36,8 +36,9 @@ function initialDraft(ev: Event | null | undefined, defaultType: EventType): { d
   const maxDiscountRow = Math.max(1, ...(ev.attendee_discounts || []).map(d => d.minAttendees));
   const numRows = Math.min(4, Math.max(2, maxDiscountRow));
   const rows = Array.from({ length: numRows }, (_, a) => Array.from({ length: numDays }, (_, d) => legacyPrice(ev, a + 1, d + 1)));
+  const extra = roundCents(legacyPrice(ev, numRows + 1, 1) - legacyPrice(ev, numRows, 1));
   return {
-    draft: { byDays: true, rows, extra: legacyPrice(ev, numRows + 1, 1) - legacyPrice(ev, numRows, 1) },
+    draft: { byDays: true, rows, extra: Number.isFinite(extra) ? Math.max(0, extra) : '' },
     converted: numDays > 0,
   };
 }
@@ -113,6 +114,10 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
     e.preventDefault();
     if (!title || !location || dates.length === 0) {
       setError('Título, Ubicación y al menos una fecha son obligatorios.');
+      return;
+    }
+    if (dates.length > MAX_TABLE_DAYS) {
+      setError(`Un evento puede tener como mucho ${MAX_TABLE_DAYS} fechas.`);
       return;
     }
     const priceTable = draftToTable(priceDraft, dates.length);

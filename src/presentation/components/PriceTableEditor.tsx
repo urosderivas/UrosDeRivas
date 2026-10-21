@@ -46,6 +46,8 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
   const [quickPrice, setQuickPrice] = useState<Cell>('');
   const [testAttendees, setTestAttendees] = useState(3);
   const [testDays, setTestDays] = useState(1);
+  // Lo que había en el otro modo, para recuperarlo si el admin vuelve a él
+  const [otherMode, setOtherMode] = useState<PriceTableDraft | null>(null);
 
   const cols = draft.byDays ? numDates : 1;
   const rows = fitRows(draft.rows, cols);
@@ -67,6 +69,16 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
     });
   };
 
+  // Los precios de un modo no valen en el otro (precio por días frente a evento
+  // completo), así que se empieza con la tabla vacía y las mismas filas.
+  const switchMode = (byDays: boolean) => {
+    if (byDays === draft.byDays) return;
+    setOtherMode(draft);
+    onChange(otherMode && otherMode.byDays === byDays
+      ? otherMode
+      : { byDays, rows: draft.rows.map(() => []), extra: '' });
+  };
+
   const copyFrom = (id: string) => {
     const source = copySources.find(s => s.id === id);
     if (!source) return;
@@ -84,11 +96,11 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
     <div className="pte">
       <div className="pte-mode">
         <label>
-          <input type="radio" checked={draft.byDays} onChange={() => set({ byDays: true })} />
+          <input type="radio" checked={draft.byDays} onChange={() => switchMode(true)} />
           Precio según los días que elijan
         </label>
         <label>
-          <input type="radio" checked={!draft.byDays} onChange={() => set({ byDays: false })} />
+          <input type="radio" checked={!draft.byDays} onChange={() => switchMode(false)} />
           Precio por evento completo (sin elegir días)
         </label>
       </div>

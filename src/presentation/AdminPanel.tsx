@@ -18,6 +18,7 @@ const adapter = new SupabaseAdapter();
 
 export function AdminPanel() {
   const { user } = useStore();
+  const isAdmin = user?.role === 'admin';
   const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>(user?.role === 'coach' ? 'stats' : 'users');
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
@@ -263,7 +264,7 @@ export function AdminPanel() {
                     <td><span className="badge-action">{log.action_type}</span></td>
                     <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
                     <td>
-                      <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete"><Trash2 size={16} /></button>
+                      {isAdmin && <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete" title="Borrar"><Trash2 size={16} /></button>}
                     </td>
                   </tr>
                 ))}
@@ -698,6 +699,8 @@ export function AdminPanel() {
           const result = batchResults[att.stripe_session_id];
           if (result) {
             newStatuses[att.stripe_session_id] = result.payment_status;
+            // Corregir el estado es cosa de admins (el webhook de Stripe ya lo hace solo)
+            if (!isAdmin) continue;
             if (result.payment_status === 'paid' && att.status === 'pending') {
               await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
             } else if (result.status === 'expired' && att.status === 'pending') {
@@ -906,6 +909,8 @@ export function AdminPanel() {
                                         <select
                                           className="status-dropdown"
                                           value={att.status || 'pending'}
+                                          disabled={!isAdmin}
+                                          title={isAdmin ? undefined : 'Solo un administrador puede cambiar el estado'}
                                           onChange={async (e) => {
                                             try {
                                               await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
@@ -936,7 +941,7 @@ export function AdminPanel() {
                                         <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                                           📄 PDF
                                         </button>
-                                        <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {
+                                        {isAdmin && <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
                                           setConfirmPrompt({
                                             open: true,
                                             message: `¿Eliminar inscripción de ${att.user_email}?`,
@@ -949,7 +954,7 @@ export function AdminPanel() {
                                           });
                                         }} style={{ marginTop: '6px' }}>
                                           <Trash2 size={16} />
-                                        </button>
+                                        </button>}
                                       </td>
                                     </tr>
                                   );
@@ -1040,7 +1045,7 @@ export function AdminPanel() {
             </button>
           )}
           <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
-            Campus & Inscripciones
+            Eventos e inscripciones
           </button>
         </div>
 

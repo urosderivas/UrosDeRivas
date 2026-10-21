@@ -347,14 +347,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       p_user_id: userId, 
       p_status: status 
     });
-    // Fallback if rpc hasn't been uploaded yet (which might fail silently or throw due to RLS)
-    if (error) {
-      console.warn("RPC update_admin_campus_status failed, trying direct update (may fail silently if RLS blocks):", error);
-      const { error: err2 } = await supabase.from('event_registrations')
-        .update({ status })
-        .match({ event_id: eventId, user_id: userId });
-      if (err2) throw err2;
-    }
+    if (error) throw error;
   }
 
   async verifyPayment(sessionId: string): Promise<boolean> {

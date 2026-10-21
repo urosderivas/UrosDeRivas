@@ -20,6 +20,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
 
 const MAX_ATTENDEES = 20;
 const MAX_ITEM_QUANTITY = 99;
+// Un pago sin terminar caduca a los 30 minutos (el mínimo de Stripe) y deja libre
+// su plaza; sin esto Stripe lo mantiene abierto 24 horas.
+const CHECKOUT_LIFETIME_SECONDS = 30 * 60;
+const checkoutExpiresAt = () => Math.floor(Date.now() / 1000) + CHECKOUT_LIFETIME_SECONDS;
 
 function getAllowedOrigins(): string[] {
   const configured = Deno.env.get('ALLOWED_ORIGINS');
@@ -117,7 +121,9 @@ serve(async (req: Request) => {
       return await cancelCheckout(body.cancelSessionId, user.id, supabaseAdminClient);
     }
 
-    const { checkoutType, cartItems, userEmail, returnUrl, campusRegistration } = body;
+    const { checkoutType, cartItems, returnUrl, campusRegistration } = body;
+    // El email es siempre el de la cuenta, no uno que mande el navegador
+    const userEmail = user.email;
 
     // Inscripción a un campus, torneo o viaje (checkoutType 'campus' para todos los eventos)
     if (checkoutType === 'campus') {
@@ -185,11 +191,22 @@ serve(async (req: Request) => {
       // Una inscripción ya pagada no se puede volver a abrir desde aquí
       const { data: existing } = await supabaseAdminClient
         .from('event_registrations')
-        .select('status')
+        .select('status, stripe_session_id')
         .eq('event_id', campusRegistration.eventId)
         .eq('user_id', user.id)
         .maybeSingle();
       if (existing?.status === 'completed') throw new Error(`Ya tienes una inscripción pagada en este ${eventNoun}.`);
+
+      // Si había un pago a medias (otra pestaña, o volvió atrás sin cancelar), se cierra
+      // antes de abrir otro: si no, al pagar el antiguo no habría inscripción que confirmar.
+      const previousSession = existing?.status === 'pending' ? existing.stripe_session_id : null;
+      if (typeof previousSession === 'string' && previousSession.startsWith('cs_')) {
+        const previous = await stripe.checkout.sessions.retrieve(previousSession);
+        if (previous.status === 'complete') {
+          throw new Error(`Tu pago anterior para este ${eventNoun} ya se ha completado. En unos minutos aparecerá como inscrito.`);
+        }
+        if (previous.status === 'open') await stripe.checkout.sessions.expire(previousSession);
+      }
 
       // Aforo: cuentan las inscripciones no canceladas de los demás (la propia se sustituye)
       if (dbEvent.max_capacity) {
@@ -262,6 +279,7 @@ serve(async (req: Request) => {
         payment_method_types: ['card'],
         line_items,
         mode: 'payment',
+        expires_at: checkoutExpiresAt(),
         success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${safeReturnUrl}?canceled=true`,
         metadata: { userId: user.id, eventId: campusRegistration.eventId, type: 'campus' }
@@ -337,7 +355,7 @@ serve(async (req: Request) => {
       orderInserts.push({
         user_id: user.id,
         buyer_name: user?.email?.split('@')[0] || 'Unknown',
-        buyer_email: userEmail,
+        buyer_email: userEmail || '',
         item_id: dbItem.id,
         size: textOptionsStr || null,
         quantity: cartItem.quantity,
@@ -363,10 +381,11 @@ serve(async (req: Request) => {
     }
 
     const session = await stripe.checkout.sessions.create({
-      customer_email: userEmail,
+      customer_email: userEmail || undefined,
       payment_method_types: ['card'],
       line_items: line_items,
       mode: 'payment',
+      expires_at: checkoutExpiresAt(),
       success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${safeReturnUrl}?canceled=true`,
       metadata: {

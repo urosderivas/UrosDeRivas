@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
@@ -86,6 +86,8 @@ function App() {
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/legal" element={<LegalNotice />} />
             <Route path="/cookies" element={<CookiesPolicy />} />
+            {/* Sección retirada: los enlaces antiguos llevan a Inicio */}
+            <Route path="/clasificaciones" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

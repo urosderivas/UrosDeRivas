@@ -14,10 +14,14 @@ export function PromoBar() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    adapter.getEvents()
-      .then(events => {
+    // Solo eventos que aún no han terminado y con plazas libres
+    const today = new Date().toLocaleDateString('sv-SE');
+    Promise.all([adapter.getEvents(), adapter.getCampusOccupancy().catch(() => ({} as Record<string, number>))])
+      .then(([events, occupancy]) => {
         const open = events
           .filter(e => e.active)
+          .filter(e => [...(e.dates || []), e.date].some(d => d && d >= today))
+          .filter(e => !e.max_capacity || (occupancy[e.id] || 0) < e.max_capacity)
           .map(e => ({ text: `Inscripciones abiertas: ${e.title}`, to: eventPath(e) }));
         setMessages([...open, ...PROMO_MESSAGES]);
       })
@@ -34,7 +38,7 @@ export function PromoBar() {
   if (!current) return null;
 
   return (
-    <div className="promo-bar" role="status">
+    <div className="promo-bar" aria-live="off">
       <span key={index} className="promo-message">
         {current.to ? <Link to={current.to}>{current.text} →</Link> : current.text}
       </span>

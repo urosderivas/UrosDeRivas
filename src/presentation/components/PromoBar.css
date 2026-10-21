@@ -9,11 +9,14 @@
   padding: 0.5rem 1rem;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .promo-message {
   display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
   animation: promoIn 0.5s ease-out;
 }
 

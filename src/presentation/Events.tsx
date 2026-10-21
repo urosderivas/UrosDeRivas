@@ -132,6 +132,8 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     if (ev.type !== kind) { navigate(eventPath(ev), { replace: true }); return; }
     if (expandedId !== ev.id) handleExpand(ev);
     document.getElementById(`campus-${ev.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Ya abierto: se quita del enlace para que cerrarlo no lo vuelva a abrir
+    navigate(location.pathname, { replace: true });
   }, [linkedCampusId, loading, events, kind]);
 
   const visibleEvents = events.filter(e => e.type === kind);
@@ -170,7 +172,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
   const handleRegister = async (ev: Event) => {
     if (!user) { showMessage('Atención', 'Debes iniciar sesión para inscribirte.'); return; }
     // Si el evento se paga completo no se eligen días: se va a todos
-    const days = choosesDays(ev) ? regSelectedDays : ev.dates;
+    const days = choosesDays(ev) ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
     if (days.length === 0) { showMessage('Faltan datos', 'Selecciona al menos un día.'); return; }
 
     // Validate attendee names
@@ -251,7 +253,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const table = eventTable(ev);
               const pickDays = choosesDays(ev);
               const fromPrice = startingPrice(ev);
-              const regDays = pickDays ? regSelectedDays : ev.dates;
+              const regDays = pickDays ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
               const dateRange = ev.dates.length > 0
                 ? `${new Date(ev.dates[0] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${new Date(ev.dates[ev.dates.length - 1] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
