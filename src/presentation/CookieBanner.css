@@ -3,12 +3,12 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background-color: rgba(20, 20, 30, 0.95);
+  background-color: var(--banner-bg);
   backdrop-filter: blur(10px);
   z-index: 9999;
   border-top: 2px solid var(--accent-gold);
   padding: 1rem;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 -4px 20px rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-k)));
   animation: slideUp 0.5s ease-out;
 }
 
@@ -35,14 +35,14 @@
 }
 
 .cookie-content p {
-  color: #ddd;
+  color: var(--text-soft);
   font-size: 0.85rem;
   line-height: 1.4;
   margin: 0;
 }
 
 .cookie-content a {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   text-decoration: underline;
   margin-left: 0.3rem;
 }
@@ -56,8 +56,8 @@
 
 .btn-decline {
   background: transparent;
-  color: #ccc;
-  border: 1px solid #666;
+  color: var(--text-soft);
+  border: 1px solid var(--border-strong);
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
@@ -66,13 +66,13 @@
 }
 
 .btn-decline:hover {
-  background: #333;
-  color: white;
+  background: var(--surface-2);
+  color: var(--text-primary);
 }
 
 .btn-accept {
   background: var(--accent-turquoise);
-  color: #000;
+  color: var(--on-accent);
   border: none;
   font-weight: bold;
   padding: 0.5rem 1.5rem;

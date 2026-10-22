@@ -10,10 +10,10 @@
   background-color: var(--secondary-bg);
   padding: 3rem;
   border-radius: 12px;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   width: 100%;
   max-width: 450px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  box-shadow: 0 10px 30px rgba(var(--shadow-rgb), calc(0.8 * var(--shadow-k)));
   animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -31,7 +31,7 @@
 
 .error-message {
   background-color: rgba(255, 60, 60, 0.1);
-  color: #ff5c5c;
+  color: var(--danger-text);
   padding: 1rem;
   border-left: 4px solid #ff5c5c;
   margin-bottom: 1.5rem;
@@ -60,8 +60,8 @@
 
 .form-group input {
   padding: 0.8rem 1rem;
-  background-color: #000;
-  border: 1px solid #444;
+  background-color: var(--primary-bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 1rem;
@@ -75,7 +75,7 @@
 
 .btn-primary {
   background-color: var(--accent-gold);
-  color: #000;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 1rem;
@@ -87,7 +87,7 @@
 }
 
 .btn-primary:hover {
-  background-color: #e6c855;
+  background-color: var(--accent-strong);
   transform: translateY(-2px);
 }
 
@@ -98,7 +98,7 @@
 
 .success-message {
   background-color: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  color: var(--success-text);
   padding: 1rem;
   border-left: 4px solid #10b981;
   margin-bottom: 1.5rem;
@@ -130,7 +130,7 @@
 }
 
 .link-btn:hover {
-  color: var(--accent-gold);
+  color: var(--accent-text);
 }
 
 .forgot-link {

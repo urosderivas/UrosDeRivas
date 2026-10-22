@@ -7,6 +7,16 @@
     <title>Uros de Rivas</title>
     <meta name="description" content="Club de baloncesto Uros de Rivas (Rivas-Vaciamadrid): campus, tienda oficial y noticias del club." />
     <meta name="theme-color" content="#000000" />
+    <!-- Tema claro u oscuro antes de pintar: el elegido en el botón o, si no, el del sistema -->
+    <script>
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem('theme'); } catch (e) {}
+        if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t;
+        if (t === 'light') document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f2f7f7');
+      })();
+    </script>
 
     <!-- Vista previa al compartir el enlace (WhatsApp, redes). VITE_SITE_URL la fija el workflow de despliegue. -->
     <meta property="og:type" content="website" />

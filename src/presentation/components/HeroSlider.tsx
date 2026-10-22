@@ -42,7 +42,7 @@ export function HeroSlider({ slides }: { slides: HeroSlide[] }) {
   return (
     <section className="hero-slider" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       {slides.map((slide, i) => (
-        <div key={slide.key} className={`hero-slide ${slide.image ? '' : 'hero-slide-plain'} ${i === index ? 'active' : ''}`} aria-hidden={i !== index}>
+        <div key={slide.key} className={`hero-slide ${slide.image ? 'theme-dark' : 'hero-slide-plain'} ${i === index ? 'active' : ''}`} aria-hidden={i !== index}>
           {slide.image && <div className="hero-slide-bg" style={reached.has(i) ? { backgroundImage: `url("${slide.image}")` } : undefined} />}
           {slide.image && <div className="hero-slide-shade" />}
           <div className="hero-slide-content">
@@ -61,9 +61,9 @@ export function HeroSlider({ slides }: { slides: HeroSlide[] }) {
       ))}
       {count > 1 && (
         <>
-          <button className="hero-arrow prev" onClick={() => go(-1)} aria-label="Anterior"><ChevronLeft size={22} /></button>
-          <button className="hero-arrow next" onClick={() => go(1)} aria-label="Siguiente"><ChevronRight size={22} /></button>
-          <div className="hero-dots">
+          <button className="hero-arrow prev theme-dark" onClick={() => go(-1)} aria-label="Anterior"><ChevronLeft size={22} /></button>
+          <button className="hero-arrow next theme-dark" onClick={() => go(1)} aria-label="Siguiente"><ChevronRight size={22} /></button>
+          <div className={`hero-dots ${slides[index]?.image ? 'theme-dark' : ''}`}>
             {slides.map((s, i) => (
               <button key={s.key} className={i === index ? 'active' : ''} onClick={() => setIndex(i)} aria-label={`Diapositiva ${i + 1}`} />
             ))}

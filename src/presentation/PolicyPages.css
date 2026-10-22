@@ -10,11 +10,11 @@
   background-color: var(--secondary-bg);
   padding: 3rem;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-k)));
 }
 
 .policy-content h1 {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   margin-bottom: 2rem;
   text-align: center;
   font-size: 2rem;
@@ -26,7 +26,7 @@
   margin-top: 2.5rem;
   margin-bottom: 1rem;
   font-size: 1.3rem;
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
 }
 
@@ -46,19 +46,19 @@
 }
 
 .policy-content strong {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .policy-content a {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   text-decoration: none;
   border-bottom: 1px solid var(--accent-gold);
   transition: all 0.3s ease;
 }
 
 .policy-content a:hover {
-  color: #fff;
-  border-bottom-color: #fff;
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
 }
 
 /* Tabla de cookies */
@@ -66,7 +66,7 @@
   width: 100%;
   border-collapse: collapse;
   margin-top: 2rem;
-  background-color: #1a1a1a;
+  background-color: var(--surface);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -74,17 +74,17 @@
 .cookies-table th, .cookies-table td {
   padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .cookies-table th {
-  background-color: #222;
+  background-color: var(--surface);
   color: var(--accent-turquoise);
   font-weight: bold;
 }
 
 .cookies-table code {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   background: rgba(255, 215, 0, 0.1);
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
@@ -111,10 +111,10 @@
     gap: 0.3rem;
   }
   .cookies-table tr {
-    border-bottom: 2px solid #444;
+    border-bottom: 2px solid var(--border);
   }
   .cookies-table td:not(:last-child) {
-    border-bottom: 1px dashed #333;
+    border-bottom: 1px dashed var(--border);
   }
   .mobile-label {
     display: block;

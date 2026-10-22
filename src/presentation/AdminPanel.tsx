@@ -503,10 +503,10 @@ export function AdminPanel() {
           <button className="btn-primary" onClick={() => handleSyncAllStripe(undefined, true)} disabled={syncingStripe}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
-          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9', color: '#fff' }}>
             {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
           </button>
-          <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', marginLeft: 'auto' }}>
+          <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff', marginLeft: 'auto' }}>
             📊 Exportar Excel
           </button>
         </div>
@@ -534,7 +534,7 @@ export function AdminPanel() {
                   const stripeChecked = orderChecked(first);
 
                   return (
-                    <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
+                    <tr key={groupId} style={{ borderBottom: '3px solid var(--separator)' }}>
                       <td className="monospace" style={{ fontSize: '0.8rem' }}>
                         {groupId.substring(0, 12)}...
                         {isStripeOrder && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
@@ -542,16 +542,16 @@ export function AdminPanel() {
                       </td>
                       <td>
                         <strong>{first.buyer_name}</strong><br />
-                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{first.buyer_email}</span><br />
-                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(first.created_at).toLocaleDateString()}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{first.buyer_email}</span><br />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(first.created_at).toLocaleDateString()}</span>
                       </td>
                       <td>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                           {groupOrders.map(o => (
                             <li key={o.id} style={{ marginBottom: '6px' }}>
                               • <strong>{o.item_name}</strong>
-                              {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
-                              {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
+                              {(o.quantity || 1) > 1 && <span style={{ color: 'var(--accent-text)', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
+                              {o.size && <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>[{o.size}]</span>}
                               <span style={{ marginLeft: '6px', color: '#0e70ab' }}>
                                 {(o.quantity || 1) > 1
                                   ? `(€${(o.amount / o.quantity).toFixed(2)} c/u = €${o.amount.toFixed(2)})`
@@ -582,10 +582,10 @@ export function AdminPanel() {
                             {isPaidStripe ? '✅ Online' : 'Online'}
                           </span>
                         ) : groupId.startsWith('free_') ? (
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Gratis</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Gratis</span>
                         ) : (
                           // Pedidos antiguos sin pago online: se gestionan con el estado
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Sin pago online</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Sin pago online</span>
                         )}
                       </td>
                       <td>
@@ -640,7 +640,7 @@ export function AdminPanel() {
     <div className="admin-table-container">
       <div className="table-toolbar" style={{ justifyContent: 'space-between' }}>
         <h3>Usuarios Registrados</h3>
-        <button className="btn-primary" onClick={exportUsersExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+        <button className="btn-primary" onClick={exportUsersExcel} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff' }}>
           📊 Exportar Excel
         </button>
       </div>
@@ -862,16 +862,16 @@ export function AdminPanel() {
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
         <h3>Campus, torneos e inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe(undefined, true)} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
+          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe(undefined, true)} disabled={syncingStripe} style={{ background: 'var(--accent-gold)', borderColor: 'var(--accent-strong)', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
-          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9', color: '#fff' }}>
             {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
           </button>
-          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
+          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff' }}>
             📥 Importar Eventos Clupik
           </button>
-          <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+          <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff' }}>
             {loadingAttendees === 'export' ? 'Generando...' : '📊 Exportar Excel'}
           </button>
         </div>
@@ -897,7 +897,7 @@ export function AdminPanel() {
                   >
                     <td>
                       <strong>{ev.title}</strong>
-                      <div style={{ fontSize: '0.75rem', color: '#999' }}>{ev.type === 'torneo' ? 'Torneo / viaje' : 'Campus'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ev.type === 'torneo' ? 'Torneo / viaje' : 'Campus'}</div>
                     </td>
                     <td style={{ fontSize: '0.8rem' }}>
                       {ev.dates && ev.dates.length > 0
@@ -971,17 +971,17 @@ export function AdminPanel() {
                                       </td>
                                       <td>
                                         <strong>{(att.attendee_names || []).join(', ')}</strong><br />
-                                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{att.user_email}</span><br />
-                                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{att.user_email}</span><br />
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
                                       </td>
                                       <td>
                                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                                           <li>
                                             • <strong>{ev.title}</strong>
-                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {formatDateRanges(att.selected_days || [], { weekday: false })}]</span>
+                                            <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {formatDateRanges(att.selected_days || [], { weekday: false })}]</span>
                                           </li>
                                           {Object.entries(att.custom_data || {}).map(([k, v]) => (
-                                            <li key={k} style={{ color: '#555' }}>{k}: <strong>{String(v)}</strong></li>
+                                            <li key={k} style={{ color: 'var(--text-muted)' }}>{k}: <strong>{String(v)}</strong></li>
                                           ))}
                                         </ul>
                                       </td>
@@ -1006,14 +1006,14 @@ export function AdminPanel() {
                                       </td>
                                       <td style={{ textAlign: 'center' }}>
                                         {isFreeReg ? (
-                                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Gratis</span>
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Gratis</span>
                                         ) : !isLocal ? (
                                           <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
                                             {isPaidStripe ? '✅ Online' : 'Online'}
                                           </span>
                                         ) : (
                                           // Inscripciones antiguas sin pago online: se gestionan con el estado
-                                          <span style={{ fontSize: '0.75rem', color: '#888' }}>Sin pago online</span>
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Sin pago online</span>
                                         )}
                                       </td>
                                       <td>
@@ -1058,7 +1058,7 @@ export function AdminPanel() {
     <div className="admin-table-container">
       <div className="table-toolbar">
         <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
-        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', marginLeft: 'auto' }}>
+        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff', marginLeft: 'auto' }}>
           📥 Importar Catálogo Clupik
         </button>
       </div>

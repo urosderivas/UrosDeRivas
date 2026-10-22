@@ -29,18 +29,18 @@
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(var(--tint), 0.03);
+  border: 1px solid rgba(var(--tint), 0.1);
   border-radius: 12px;
   padding: 24px;
   text-align: center;
   backdrop-filter: blur(10px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(var(--shadow-rgb), calc(0.2 * var(--shadow-k)));
 }
 
 .stat-card h3 {
   font-size: 1rem;
-  color: #888;
+  color: var(--text-faint);
   margin: 0 0 10px 0;
   text-transform: uppercase;
 }
@@ -63,8 +63,8 @@
 /* Table */
 .admin-table-container {
   overflow-x: auto;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--panel-bg);
+  border: 1px solid rgba(var(--tint), 0.1);
   border-radius: 12px;
 }
 
@@ -76,12 +76,12 @@
 
 .admin-table th, .admin-table td {
   padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(var(--tint), 0.05);
 }
 
 .admin-table th {
-  background: rgba(255, 255, 255, 0.02);
-  color: #fff;
+  background: rgba(var(--tint), 0.02);
+  color: var(--text-primary);
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.85rem;
@@ -89,11 +89,11 @@
 }
 
 .admin-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--tint), 0.02);
 }
 
 .badge-action {
-  background: rgba(212, 175, 55, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--primary-color);
   padding: 4px 10px;
   border-radius: 20px;
@@ -104,16 +104,16 @@
 
 .monospace {
   font-family: monospace;
-  color: #888;
+  color: var(--text-faint);
   font-size: 0.85rem;
 }
 
 .metadata-box {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint), 0.05);
   padding: 8px;
   border-radius: 4px;
   font-size: 0.8rem;
-  color: #aaa;
+  color: var(--text-secondary);
   margin: 0;
   max-width: 300px;
   overflow-x: auto;
@@ -122,7 +122,7 @@
 .btn-icon.delete {
   background: none;
   border: none;
-  color: #ff4444;
+  color: var(--danger-text);
   cursor: pointer;
   padding: 8px;
   border-radius: 4px;
@@ -136,7 +136,7 @@
 
 .table-loading, .table-empty {
   text-align: center;
-  color: #888;
+  color: var(--text-faint);
   padding: 40px !important;
 }
 
@@ -164,7 +164,7 @@
   display: flex;
   gap: 15px;
   margin-bottom: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--tint), 0.1);
   padding-bottom: 1px;
 }
 
@@ -200,7 +200,7 @@
 }
 
 .tab-btn:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .tab-btn.active {
@@ -212,7 +212,7 @@
   padding: 15px;
   display: flex;
   justify-content: flex-end;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(var(--tint), 0.05);
 }
 
 .market-thumb {
@@ -227,7 +227,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #aaa;
+  color: var(--text-secondary);
 }
 
 .status-badge {
@@ -240,17 +240,17 @@
   font-weight: bold;
   text-transform: uppercase;
 }
-.status-badge.pending { background: rgba(255, 193, 7, 0.1); color: #ffeb3b; }
-.status-badge.processing { background: rgba(33, 150, 243, 0.1); color: #64b5f6; }
-.status-badge.completed { background: rgba(76, 175, 80, 0.1); color: #81c784; }
-.status-badge.cancelled { background: rgba(244, 67, 54, 0.1); color: #e57373; }
+.status-badge.pending { background: rgba(255, 193, 7, 0.1); color: var(--warning-text); }
+.status-badge.processing { background: rgba(33, 150, 243, 0.1); color: var(--info-text); }
+.status-badge.completed { background: rgba(76, 175, 80, 0.1); color: var(--success-text); }
+.status-badge.cancelled { background: rgba(244, 67, 54, 0.1); color: var(--danger-text); }
 .status-toggle { border: 1px solid currentColor; cursor: pointer; font-family: inherit; }
 .status-toggle:hover { filter: brightness(1.3); }
 
 .status-dropdown {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #fff;
+  background: rgba(var(--tint), 0.05);
+  border: 1px solid rgba(var(--tint), 0.1);
+  color: var(--text-primary);
   padding: 6px 10px;
   border-radius: 4px;
   font-family: inherit;
@@ -262,8 +262,8 @@
   border-color: var(--primary-color);
 }
 .status-dropdown option {
-  background: #111;
-  color: #fff;
+  background: var(--secondary-bg);
+  color: var(--text-primary);
 }
 
 /* Clickable Rows (Campus Admin) */
@@ -273,7 +273,7 @@
 }
 
 .clickable-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint), 0.05);
 }
 
 .clickable-row.expanded {
@@ -285,22 +285,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint), 0.05);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.9rem;
   font-weight: 700;
   width: fit-content;
-  color: var(--accent-gold);
+  color: var(--accent-text);
 }
 
 .clickable-row.expanded .attendee-count-badge {
   background: var(--accent-gold);
-  color: #000;
+  color: var(--on-accent);
 }
 
 .attendees-row {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--shadow-rgb), calc(0.2 * var(--shadow-k)));
 }
 
 .attendees-list {

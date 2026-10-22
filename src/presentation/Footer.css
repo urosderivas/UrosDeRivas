@@ -24,7 +24,7 @@
 
 .footer-logo {
   height: 60px;
-  filter: drop-shadow(0 0 8px rgba(255,255,255,0.2));
+  filter: drop-shadow(0 0 8px rgba(var(--tint), 0.2));
 }
 
 .footer-brand h3 {
@@ -48,7 +48,7 @@
 }
 
 .footer-socials a:hover {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   transform: scale(1.1);
 }
 
@@ -73,6 +73,6 @@
 
 .footer-copy {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-muted);
   margin-top: 1rem;
 }

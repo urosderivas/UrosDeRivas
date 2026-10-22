@@ -6,6 +6,7 @@ import { MyOrdersModal } from './MyOrdersModal';
 import './Navbar.css';
 import { clubLogoUrl } from '../utils/media';
 import { isStaff, ROLE_LABELS } from '../domain/roles';
+import { ThemeToggle } from './components/ThemeToggle';
 
 export function Navbar() {
   const { user, signOut, cart } = useStore();
@@ -52,10 +53,13 @@ export function Navbar() {
           )}
         </div>
 
-        <Link to="/market?carrito=1" onClick={() => setIsOpen(false)} className="nav-cart" title="Carrito" aria-label="Carrito">
-          <ShoppingCart size={22} />
-          {cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}
-        </Link>
+        <div className="nav-icons">
+          <ThemeToggle />
+          <Link to="/market?carrito=1" onClick={() => setIsOpen(false)} className="nav-cart" title="Carrito" aria-label="Carrito">
+            <ShoppingCart size={22} />
+            {cartCount > 0 && <span className="nav-cart-badge">{cartCount}</span>}
+          </Link>
+        </div>
 
         <button className="mobile-toggle" onClick={() => setIsOpen(!isOpen)}>
           {isOpen ? <X size={24} /> : <Menu size={24} />}

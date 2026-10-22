@@ -8,10 +8,10 @@
 .coupons-table td {
   padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--tint), 0.08);
 }
 
 .coupons-table th {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   font-weight: 700;
 }

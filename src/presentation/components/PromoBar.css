@@ -1,6 +1,6 @@
 .promo-bar {
   background: var(--accent-gold);
-  color: #000;
+  color: var(--on-accent);
   text-align: center;
   font-size: 0.8rem;
   font-weight: 700;

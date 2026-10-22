@@ -213,16 +213,16 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
         <div className="form-group">
           <label>Fechas *</label>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#999' }}>Del</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Del</span>
             <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} style={{ flex: 1, minWidth: '140px' }} />
-            <span style={{ fontSize: '0.85rem', color: '#999' }}>al</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>al</span>
             <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} style={{ flex: 1, minWidth: '140px' }} />
             <button type="button" className="btn-modal-save" style={{ padding: '8px 16px' }} onClick={handleAddRange} disabled={!rangeFrom || !rangeTo}>
               <Plus size={16} /> Añadir días
             </button>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#999' }}>O un día suelto</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>O un día suelto</span>
             <input type="date" value={newDateInput} onChange={e => setNewDateInput(e.target.value)} style={{ flex: 1, minWidth: '140px' }} />
             <button type="button" className="btn-modal-save" style={{ padding: '8px 16px' }} onClick={handleAddDate} disabled={!newDateInput}>
               <Plus size={16} /> Añadir
@@ -232,26 +232,26 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
             {dates.map(d => (
               <span key={d} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '4px',
-                background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.3)',
+                background: 'rgba(var(--accent-rgb), 0.15)', color: 'var(--accent-text)', border: '1px solid rgba(var(--accent-rgb), 0.3)',
                 padding: '4px 10px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: 600,
               }}>
                 {new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                 <button type="button" onClick={() => handleRemoveDate(d)}
-                  style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', padding: 0 }}>
+                  style={{ background: 'none', border: 'none', color: 'var(--accent-text)', cursor: 'pointer', padding: 0 }}>
                   <X size={14} />
                 </button>
               </span>
             ))}
           </div>
-          {dates.length === 0 && <p style={{ color: '#888', fontSize: '0.8rem', margin: '4px 0 0' }}>Añade al menos una fecha.</p>}
+          {dates.length === 0 && <p style={{ color: 'var(--text-faint)', fontSize: '0.8rem', margin: '4px 0 0' }}>Añade al menos una fecha.</p>}
         </div>
 
         {/* Pricing */}
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '16px' }}>
+        <div style={{ background: 'rgba(var(--tint), 0.03)', border: '1px solid rgba(var(--tint), 0.08)', borderRadius: '10px', padding: '16px' }}>
           <label style={{ fontWeight: 700, marginBottom: '12px', display: 'block' }}>💰 Precios</label>
           {type === 'torneo' ? (
             <div>
-              <p style={{ color: '#aaa', fontSize: '0.85rem', margin: '0 0 12px' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 12px' }}>
                 Precio por jugador para todo el evento (cada jugador se inscribe por separado, sin descuentos).
                 Si hay varios precios (p. ej. según use el autobús), añade una opción por cada uno y la familia elige.
               </p>
@@ -270,18 +270,18 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
               ))}
               {priceOptions.length < MAX_PRICE_OPTIONS && (
                 <button type="button" onClick={() => setPriceOptions([...priceOptions, { label: '', price: '' }])}
-                  style={{ background: 'none', border: '1px dashed rgba(255,255,255,0.2)', color: '#aaa', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                  style={{ background: 'none', border: '1px dashed rgba(var(--tint), 0.2)', color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
                   + Añadir otra opción de precio
                 </button>
               )}
-              <p style={{ color: '#888', fontSize: '0.8rem', margin: '10px 0 0' }}>
+              <p style={{ color: 'var(--text-faint)', fontSize: '0.8rem', margin: '10px 0 0' }}>
                 Para becas o precios especiales, crea cupones desde la tarjeta del evento (botón 🎟️) una vez guardado.
               </p>
             </div>
           ) : (
             <>
               {pricesConverted && (
-                <p style={{ color: '#f59e0b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                <p style={{ color: 'var(--warning-text)', fontSize: '0.85rem', margin: '0 0 12px' }}>
                   Precios pasados a tabla desde los descuentos que tenía. Revísalos y guarda.
                 </p>
               )}
@@ -300,7 +300,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
         </div>
 
         {/* Custom fields */}
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '16px' }}>
+        <div style={{ background: 'rgba(var(--tint), 0.03)', border: '1px solid rgba(var(--tint), 0.08)', borderRadius: '10px', padding: '16px' }}>
           <label style={{ fontWeight: 700, marginBottom: '12px', display: 'block' }}>📋 Campos Personalizados (Inscripción)</label>
           {customFields.map((cf, i) => (
             <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
@@ -311,7 +311,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
                 <option value="text">Texto</option>
                 <option value="categorical">Opciones</option>
               </select>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#aaa', whiteSpace: 'nowrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                 <input type="checkbox" checked={cf.required} onChange={e => updateCustomField(i, { required: e.target.checked })} /> Req.
               </label>
               <button type="button" onClick={() => removeCustomField(i)}
@@ -329,7 +329,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
             );
           })}
           <button type="button" onClick={addCustomField}
-            style={{ background: 'none', border: '1px dashed rgba(255,255,255,0.2)', color: '#aaa', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
+            style={{ background: 'none', border: '1px dashed rgba(var(--tint), 0.2)', color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
             + Añadir campo
           </button>
         </div>

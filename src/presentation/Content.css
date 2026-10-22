@@ -14,7 +14,7 @@
   letter-spacing: 2px;
   cursor: pointer;
   background: var(--accent-turquoise);
-  color: #000;
+  color: var(--on-accent);
   border: none;
   transition: transform 0.3s;
 }
@@ -43,7 +43,7 @@
 }
 
 .content-card-actions button:hover { transform: scale(1.15); }
-.content-card-actions .edit { background: rgba(255, 255, 255, 0.9); color: #000; }
+.content-card-actions .edit { background: rgba(var(--tint), 0.9); color: var(--on-accent); }
 .content-card-actions .delete { background: #ff4444; color: #fff; }
 
 .content-image-preview {
@@ -52,7 +52,7 @@
   object-fit: contain;
   border-radius: 10px;
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--tint), 0.04);
 }
 
 .content-empty {

@@ -1,17 +1,86 @@
 /* src/index.css */
-:root {
+:root,
+.theme-dark {
+  /* Tema oscuro (el de siempre): negro y dorado */
   --primary-bg: #000000;
   --secondary-bg: #111111;
+  --surface: #1a1a1a;
+  --surface-2: #333333;
   --text-primary: #ffffff;
   --text-secondary: #aaaaaa;
+  --text-soft: #cccccc;
+  --text-faint: #888888;
+  --text-muted: #666666;
+  --border: #333333;
+  --border-strong: #666666;
+  --separator: #eeeeee;
   --accent-gold: #d4af37;
+  --accent-strong: #e6c855;
+  --accent-text: #d4af37;
   --accent-turquoise: #40e0d0;
-  
+  --on-accent: #000000;
+  --danger-text: #ff6b6b;
+  --success-text: #10b981;
+  --warning-text: #f59e0b;
+  --info-text: #64b5f6;
+  --panel-bg: rgba(0, 0, 0, 0.5);
+  --banner-bg: rgba(20, 20, 30, 0.95);
+  /* Canales RGB para transparencias: rgba(var(--tint), 0.1) */
+  --tint: 255, 255, 255;
+  --accent-rgb: 212, 175, 55;
+  --shadow-rgb: 0, 0, 0;
+  --shadow-k: 1;
+  color-scheme: dark;
+}
+
+/* Tema claro: los colores de la segunda equipación (turquesa, blanco y negro) */
+:root[data-theme="light"] {
+  --primary-bg: #f2f7f7;
+  --secondary-bg: #ffffff;
+  --surface: #e8f0f0;
+  --surface-2: #d8e4e5;
+  --text-primary: #0d1a1e;
+  --text-secondary: #4f6166;
+  --text-soft: #24363b;
+  --text-faint: #63757a;
+  --text-muted: #7b8a8e;
+  --border: #cfdcdd;
+  --border-strong: #9fb2b4;
+  --separator: #9fb2b4;
+  --accent-gold: #2fb3b0;
+  --accent-strong: #249a97;
+  --accent-text: #0b6e6b;
+  --accent-turquoise: #0b6e6b;
+  --on-accent: #06211f;
+  --danger-text: #c62828;
+  --success-text: #047857;
+  --warning-text: #b45309;
+  --info-text: #1565c0;
+  --panel-bg: #ffffff;
+  --banner-bg: rgba(255, 255, 255, 0.97);
+  --tint: 13, 26, 30;
+  --accent-rgb: 47, 179, 176;
+  --shadow-rgb: 13, 26, 30;
+  --shadow-k: 0.35;
+  color-scheme: light;
+}
+
+/* Zonas que siempre van en oscuro (texto blanco sobre fotos); con el tema claro
+   mantienen el turquesa como color de acento */
+.theme-dark { color: var(--text-primary); }
+:root[data-theme="light"] .theme-dark {
+  --accent-gold: #3cc8c4;
+  --accent-strong: #5fd6d2;
+  --accent-text: #5fd6d2;
+  --on-accent: #06211f;
+  --accent-rgb: 60, 200, 196;
+}
+
+:root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: dark;
   color: var(--text-primary);
   background-color: var(--primary-bg);
 

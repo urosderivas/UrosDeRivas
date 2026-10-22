@@ -12,10 +12,10 @@ const adapter = new AppointmentsAdapter();
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const SERVICES = ['Fisioterapia', 'Recuperación'];
 const STATUS: Record<AppointmentStatus, { label: string; color: string }> = {
-  booked: { label: 'Reservada', color: '#d4af37' },
-  done: { label: 'Hecha', color: '#10b981' },
+  booked: { label: 'Reservada', color: 'var(--accent-text)' },
+  done: { label: 'Hecha', color: 'var(--success-text)' },
   no_show: { label: 'No vino', color: '#e53935' },
-  cancelled: { label: 'Cancelada', color: '#777' },
+  cancelled: { label: 'Cancelada', color: 'var(--text-muted)' },
 };
 
 const SECTION_LABELS = { agenda: 'Agenda', weeks: 'Semana a semana', settings: 'Horario habitual y ajustes', blocks: 'Días cerrados' };

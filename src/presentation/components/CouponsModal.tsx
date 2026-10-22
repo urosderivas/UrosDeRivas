@@ -20,9 +20,9 @@ type CouponState = { label: string; color: string; free: boolean };
 function couponState(coupon: EventCoupon, registrations: any[]): CouponState {
   const reg = coupon.stripe_session_id ? registrations.find(r => r.stripe_session_id === coupon.stripe_session_id) : null;
   const who = reg ? (reg.attendee_names || []).join(', ') || reg.user_email : '';
-  if (reg?.status === 'completed') return { label: `Usado · ${who}`, color: '#10b981', free: false };
-  if (reg?.status === 'pending') return { label: `Pago en curso · ${who}`, color: '#f59e0b', free: false };
-  return { label: 'Libre', color: '#aaa', free: true };
+  if (reg?.status === 'completed') return { label: `Usado · ${who}`, color: 'var(--success-text)', free: false };
+  if (reg?.status === 'pending') return { label: `Pago en curso · ${who}`, color: 'var(--warning-text)', free: false };
+  return { label: 'Libre', color: 'var(--text-secondary)', free: true };
 }
 
 /** Cupones de un torneo o viaje: cada código vale una vez y fija el precio final. Solo admins. */
@@ -82,7 +82,7 @@ export function CouponsModal({ event, onClose }: { event: Event; onClose: () => 
 
   return (
     <Modal isOpen onClose={onClose} title={`Cupones · ${event.title}`} icon={<Ticket size={22} />} maxWidth="720px">
-      <p style={{ color: '#aaa', fontSize: '0.9rem', marginTop: 0 }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: 0 }}>
         Cada código vale <b>una sola vez</b> y solo para este evento. Quien lo use paga el precio del cupón en vez del normal
         (0 € = gratis). Si el pago se cancela o caduca, el cupón vuelve a quedar libre.
       </p>
@@ -105,8 +105,8 @@ export function CouponsModal({ event, onClose }: { event: Event; onClose: () => 
 
       {error && <p className="modal-error">{error}</p>}
 
-      {loading ? <p style={{ color: '#aaa' }}>Cargando…</p> : coupons.length === 0 ? (
-        <p style={{ color: '#aaa' }}>Este evento aún no tiene cupones.</p>
+      {loading ? <p style={{ color: 'var(--text-secondary)' }}>Cargando…</p> : coupons.length === 0 ? (
+        <p style={{ color: 'var(--text-secondary)' }}>Este evento aún no tiene cupones.</p>
       ) : (
         <>
           {freeCoupons.length > 1 && (
@@ -128,7 +128,7 @@ export function CouponsModal({ event, onClose }: { event: Event; onClose: () => 
                       <td style={{ fontFamily: 'monospace', fontSize: '1rem', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
                         {c.code}
                         <button type="button" title="Copiar" onClick={() => copy(c.code, c.id)}
-                          style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', marginLeft: '6px' }}>
+                          style={{ background: 'none', border: 'none', color: 'var(--accent-text)', cursor: 'pointer', marginLeft: '6px' }}>
                           {copied === c.id ? '✓' : <Copy size={14} />}
                         </button>
                       </td>

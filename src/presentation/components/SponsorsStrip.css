@@ -1,6 +1,6 @@
 .sponsors-strip {
-  background: #080808;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--secondary-bg);
+  border-top: 1px solid rgba(var(--tint), 0.06);
   padding: 2.5rem 0 3rem;
 }
 
@@ -22,7 +22,7 @@
 }
 
 .sponsors-strip-head a {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 1px;
@@ -30,7 +30,7 @@
   white-space: nowrap;
 }
 
-.sponsors-strip-head a:hover { color: #fff; }
+.sponsors-strip-head a:hover { color: var(--text-primary); }
 
 /* Los bordes se difuminan para que los logos entren y salgan suavemente */
 .sponsors-strip-viewport {
