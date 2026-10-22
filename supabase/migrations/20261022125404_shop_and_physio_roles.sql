@@ -2,13 +2,10 @@
 --
 -- - 'tienda': gestiona el catálogo, las fotos de los productos y los pedidos (nada más).
 -- - 'fisio': fisioterapeuta o recuperador; gestiona su calendario de citas
---   (tablas en 20261022130100_appointments.sql).
+--   (tablas en 20261022125858_appointments.sql y siguientes).
 -- - set_user_role: un admin cambia el rol de otro usuario sin SQL. Nadie cambia el suyo,
 --   para que un admin no se quede fuera por error.
-
-alter table public.user_roles drop constraint if exists user_roles_role_check;
-alter table public.user_roles add constraint user_roles_role_check
-  check (role = any (array['admin', 'coach', 'tienda', 'fisio', 'user']));
+-- Borrar pedidos sigue siendo solo de admins (delete_admin_order no cambia).
 
 -- ¿Tiene el usuario actual alguno de estos roles? (para políticas y funciones)
 create or replace function public.has_role(roles text[])
@@ -68,21 +65,6 @@ alter policy "Admins can read all orders" on public.orders
   using (public.has_role(array['admin', 'tienda']));
 alter policy "Admins can update orders" on public.orders
   using (public.has_role(array['admin', 'tienda']));
-
-create or replace function public.delete_admin_order(target_order_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path to 'public'
-as $function$
-begin
-  if not public.has_role(array['admin', 'tienda']) then
-    raise exception 'Solo un administrador o el gestor de la tienda pueden borrar pedidos.';
-  end if;
-
-  delete from orders where id = target_order_id;
-end;
-$function$;
 
 -- Tienda: fotos de los productos (mismo bucket que noticias y patrocinadores, pero
 -- el gestor de la tienda solo toca la carpeta products/)

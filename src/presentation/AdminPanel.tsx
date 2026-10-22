@@ -570,9 +570,12 @@ export function AdminPanel() {
                         <button className="btn-secondary" onClick={() => generateReceipt(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                           📄 PDF
                         </button>
-                        <button onClick={() => handleDeleteOrder(groupOrders.map(o => o.id), `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
-                          <Trash2 size={16} />
-                        </button>
+                        {/* Borrar pedidos es solo de admins; la tienda cambia su estado */}
+                        {user?.role === 'admin' && (
+                          <button onClick={() => handleDeleteOrder(groupOrders.map(o => o.id), `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )
