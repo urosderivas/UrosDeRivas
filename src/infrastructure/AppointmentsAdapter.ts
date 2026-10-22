@@ -7,12 +7,13 @@ function friendly(error: any): Error {
   if (msg.includes('appointment_providers_user_id_key')) return new Error('Esa persona ya tiene un calendario.');
   if (msg.includes('appointment_providers_hours_check')) return new Error('Revisa el horario: cada tramo tiene que empezar antes de acabar.');
   if (msg.includes('appointment_day_hours_ranges_check')) return new Error('Revisa el horario: cada tramo tiene que empezar antes de acabar y no solaparse.');
+  if (msg.includes('appointment_providers_price_check')) return new Error('El precio tiene que estar entre 0 y 1000 €.');
   if (msg.includes('appointment_blocks_range_check')) return new Error('El bloqueo tiene que acabar después de empezar (y durar como mucho 120 días).');
   if (msg.includes('row-level security')) return new Error('No tienes permiso para hacer esto.');
   return new Error(msg);
 }
 
-const PROVIDER_COLUMNS = 'id, user_id, name, service, description, duration_minutes, weekly_hours, min_notice_hours, max_days_ahead, cancel_hours, active';
+const PROVIDER_COLUMNS = 'id, user_id, name, service, description, duration_minutes, weekly_hours, min_notice_hours, max_days_ahead, cancel_hours, active, price';
 
 export type ProviderDraft = Omit<AppointmentProvider, 'id'>;
 
@@ -49,6 +50,16 @@ export class AppointmentsAdapter {
     return (data || []).map((r: any) => r.starts_at);
   }
 
+  /** El fisio o un admin apuntan una cita desde el panel (sin dueño y sin pago online). */
+  async addByStaff(providerId: string, startsAt: string, patientName: string, notes: string): Promise<string> {
+    const { data, error } = await supabase.rpc('add_staff_appointment', {
+      p_provider_id: providerId, p_starts_at: startsAt, p_patient_name: patientName, p_notes: notes || null,
+    });
+    if (error) throw friendly(error);
+    return data as string;
+  }
+
+  /** Cita gratis reservada desde la página Citas (las de pago van por StripeAdapter). */
   async book(providerId: string, startsAt: string, patientName: string, notes: string): Promise<string> {
     const { data, error } = await supabase.rpc('book_appointment', {
       p_provider_id: providerId, p_starts_at: startsAt, p_patient_name: patientName, p_notes: notes || null,

@@ -68,6 +68,7 @@
 .appt-agenda-time { font-weight: 800; }
 .appt-agenda-who { display: flex; flex-direction: column; }
 .appt-agenda-who span { color: var(--text-secondary); font-size: 0.85rem; }
+.appt-paid { color: #10b981 !important; font-weight: 700; }
 .appt-agenda-notes { font-style: italic; white-space: pre-line; }
 .appt-agenda-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; font-size: 0.85rem; font-weight: 700; }
 .appt-agenda-actions button {

@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, Clock, CalendarDays } from 'lucide-react';
 import { useStore } from './store';
 import { Appointment, AppointmentProvider } from '../domain/entities';
 import { AppointmentsAdapter } from '../infrastructure/AppointmentsAdapter';
+import { StripeAdapter } from '../infrastructure/StripeAdapter';
 import { addDays, formatDayLong, formatMonth, isoWeekday, madridDay, madridTime, madridToday } from '../utils/madrid';
 import './Appointments.css';
 
 const adapter = new AppointmentsAdapter();
+const stripe = new StripeAdapter();
+const euros = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(2)} €`;
+
+/** Apartada para pagar y el pago aún puede llegar (hasta hold_until). */
+export const awaitingPayment = (a: Appointment) =>
+  a.status === 'booked' && a.payment === 'pending' && !!a.hold_until && new Date(a.hold_until).getTime() > Date.now();
+/** Apartada para pagar, pero el pago no se completó a tiempo. */
+export const paymentLapsed = (a: Appointment) =>
+  a.payment === 'failed' || (a.payment === 'pending' && !awaitingPayment(a));
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -30,6 +40,9 @@ export function Appointments() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<AppointmentProvider | null>(null);
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
+  const [notice, setNotice] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const loadMine = async () => {
     if (!user) { setMyAppointments([]); return; }
@@ -45,6 +58,22 @@ export function Appointments() {
 
   useEffect(() => { loadMine(); }, [user?.id]);
 
+  // Vuelta de Stripe: pagada (el aviso de Stripe la confirma en unos segundos) o cancelada
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('success')) {
+      setNotice('✅ Pago hecho: tu cita está reservada. La tienes abajo en "Mis citas".');
+      const timers = [2000, 6000].map(ms => setTimeout(loadMine, ms));
+      navigate(location.pathname, { replace: true });
+      return () => timers.forEach(clearTimeout);
+    }
+    if (params.get('canceled')) {
+      setNotice('Has cancelado el pago. La hora queda libre y no se ha reservado nada.');
+      stripe.cancelPendingCheckout().finally(loadMine);
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.search, user?.id]);
+
   return (
     <div className="appointments-page">
       <div className="events-header">
@@ -52,6 +81,7 @@ export function Appointments() {
       </div>
 
       {error && <p className="appt-error">{error}</p>}
+      {notice && <p className="appt-notice">{notice}</p>}
 
       {selected ? (
         <Booking provider={selected} onBack={() => setSelected(null)} onBooked={loadMine} />
@@ -65,7 +95,7 @@ export function Appointments() {
             <button key={p.id} className="appt-provider-card" onClick={() => setSelected(p)}>
               <span className="appt-provider-service">{p.service}</span>
               <span className="appt-provider-name">{p.name}</span>
-              <span className="appt-provider-duration"><Clock size={15} /> {p.duration_minutes} min</span>
+              <span className="appt-provider-duration"><Clock size={15} /> {p.duration_minutes} min{p.price > 0 ? ` · ${euros(p.price)}` : ''}</span>
               {p.description && <span className="appt-provider-desc">{p.description}</span>}
               <span className="appt-provider-cta">Ver horarios <ChevronRight size={16} /></span>
             </button>
@@ -134,6 +164,11 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
     if (!slot) return;
     setSaving(true); setError('');
     try {
+      if (provider.price > 0) {
+        // Se aparta la hora y se paga en Stripe; al volver, la cita sale en "Mis citas"
+        window.location.href = await stripe.createAppointmentCheckout({ providerId: provider.id, startsAt: slot, patientName, notes });
+        return;
+      }
       await adapter.book(provider.id, slot, patientName, notes);
       setBooked(slot);
       onBooked();
@@ -164,6 +199,7 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
         <span className="appt-provider-service">{provider.service}</span>
         <h2>{provider.name}</h2>
         <p className="appt-provider-duration"><Clock size={15} /> {provider.duration_minutes} min</p>
+        {provider.price > 0 && <p className="appt-info-price">{euros(provider.price)} <span>· se paga al reservar</span></p>}
         {provider.description && <p className="appt-info-desc">{provider.description}</p>}
       </aside>
 
@@ -208,7 +244,10 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
               <label>Nota para {provider.name} (opcional)
                 <textarea value={notes} maxLength={500} rows={3} onChange={e => setNotes(e.target.value)} placeholder="Motivo de la cita" />
               </label>
-              <button type="submit" className="appt-btn" disabled={saving}>{saving ? 'Reservando…' : 'Reservar cita'}</button>
+              <button type="submit" className="appt-btn" disabled={saving}>
+                {saving ? (provider.price > 0 ? 'Abriendo el pago…' : 'Reservando…') : provider.price > 0 ? `Pagar ${euros(provider.price)} y reservar` : 'Reservar cita'}
+              </button>
+              {provider.price > 0 && <p className="appt-muted">Te guardamos la hora mientras pagas con tarjeta (30 minutos como mucho).</p>}
             </form>
           ) : (
             <p className="appt-login">Para reservar, <Link to="/login?next=/citas">inicia sesión o crea una cuenta</Link>.</p>
@@ -224,7 +263,7 @@ function MyAppointments({ appointments, onChange }: { appointments: Appointment[
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const now = Date.now();
-  const upcoming = appointments.filter(a => a.status === 'booked' && new Date(a.starts_at).getTime() > now).reverse();
+  const upcoming = appointments.filter(a => a.status === 'booked' && !paymentLapsed(a) && new Date(a.starts_at).getTime() > now).reverse();
   const past = appointments.filter(a => !upcoming.includes(a)).slice(0, 10);
 
   const handleCancel = async (a: Appointment) => {
@@ -242,11 +281,12 @@ function MyAppointments({ appointments, onChange }: { appointments: Appointment[
           <b>{formatDayLong(madridDay(a.starts_at))}, {madridTime(a.starts_at)}</b>
           <span>{a.provider ? `${a.provider.service} · ${a.provider.name}` : ''} · {a.patient_name}</span>
         </div>
-        {canCancel ? (
-          lateToCancel
+        {!canCancel ? <span className="appt-status">{paymentLapsed(a) ? 'Sin pagar' : STATUS_LABELS[a.status]}</span>
+          : awaitingPayment(a) ? <span className="appt-status">Pago pendiente</span>
+          : a.payment === 'paid' ? <span className="appt-muted">Pagada ({euros(Number(a.amount))}). Para cancelarla, habla con el club.</span>
+          : lateToCancel
             ? <span className="appt-muted" title="Fuera de plazo para cancelar desde la web">Habla con el club para cancelar</span>
-            : <button className="appt-cancel" disabled={busy === a.id} onClick={() => handleCancel(a)}>Cancelar</button>
-        ) : <span className="appt-status">{STATUS_LABELS[a.status]}</span>}
+            : <button className="appt-cancel" disabled={busy === a.id} onClick={() => handleCancel(a)}>Cancelar</button>}
       </li>
     );
   };

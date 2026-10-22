@@ -109,6 +109,18 @@ export class StripeAdapter implements PaymentPort {
     return data.url;
   }
 
+  /** Cita de pago: aparta el hueco y devuelve la página de pago de Stripe. */
+  async createAppointmentCheckout(appointment: { providerId: string; startsAt: string; patientName: string; notes: string }): Promise<string> {
+    const returnUrl = window.location.href.split('?')[0];
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { checkoutType: 'appointment', appointment: { ...appointment, notes: appointment.notes || null }, returnUrl }
+    });
+    if (error) throw new Error(await functionErrorMessage(error, "No se pudo iniciar el pago de la cita."));
+    if (!data?.url) throw new Error("Url de Stripe inválida.");
+    rememberSession(data.sessionId);
+    return data.url;
+  }
+
   /** El usuario ha vuelto de Stripe sin pagar: cierra esa sesión y cancela lo pendiente. */
   async cancelPendingCheckout(): Promise<void> {
     let sessionId: string | null = null;

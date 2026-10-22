@@ -199,16 +199,102 @@ async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminC
   }
 
   // Lo mismo que hará el webhook con checkout.session.expired; solo filas pendientes
-  const [ordersResult, registrationsResult] = await Promise.all([
+  const [ordersResult, registrationsResult, appointmentsResult] = await Promise.all([
     supabaseAdminClient.from('orders').update({ status: 'cancelled' })
       .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
     supabaseAdminClient.from('event_registrations').update({ status: 'cancelled' })
       .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
+    supabaseAdminClient.from('appointments').update({ status: 'cancelled', payment: 'failed' })
+      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('payment', 'pending'),
   ]);
-  const dbError = ordersResult.error || registrationsResult.error;
+  const dbError = ordersResult.error || registrationsResult.error || appointmentsResult.error;
   if (dbError) throw new Error("DB update failed: " + dbError.message);
 
   return new Response(JSON.stringify({ cancelled: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+}
+
+const madridWhen = new Intl.DateTimeFormat('es-ES', {
+  timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+});
+
+/**
+ * Cita de fisio o recuperación de pago: se aparta el hueco (insert_user_appointment, que
+ * comprueba que siga libre) y se abre el pago. El webhook la confirma o la cancela.
+ */
+async function appointmentCheckout(body: any, user: { id: string; email?: string }, admin: any): Promise<Response> {
+  const appt = body.appointment;
+  if (
+    !appt || typeof appt.providerId !== 'string' || typeof appt.startsAt !== 'string' ||
+    typeof appt.patientName !== 'string' || (appt.notes != null && typeof appt.notes !== 'string')
+  ) {
+    throw new Error("Datos de la cita no válidos.");
+  }
+  const safeReturnUrl = validateReturnUrl(body.returnUrl);
+
+  // Un pago de cita a medias (otra pestaña, o volvió atrás sin cancelar) se cierra antes de
+  // abrir otro, y su hueco queda libre; si ya se pagó, no se abre uno nuevo.
+  const { data: open, error: openError } = await admin.from('appointments')
+    .select('id, stripe_session_id')
+    .eq('user_id', user.id).eq('payment', 'pending').eq('status', 'booked');
+  if (openError) throw new Error("No se pudo comprobar tus citas.");
+  for (const row of open || []) {
+    if (typeof row.stripe_session_id === 'string' && row.stripe_session_id.startsWith('cs_')) {
+      const previous = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
+      if (previous.status === 'complete') {
+        throw new Error("Tu pago anterior de una cita ya se ha completado. En unos segundos aparecerá en \"Mis citas\".");
+      }
+      if (previous.status === 'open') await stripe.checkout.sessions.expire(row.stripe_session_id);
+    }
+    await admin.from('appointments').update({ status: 'cancelled', payment: 'failed' }).eq('id', row.id).eq('payment', 'pending');
+  }
+
+  const { data: appointmentId, error: holdError } = await admin.rpc('insert_user_appointment', {
+    p_user_id: user.id, p_provider_id: appt.providerId, p_starts_at: appt.startsAt,
+    p_patient_name: appt.patientName, p_notes: appt.notes ?? null, p_pay: true,
+  });
+  if (holdError || !appointmentId) throw new Error(holdError?.message || "No se pudo reservar la cita.");
+
+  const release = () => admin.from('appointments').update({ status: 'cancelled', payment: 'failed' })
+    .eq('id', appointmentId).eq('payment', 'pending');
+  try {
+    const { data: row, error: rowError } = await admin.from('appointments')
+      .select('amount, starts_at, patient_name, provider:appointment_providers(name, service)')
+      .eq('id', appointmentId).single();
+    if (rowError || !row) throw new Error("No se pudo preparar el pago de la cita.");
+    const amount = roundCents(Number(row.amount));
+    if (!Number.isFinite(amount) || amount < 0.5) throw new Error("El importe mínimo para pagar con tarjeta es 0,50 €.");
+
+    const session = await stripe.checkout.sessions.create({
+      customer_email: user.email || undefined,
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: `Cita: ${row.provider.service} con ${row.provider.name}`,
+            description: `${madridWhen.format(new Date(row.starts_at))} | ${row.patient_name}`,
+          },
+          unit_amount: Math.round(amount * 100),
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      expires_at: checkoutExpiresAt(),
+      success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${safeReturnUrl}?canceled=true`,
+      metadata: { userId: user.id, appointmentId, type: 'appointment' },
+    });
+
+    const { error: linkError } = await admin.from('appointments').update({ stripe_session_id: session.id }).eq('id', appointmentId);
+    if (linkError) {
+      await stripe.checkout.sessions.expire(session.id);
+      throw new Error("No se pudo preparar el pago de la cita.");
+    }
+    return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+  } catch (err) {
+    await release();
+    throw err;
+  }
 }
 
 serve(async (req: Request) => {
@@ -245,6 +331,10 @@ serve(async (req: Request) => {
     // y sus pedidos o inscripciones pendientes pasan a cancelados al momento.
     if (body.cancelSessionId !== undefined) {
       return await cancelCheckout(body.cancelSessionId, user.id, supabaseAdminClient);
+    }
+
+    if (body.checkoutType === 'appointment') {
+      return await appointmentCheckout(body, user, supabaseAdminClient);
     }
 
     const { checkoutType, cartItems, returnUrl, campusRegistration } = body;

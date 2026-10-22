@@ -4,6 +4,7 @@ import { useStore } from './store';
 import { Appointment, AppointmentBlock, AppointmentProvider, AppointmentStatus, DayHours, WeeklyHours } from '../domain/entities';
 import { AppointmentsAdapter, ProviderDraft } from '../infrastructure/AppointmentsAdapter';
 import { addDays, formatDayLong, isoWeekday, madridDay, madridTime, madridToDate, madridToday } from '../utils/madrid';
+import { awaitingPayment, paymentLapsed } from './Appointments';
 import './AppointmentsAdmin.css';
 
 const adapter = new AppointmentsAdapter();
@@ -30,6 +31,7 @@ const emptyDraft = (userId: string | null, name = ''): ProviderDraft => ({
   max_days_ahead: 30,
   cancel_hours: 24,
   active: true,
+  price: 0,
 });
 
 type Ranges = [string, string][];
@@ -161,6 +163,8 @@ function ProviderSettings({ draft, id, canDelete, owners, onSaved, onDeleted }: 
   const validate = (): string => {
     if (!form.name.trim()) return 'Pon el nombre que verán los usuarios.';
     if (!form.service.trim()) return 'Pon el servicio (por ejemplo Fisioterapia).';
+    if (!Number.isFinite(form.price) || form.price < 0 || form.price > 1000) return 'El precio tiene que estar entre 0 y 1000 €.';
+    if (form.price > 0 && form.price < 0.5) return 'Con tarjeta se cobra como mínimo 0,50 €.';
     for (const [day, ranges] of Object.entries(form.weekly_hours)) {
       const problem = rangesProblem(DAY_NAMES[Number(day) - 1], ranges);
       if (problem) return problem;
@@ -238,10 +242,16 @@ function ProviderSettings({ draft, id, canDelete, owners, onSaved, onDeleted }: 
             {[7, 14, 21, 30, 45, 60, 90].map(d => <option key={d} value={d}>{d} días vista</option>)}
           </select>
         </label>
+        <label className="appt-admin-field">Precio por cita (€)
+          <input type="number" min={0} max={1000} step="0.01" value={form.price}
+            onChange={e => set('price', e.target.value === '' ? 0 : Number(e.target.value))} />
+          <span className="appt-admin-muted">{form.price > 0 ? 'Se paga con tarjeta al reservar.' : '0 = gratis, sin pago.'}</span>
+        </label>
         <label className="appt-admin-field">El usuario puede cancelar hasta
           <select value={form.cancel_hours} onChange={e => set('cancel_hours', Number(e.target.value))}>
             {[0, 2, 6, 12, 24, 48].map(h => <option key={h} value={h}>{h === 0 ? 'La misma hora' : `${h} h antes`}</option>)}
           </select>
+          {form.price > 0 && <span className="appt-admin-muted">Solo las gratis: las pagadas se cancelan hablando con el club.</span>}
         </label>
       </div>
 
@@ -443,7 +453,8 @@ function Agenda({ provider }: { provider: AppointmentProvider }) {
   useEffect(() => { load(); }, [weekStart, provider.id]);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const visible = appointments.filter(a => showCancelled || a.status !== 'cancelled');
+  // Un apartado que no se llegó a pagar cuenta como cancelado
+  const visible = appointments.filter(a => showCancelled || (a.status !== 'cancelled' && !paymentLapsed(a)));
 
   const act = async (fn: () => Promise<void>) => {
     setError('');
@@ -476,11 +487,14 @@ function Agenda({ provider }: { provider: AppointmentProvider }) {
                     <div className="appt-agenda-who">
                       <b>{a.patient_name}</b>
                       <span>{a.user_email || 'Apuntada por el club'}</span>
+                      {a.payment === 'paid' && <span className="appt-paid">Pagada {Number(a.amount).toFixed(2).replace('.', ',')} €{a.status === 'cancelled' ? ' · devolver el pago en Stripe' : ''}</span>}
                       {a.notes && <span className="appt-agenda-notes">{a.notes}</span>}
                     </div>
                     <div className="appt-agenda-actions">
-                      <span style={{ color: STATUS[a.status].color }}>{STATUS[a.status].label}</span>
-                      {a.status === 'booked' ? (
+                      {awaitingPayment(a) ? <span className="appt-admin-muted">Pagando…</span>
+                        : paymentLapsed(a) ? <span style={{ color: STATUS.cancelled.color }}>Sin pagar</span>
+                        : <span style={{ color: STATUS[a.status].color }}>{STATUS[a.status].label}</span>}
+                      {awaitingPayment(a) || paymentLapsed(a) ? null : a.status === 'booked' ? (
                         <>
                           <button onClick={() => act(() => adapter.setStatus(a.id, 'done'))}>Hecha</button>
                           <button onClick={() => act(() => adapter.setStatus(a.id, 'no_show'))}>No vino</button>
@@ -514,7 +528,7 @@ function AddAppointment({ provider, onClose, onSaved }: { provider: AppointmentP
     e.preventDefault();
     setSaving(true); setError('');
     try {
-      await adapter.book(provider.id, madridToDate(day, time).toISOString(), name, notes);
+      await adapter.addByStaff(provider.id, madridToDate(day, time).toISOString(), name, notes);
       onSaved();
     } catch (err: any) { setError(err.message); }
     setSaving(false);

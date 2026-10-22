@@ -159,6 +159,8 @@ export interface AppointmentProvider {
   max_days_ahead: number;
   cancel_hours: number;
   active: boolean;
+  /** Precio fijo de cada cita en euros; 0 = gratis */
+  price: number;
 }
 
 export type AppointmentStatus = 'booked' | 'done' | 'no_show' | 'cancelled';
@@ -169,6 +171,11 @@ export interface Appointment {
   user_id: string | null;
   user_email: string | null;
   patient_name: string;
+  /** Pago con tarjeta: null = sin pago online (gratis o apuntada por el club) */
+  payment?: 'pending' | 'paid' | 'failed' | null;
+  amount?: number | null;
+  /** Hasta cuándo se guarda el hueco mientras se paga */
+  hold_until?: string | null;
   notes: string | null;
   starts_at: string;
   ends_at: string;
