@@ -71,6 +71,16 @@ export class StripeAdapter implements PaymentPort {
     return data.url;
   }
 
+  /** Precio final con un cupón (torneos y viajes), o un error en español si no vale. */
+  async checkCoupon(eventId: string, code: string): Promise<number> {
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { checkCoupon: { eventId, code } }
+    });
+    if (error) throw new Error(await functionErrorMessage(error, 'No se pudo comprobar el cupón.'));
+    if (typeof data?.price !== 'number') throw new Error('No se pudo comprobar el cupón.');
+    return data.price;
+  }
+
   async createCheckoutSessionFromCart(cart: any[], userEmail: string): Promise<string> {
     const returnUrl = window.location.href.split('?')[0]; 
     const payload = cart.map(c => ({

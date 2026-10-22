@@ -1,4 +1,4 @@
-import type { PriceTable } from './pricing';
+import type { PriceOption, PriceTable } from './pricing';
 
 export interface User {
   id: string;
@@ -50,6 +50,8 @@ export interface Event {
   attendee_discounts: { minAttendees: number; discountPct: number }[];
   /** Precio total por nº de asistentes y nº de días (ver domain/pricing.ts) */
   price_table?: PriceTable | null;
+  /** Torneos y viajes: precio por jugador, fijo (una opción) o a elegir (p. ej. con o sin bus) */
+  price_options?: PriceOption[] | null;
   custom_fields?: CustomField[];
   /** Plazas (asistentes) en total; null o vacío = sin límite */
   max_capacity?: number | null;
@@ -70,6 +72,26 @@ export interface CampusRegistration {
   stripe_session_id?: string;
   custom_data: Record<string, string>;
   created_at: string;
+}
+
+/** Inscripción propia, para saber si ya está inscrito (en torneos, a qué jugadores). */
+export interface OwnRegistration {
+  id: string;
+  event_id: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  attendee_names: string[];
+}
+
+/** Cupón de un torneo o viaje: un solo uso, fija el precio final. */
+export interface EventCoupon {
+  id: string;
+  event_id: string;
+  code: string;
+  price: number;
+  note: string | null;
+  created_at: string;
+  /** Último pago en el que se usó; si su inscripción está completada, el cupón está gastado */
+  stripe_session_id: string | null;
 }
 
 export interface SystemLog {

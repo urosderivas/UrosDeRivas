@@ -5,8 +5,10 @@ import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { StripeAdapter } from '../infrastructure/StripeAdapter';
 import { EventModal } from './EventModal';
-import { Event, CustomField, EventType } from '../domain/entities';
-import { choosesDays, eventPrice, eventTable, isFreeEvent, startingPrice, PriceTable } from '../domain/pricing';
+import { Event, CustomField, EventType, OwnRegistration } from '../domain/entities';
+import { choosesDays, eventOptions, eventPrice, eventTable, isFreeEvent, startingPrice, PriceTable } from '../domain/pricing';
+import { formatDateRanges } from '../utils/dates';
+import { CouponsModal } from './components/CouponsModal';
 import { EVENT_PAGES, eventPath } from '../utils/eventLinks';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -77,7 +79,8 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
   const [messageAlert, setMessageAlert] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
   const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean; action: (() => void) | null; message: string }>({ open: false, action: null, message: '' });
   const showMessage = (title: string, message: string) => setMessageAlert({ open: true, title, message });
-  const [userRegistrations, setUserRegistrations] = useState<Record<string, string>>({});
+  const [userRegistrations, setUserRegistrations] = useState<OwnRegistration[]>([]);
+  const [couponsEvent, setCouponsEvent] = useState<Event | null>(null);
 
   // Registration form state
   const [regSelectedDays, setRegSelectedDays] = useState<string[]>([]);
@@ -85,6 +88,12 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
   const [regAttendeeNames, setRegAttendeeNames] = useState<string[]>(['']);
   const [regCustomData, setRegCustomData] = useState<Record<string, string>>({});
   const [regSubmitting, setRegSubmitting] = useState(false);
+  // Torneos y viajes: opción de precio elegida y cupón
+  const [regPriceOption, setRegPriceOption] = useState<number | null>(null);
+  const [regCoupon, setRegCoupon] = useState('');
+  const [couponPrice, setCouponPrice] = useState<number | null>(null);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [couponChecking, setCouponChecking] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -100,6 +109,8 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
       if (user) {
         const regs = await adapter.getUserRegistrations(user.id);
         setUserRegistrations(regs);
+      } else {
+        setUserRegistrations([]);
       }
     } catch (e) { console.error('Failed to load campus events', e); }
     setLoading(false);
@@ -163,6 +174,20 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     setRegNumAttendees(1);
     setRegAttendeeNames(['']);
     setRegCustomData({});
+    setRegPriceOption(null);
+    setRegCoupon(''); setCouponPrice(null); setCouponMessage('');
+  };
+
+  const handleApplyCoupon = async (ev: Event) => {
+    if (!regCoupon.trim()) return;
+    setCouponChecking(true); setCouponMessage('');
+    try {
+      setCouponPrice(await stripeAdapter.checkCoupon(ev.id, regCoupon));
+    } catch (e: any) {
+      setCouponPrice(null);
+      setCouponMessage(e.message);
+    }
+    setCouponChecking(false);
   };
 
   const toggleDay = (day: string) => {
@@ -171,14 +196,20 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
 
   const handleRegister = async (ev: Event) => {
     if (!user) { showMessage('Atención', 'Debes iniciar sesión para inscribirte.'); return; }
+    const options = eventOptions(ev);
     // Si el evento se paga completo no se eligen días: se va a todos
     const days = choosesDays(ev) ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
     if (days.length === 0) { showMessage('Faltan datos', 'Selecciona al menos un día.'); return; }
 
     // Validate attendee names
     const names = regAttendeeNames.filter(n => n.trim());
-    if (names.length < regNumAttendees) {
-      showMessage('Faltan datos', `Introduce el nombre de los ${regNumAttendees} asistentes.`);
+    const numAttendees = options ? 1 : regNumAttendees;
+    if (names.length < numAttendees) {
+      showMessage('Faltan datos', options ? 'Escribe el nombre del jugador.' : `Introduce el nombre de los ${regNumAttendees} asistentes.`);
+      return;
+    }
+    if (options && options.length > 1 && regPriceOption === null) {
+      showMessage('Faltan datos', 'Elige una de las opciones de precio.');
       return;
     }
 
@@ -198,9 +229,10 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
       const url = await stripeAdapter.createCampusCheckoutSession({
         eventId: ev.id,
         selectedDays: days,
-        numAttendees: regNumAttendees,
-        attendeeNames: names,
-        customData: regCustomData
+        numAttendees,
+        attendeeNames: names.slice(0, numAttendees),
+        customData: regCustomData,
+        ...(options ? { priceOption: regPriceOption ?? 0, coupon: regCoupon.trim() || undefined } : {}),
       }, user.email || '');
       window.location.href = url;
       return;
@@ -243,9 +275,16 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
           ) : (
             visibleEvents.map(ev => {
               const isExpanded = expandedId === ev.id;
-              const regStatus = userRegistrations[ev.id];
-              // Una inscripción cancelada (pago no completado) no bloquea: se puede volver a rellenar
-              const isRegistered = regStatus !== undefined && regStatus !== 'cancelled';
+              const options = eventOptions(ev);
+              const myRegs = userRegistrations.filter(r => r.event_id === ev.id);
+              // Estado para la etiqueta: el mejor de mis inscripciones (en campus solo hay una)
+              const regStatus = myRegs.some(r => r.status === 'completed') ? 'completed'
+                : myRegs.some(r => r.status === 'pending') ? 'pending'
+                : myRegs.length > 0 ? 'cancelled' : undefined;
+              // Una inscripción cancelada (pago no completado) no bloquea: se puede volver a rellenar.
+              // En torneos y viajes se puede inscribir a otro jugador aunque ya haya alguno.
+              const isRegistered = !options && regStatus !== undefined && regStatus !== 'cancelled';
+              const myPlayers = options ? myRegs.filter(r => r.status !== 'cancelled') : [];
               const spotsLeft = ev.max_capacity ? Math.max(0, ev.max_capacity - (occupancy[ev.id] || 0)) : null;
               const isFull = spotsLeft === 0;
               const maxAttendees = spotsLeft === null ? MAX_ATTENDEES : Math.min(MAX_ATTENDEES, spotsLeft);
@@ -255,8 +294,11 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const fromPrice = startingPrice(ev);
               const regDays = pickDays ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
               const dateRange = ev.dates.length > 0
-                ? `${new Date(ev.dates[0] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} - ${new Date(ev.dates[ev.dates.length - 1] + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                ? `${formatDateRanges(ev.dates, { weekday: false })} ${ev.dates[ev.dates.length - 1].slice(0, 4)}`
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+              // Torneos: precio de la opción elegida (o la única), o el del cupón si se ha aplicado
+              const chosenOption = options ? (options.length === 1 ? options[0] : regPriceOption !== null ? options[regPriceOption] : null) : null;
+              const torneoPrice = couponPrice ?? chosenOption?.price ?? null;
 
               const renderBadge = () => {
                 if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }} title="Tu participación está asegurada">✅ Inscrito</div>;
@@ -270,6 +312,9 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                   <AdminGuard roles={['admin', 'coach']}>
                     <div className="admin-card-actions">
                       <button className="btn-admin-edit" onClick={() => { setEditEvent(ev); setModalOpen(true); }} title="Editar">✏️</button>
+                      {options && user?.role === 'admin' && (
+                        <button className="btn-admin-edit" onClick={() => setCouponsEvent(ev)} title="Cupones de descuento">🎟️</button>
+                      )}
                       <button className="btn-admin-delete" onClick={() => handleDelete(ev.id)} title="Borrar">X</button>
                     </div>
                   </AdminGuard>
@@ -288,7 +333,9 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                         {ev.schedule && <span>🕐 {ev.schedule}</span>}
                         {!isFree && (
                           <span className="event-price-tag">
-                            💰 {table ? (table.byDays ? `Desde ${euros(fromPrice)}` : euros(fromPrice)) : `Desde ${euros(fromPrice)}/día`}
+                            💰 {options
+                              ? (options.length > 1 ? `Desde ${euros(fromPrice)}` : euros(fromPrice))
+                              : table ? (table.byDays ? `Desde ${euros(fromPrice)}` : euros(fromPrice)) : `Desde ${euros(fromPrice)}/día`}
                           </span>
                         )}
                         {spotsLeft !== null && (
@@ -331,9 +378,38 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                           </div>
                         ) : (
                           <div className="campus-registration-form">
-                            <h4 className="form-header">📋 Inscripción</h4>
-                            {regStatus === 'cancelled' && (
+                            <h4 className="form-header">📋 {myPlayers.length > 0 ? 'Inscribir a otro jugador' : 'Inscripción'}</h4>
+                            {!options && regStatus === 'cancelled' && (
                               <p className="form-retry-note">Tu inscripción anterior no se completó porque el pago se canceló. Puedes volver a inscribirte.</p>
+                            )}
+                            {myPlayers.length > 0 && (
+                              <div className="campus-registered-box">
+                                {myPlayers.map(r => (
+                                  <p key={r.id}>
+                                    {r.status === 'completed' ? '✅' : '⏳'} <b>{r.attendee_names.join(', ')}</b>
+                                    {r.status === 'completed' ? ' ya está inscrito.' : ' está pendiente de pago (si no lo terminaste, se cancelará solo).'}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+
+                            {options && (
+                              <div className="form-section">
+                                <label className="form-label">{options.length > 1 ? 'Elige una opción:' : 'Precio:'}</label>
+                                {options.length > 1 ? (
+                                  <div className="price-options">
+                                    {options.map((o, i) => (
+                                      <button key={i} type="button" onClick={() => setRegPriceOption(i)}
+                                        className={`price-option ${regPriceOption === i ? 'active' : ''}`}>
+                                        <span>{o.label}</span>
+                                        <strong>{o.price === 0 ? 'Gratis' : euros(o.price)}</strong>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="full-event-dates">{options[0].price === 0 ? 'Gratis' : `${euros(options[0].price)} por jugador`}{options[0].label ? ` (${options[0].label})` : ''}</p>
+                                )}
+                              </div>
                             )}
 
                             {table && (
@@ -366,13 +442,12 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                             ) : (
                               <div className="form-section">
                                 <label className="form-label">Fechas:</label>
-                                <p className="full-event-dates">
-                                  {ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })).join(' · ')}
-                                </p>
+                                <p className="full-event-dates">{formatDateRanges(ev.dates)}</p>
                               </div>
                             )}
 
-                            {/* Number of attendees */}
+                            {/* Number of attendees (en torneos y viajes, un jugador por inscripción) */}
+                            {!options && (
                             <div className="form-section">
                               <label className="form-label">Nº de asistentes:</label>
                               <div className="attendee-counter">
@@ -383,12 +458,13 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                                   className="btn-counter">+</button>
                               </div>
                             </div>
+                            )}
 
                             {/* Attendee names */}
                             <div className="form-section">
-                              <label className="form-label">Nombre(s):</label>
-                              {Array.from({ length: regNumAttendees }).map((_, i) => (
-                                <input key={i} value={regAttendeeNames[i] || ''} placeholder={`Asistente ${i + 1}`}
+                              <label className="form-label">{options ? 'Nombre del jugador/a:' : 'Nombre(s):'}</label>
+                              {Array.from({ length: options ? 1 : regNumAttendees }).map((_, i) => (
+                                <input key={i} value={regAttendeeNames[i] || ''} placeholder={options ? 'Nombre y apellidos' : `Asistente ${i + 1}`} maxLength={100}
                                   onChange={e => { const u = [...regAttendeeNames]; u[i] = e.target.value; setRegAttendeeNames(u); }}
                                   className="form-text-input" />
                               ))}
@@ -418,8 +494,39 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                               </div>
                             )}
 
+                            {/* Cupón de descuento (torneos y viajes): fija el precio final */}
+                            {options && !isFree && (
+                              <div className="form-section">
+                                <label className="form-label">¿Tienes un cupón?</label>
+                                <div className="coupon-row">
+                                  <input value={regCoupon} maxLength={24} placeholder="Código" className="form-text-input"
+                                    onChange={e => { setRegCoupon(e.target.value.toUpperCase()); setCouponPrice(null); setCouponMessage(''); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(ev); } }} />
+                                  <button type="button" className="btn-toggle-all" onClick={() => handleApplyCoupon(ev)} disabled={!regCoupon.trim() || couponChecking}>
+                                    {couponChecking ? 'Comprobando…' : 'Aplicar'}
+                                  </button>
+                                </div>
+                                {couponPrice !== null && <p className="coupon-ok">✅ Cupón válido: pagarás {couponPrice === 0 ? 'nada (gratis)' : euros(couponPrice)}.</p>}
+                                {couponMessage && <p className="coupon-error">{couponMessage}</p>}
+                              </div>
+                            )}
+
                             {/* Precio: el definitivo lo calcula el servidor con la misma fórmula */}
-                            {regDays.length > 0 ? (
+                            {options ? (
+                              torneoPrice !== null ? (
+                                <div className="price-breakdown-box">
+                                  <div className="price-row">
+                                    <span>1 jugador{chosenOption?.label ? ` · ${chosenOption.label}` : ''}{couponPrice !== null ? ' · con cupón' : ''}</span>
+                                  </div>
+                                  <div className="price-row final-price-row">
+                                    <span>Total</span>
+                                    <span>{torneoPrice === 0 ? 'Gratis' : euros(torneoPrice)}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="price-hint">Elige una opción para ver el precio.</p>
+                              )
+                            ) : regDays.length > 0 ? (
                               <div className="price-breakdown-box">
                                 <div className="price-row">
                                   <span>
@@ -441,9 +548,11 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
 
                             {/* Botón desactivado hasta elegir días */}
                             <div className="form-actions-stack">
-                              <button onClick={() => handleRegister(ev)} disabled={regSubmitting || regDays.length === 0}
-                                className={isFree ? 'btn-pay-local' : 'btn-pay-online'}>
-                                {regSubmitting ? 'Procesando...' : isFree ? '✅ Inscribirse (Gratis)' : '💳 Pagar con tarjeta'}
+                              {/* Con un cupón escrito sin aplicar, el servidor lo comprueba igual al pagar */}
+                              <button onClick={() => handleRegister(ev)}
+                                disabled={regSubmitting || regDays.length === 0 || (!!options && chosenOption === null)}
+                                className={isFree || torneoPrice === 0 ? 'btn-pay-local' : 'btn-pay-online'}>
+                                {regSubmitting ? 'Procesando...' : isFree || torneoPrice === 0 ? '✅ Inscribirse (Gratis)' : '💳 Pagar con tarjeta'}
                               </button>
                             </div>
                           </div>
@@ -458,6 +567,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
         </div>
       </div>
 
+      {couponsEvent && <CouponsModal event={couponsEvent} onClose={() => setCouponsEvent(null)} />}
       {modalOpen && <EventModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveEvent}
         initial={editEvent} defaultType={kind} otherEvents={events.filter(e => e.id !== editEvent?.id)} />}
       <MessageModal isOpen={messageAlert.open} onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} title={messageAlert.title} message={messageAlert.message} />

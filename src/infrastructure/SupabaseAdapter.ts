@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabase';
+import { formatDateRanges } from '../utils/dates';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
-import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
+import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
 
 /** Registros de actividad que enseña el panel (los más recientes) */
 const LOGS_SHOWN = 500;
@@ -27,11 +28,37 @@ async function shrinkImage(file: File): Promise<Blob> {
   }
 }
 
+// Sin 0/O ni 1/I/L, para que se puedan dictar y copiar a mano sin confusiones
+const COUPON_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const COUPON_LENGTH = 6;
+
+function randomCouponCode(): string {
+  // Se descartan los bytes del final del rango para que todas las letras salgan igual de a menudo
+  const limit = 256 - (256 % COUPON_ALPHABET.length);
+  let code = '';
+  while (code.length < COUPON_LENGTH) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
+      if (b < limit && code.length < COUPON_LENGTH) code += COUPON_ALPHABET[b % COUPON_ALPHABET.length];
+    }
+  }
+  return code;
+}
+
+function couponSaveError(error: any): Error {
+  const text = `${error?.message || ''} ${error?.details || ''}`;
+  if (text.includes('event_coupons_price_check')) return new Error('El precio del cupón tiene que ser 0 (gratis) o al menos 0,50 €.');
+  if (text.includes('event_coupons_note_check')) return new Error('La nota puede tener como mucho 120 caracteres.');
+  return error instanceof Error ? error : new Error(error?.message || 'No se pudieron guardar los cupones.');
+}
+
 /** Errores de la base de datos al guardar un evento, en palabras para el admin. */
 function eventSaveError(error: any): Error {
   const text = `${error?.message || ''} ${error?.details || ''}`;
   if (text.includes('events_price_table_check')) {
     return new Error('La tabla de precios está incompleta o no cuadra con las fechas. Revisa que todas las casillas tengan precio.');
+  }
+  if (text.includes('events_price_options_check')) {
+    return new Error('Revisa los precios: cada opción necesita nombre y precio (si solo hay una, el nombre puede ir vacío).');
   }
   if (text.includes('events_type_check')) {
     return new Error('Este tipo de evento aún no está activado en la base de datos.');
@@ -178,6 +205,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       price_tiers: event.price_tiers || [],
       attendee_discounts: event.attendee_discounts || [],
       price_table: event.price_table ?? null,
+      price_options: event.price_options ?? null,
       custom_fields: event.custom_fields || [],
       max_capacity: event.max_capacity,
       active: event.active !== false,
@@ -200,6 +228,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (event.price_tiers !== undefined) payload.price_tiers = event.price_tiers;
     if (event.attendee_discounts !== undefined) payload.attendee_discounts = event.attendee_discounts;
     if (event.price_table !== undefined) payload.price_table = event.price_table;
+    if (event.price_options !== undefined) payload.price_options = event.price_options;
     if (event.custom_fields !== undefined) payload.custom_fields = event.custom_fields;
     if (event.max_capacity !== undefined) payload.max_capacity = event.max_capacity;
     if (event.active !== undefined) payload.active = event.active;
@@ -219,6 +248,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       schedule: e.schedule, type: e.type === 'torneo' ? 'torneo' : 'campus',
       price_per_day: Number(e.price_per_day) || 0, price_tiers: e.price_tiers || [],
       attendee_discounts: e.attendee_discounts || [], price_table: e.price_table ?? null,
+      price_options: e.price_options ?? null,
       custom_fields: e.custom_fields || [],
       max_capacity: e.max_capacity, active: e.active !== false,
     };
@@ -303,21 +333,25 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getCampusRegistrations(eventId: string): Promise<any[]> {
     const { data, error } = await supabase.rpc('get_event_registrations', { target_event_id: eventId });
     if (error) { console.error('Error fetching registrations', error); return []; }
-    // Enrich with registration details from the table
+    // Enrich with registration details from the table (una cuenta puede tener varias en torneos)
     const { data: regs } = await supabase.from('event_registrations')
       .select('*')
       .eq('event_id', eventId);
-    const regMap = (regs || []).reduce((acc: any, r: any) => { acc[r.user_id] = r; return acc; }, {});
-    return (data || []).map((d: any) => ({
-      ...d,
-      selected_days: regMap[d.user_id]?.selected_days || [],
-      num_attendees: regMap[d.user_id]?.num_attendees || 1,
-      attendee_names: regMap[d.user_id]?.attendee_names || [],
-      amount: regMap[d.user_id]?.amount || 0,
-      status: regMap[d.user_id]?.status || 'pending',
-      stripe_session_id: regMap[d.user_id]?.stripe_session_id,
-      custom_data: regMap[d.user_id]?.custom_data || {},
-    }));
+    const regMap = (regs || []).reduce((acc: any, r: any) => { acc[r.id] = r; return acc; }, {});
+    return (data || []).map((d: any) => {
+      const r = regMap[d.registration_id] || {};
+      return {
+        ...d,
+        id: d.registration_id,
+        selected_days: r.selected_days || [],
+        num_attendees: r.num_attendees || 1,
+        attendee_names: r.attendee_names || [],
+        amount: r.amount || 0,
+        status: r.status || 'pending',
+        stripe_session_id: r.stripe_session_id,
+        custom_data: r.custom_data || {},
+      };
+    });
   }
 
   /** Asistentes inscritos por campus (sin canceladas). Vacío si la función aún no existe. */
@@ -329,12 +363,13 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return map;
   }
 
-  async getUserRegistrations(userId: string): Promise<Record<string, string>> {
-    const { data, error } = await supabase.from('event_registrations').select('event_id, status').eq('user_id', userId);
-    if (error) return {};
-    const map: Record<string, string> = {};
-    for (const r of data) map[r.event_id] = r.status;
-    return map;
+  async getUserRegistrations(userId: string): Promise<OwnRegistration[]> {
+    const { data, error } = await supabase.from('event_registrations')
+      .select('id, event_id, status, attendee_names, created_at')
+      .eq('user_id', userId)
+      .order('created_at');
+    if (error) return [];
+    return (data || []).map((r: any) => ({ id: r.id, event_id: r.event_id, status: r.status, attendee_names: r.attendee_names || [] }));
   }
 
   async getUserFullRegistrations(userId: string): Promise<any[]> {
@@ -344,12 +379,12 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) return [];
     // map to match 'order' interface for the modal
     return data.map(r => ({
-      id: r.event_id + '_' + userId,
+      id: r.id,
       event_id: r.event_id,
       buyer_name: '',
       buyer_email: '',
       item_name: r.events?.title || 'Campus',
-      size: `${(r.attendee_names || []).join(', ')} | ${(r.selected_days || []).join(', ')}`,
+      size: `${(r.attendee_names || []).join(', ')} | ${formatDateRanges(r.selected_days || [], { weekday: false })}`,
       quantity: 1,
       amount: r.amount,
       status: r.status,
@@ -363,17 +398,48 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return this.getCampusRegistrations(eventId);
   }
 
-  async removeEventRegistration(eventId: string, userId: string): Promise<void> {
-    const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
+  async removeEventRegistration(registrationId: string): Promise<void> {
+    const { error } = await supabase.from('event_registrations').delete().eq('id', registrationId);
     if (error) throw error;
   }
 
-  async updateRegistrationStatus(eventId: string, userId: string, status: string): Promise<void> {
-    const { error } = await supabase.rpc('update_admin_campus_status', { 
-      p_event_id: eventId, 
-      p_user_id: userId, 
-      p_status: status 
+  async updateRegistrationStatus(registrationId: string, status: string): Promise<void> {
+    const { error } = await supabase.rpc('update_registration_status', {
+      p_registration_id: registrationId,
+      p_status: status
     });
+    if (error) throw error;
+  }
+
+  // ============================================
+  // CUPONES (torneos y viajes)
+  // ============================================
+  async getCoupons(eventId: string): Promise<EventCoupon[]> {
+    const { data, error } = await supabase.from('event_coupons')
+      .select('id, event_id, code, price, note, created_at, stripe_session_id')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((c: any) => ({ ...c, price: Number(c.price) }));
+  }
+
+  /** Crea `count` códigos de un solo uso con el mismo precio final. */
+  async createCoupons(eventId: string, count: number, price: number, note: string): Promise<EventCoupon[]> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rows = Array.from({ length: count }, () => ({ event_id: eventId, code: randomCouponCode(), price, note: note.trim() || null }));
+      const { data, error } = await supabase.from('event_coupons')
+        .insert(rows)
+        .select('id, event_id, code, price, note, created_at, stripe_session_id');
+      // Un código repetido (muy raro) hace fallar el lote: se genera otro
+      if (error?.code === '23505') continue;
+      if (error) throw couponSaveError(error);
+      return (data || []).map((c: any) => ({ ...c, price: Number(c.price) }));
+    }
+    throw new Error('No se pudieron generar los cupones. Vuelve a intentarlo.');
+  }
+
+  async deleteCoupon(id: string): Promise<void> {
+    const { error } = await supabase.from('event_coupons').delete().eq('id', id);
     if (error) throw error;
   }
 

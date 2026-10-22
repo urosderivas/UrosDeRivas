@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment, lazy, Suspense } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
 import { isFreeEvent, startingPrice } from '../domain/pricing';
+import { formatDateRanges } from '../utils/dates';
 import { AdminGuard } from './AdminGuard';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
@@ -677,7 +678,7 @@ export function AdminPanel() {
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
         if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
-          attMap.push({ evId, att });
+          attMap.push({ att });
         }
       }
     }
@@ -688,16 +689,16 @@ export function AdminPanel() {
       try {
         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
         const updates: Promise<unknown>[] = [];
-        for (const { evId, att } of attMap) {
+        for (const { att } of attMap) {
           const result = batchResults[att.stripe_session_id];
           if (result) {
             newStatuses[att.stripe_session_id] = result.payment_status;
             // Corregir el estado es cosa de admins (el webhook de Stripe ya lo hace solo)
             if (!isAdmin) continue;
             if (result.payment_status === 'paid' && att.status === 'pending') {
-              updates.push(adapter.updateRegistrationStatus(evId, att.user_id, 'completed'));
+              updates.push(adapter.updateRegistrationStatus(att.id, 'completed'));
             } else if (result.status === 'expired' && att.status === 'pending') {
-              updates.push(adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled'));
+              updates.push(adapter.updateRegistrationStatus(att.id, 'cancelled'));
             }
           }
         }
@@ -737,7 +738,7 @@ export function AdminPanel() {
     const eventsSummary = events.map(e => ({
       'Evento': e.title,
       'Tipo': e.type === 'torneo' ? 'Torneo / viaje' : 'Campus',
-      'Fechas': (e.dates || []).join(', ') || new Date(e.date).toLocaleDateString(),
+      'Fechas': e.dates?.length ? formatDateRanges(e.dates, { weekday: false }) : new Date(e.date).toLocaleDateString(),
       'Ubicación': e.location,
       'Desde (€)': isFreeEvent(e) ? 0 : startingPrice(e),
       'Inscritos': updatedAttendees[e.id]?.length || 0
@@ -757,6 +758,7 @@ export function AdminPanel() {
             'Días': (a.selected_days || []).join(', '),
             'Asistentes': a.num_attendees || 1,
             'Nombres': (a.attendee_names || []).join(', '),
+            ...(a.custom_data || {}),
             'Importe': a.amount || 0,
             'Estado': a.status || 'pending',
             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
@@ -814,7 +816,7 @@ export function AdminPanel() {
                     </td>
                     <td style={{ fontSize: '0.8rem' }}>
                       {ev.dates && ev.dates.length > 0
-                        ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
+                        ? formatDateRanges(ev.dates, { weekday: false })
                         : new Date(ev.date).toLocaleDateString()}
                     </td>
                     <td>{isFreeEvent(ev) ? 'Gratis' : `${startingPrice(ev)}€`}</td>
@@ -860,14 +862,14 @@ export function AdminPanel() {
 
                                   // Build mock Order for the receipt
                                   const dummyOrder = {
-                                    id: att.event_id + '_' + att.user_id,
+                                    id: att.id,
                                     user_id: att.user_id,
                                     item_id: att.event_id,
                                     event_id: att.event_id,
                                     buyer_name: att.user_email ? att.user_email.split('@')[0] : 'Desconocido',
                                     buyer_email: att.user_email || '',
                                     item_name: ev.title,
-                                    size: `${(att.attendee_names || []).join(', ')} | ${(att.selected_days || []).join(', ')}`,
+                                    size: `${(att.attendee_names || []).join(', ')} | ${formatDateRanges(att.selected_days || [], { weekday: false })}`,
                                     quantity: 1,
                                     amount: Number(att.amount),
                                     status: att.status,
@@ -877,7 +879,7 @@ export function AdminPanel() {
                                   } as any;
 
                                   return (
-                                    <tr key={att.user_id}>
+                                    <tr key={att.id}>
                                       <td className="monospace">
                                         {isLocal ? 'Reserva antigua' : isFreeReg ? 'Gratis' : att.stripe_session_id?.substring(0, 12) + '...'}
                                         {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
@@ -892,8 +894,11 @@ export function AdminPanel() {
                                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                                           <li>
                                             • <strong>{ev.title}</strong>
-                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {(att.selected_days || []).join(', ')}]</span>
+                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {formatDateRanges(att.selected_days || [], { weekday: false })}]</span>
                                           </li>
+                                          {Object.entries(att.custom_data || {}).map(([k, v]) => (
+                                            <li key={k} style={{ color: '#555' }}>{k}: <strong>{String(v)}</strong></li>
+                                          ))}
                                         </ul>
                                       </td>
                                       <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{Number(att.amount).toFixed(2)}</td>
@@ -905,7 +910,7 @@ export function AdminPanel() {
                                           title={isAdmin ? undefined : 'Solo un administrador puede cambiar el estado'}
                                           onChange={async (e) => {
                                             try {
-                                              await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                              await adapter.updateRegistrationStatus(att.id, e.target.value);
                                               handleLoadAttendees(ev.id, true);
                                             } catch (err: any) { showMessage('Error', err.message); }
                                           }}
@@ -934,10 +939,10 @@ export function AdminPanel() {
                                         {isAdmin && <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
                                           setConfirmPrompt({
                                             open: true,
-                                            message: `¿Eliminar inscripción de ${att.user_email}?`,
+                                            message: `¿Eliminar la inscripción de ${(att.attendee_names || []).join(', ') || att.user_email}?`,
                                             action: async () => {
                                               try {
-                                                await adapter.removeEventRegistration(ev.id, att.user_id);
+                                                await adapter.removeEventRegistration(att.id);
                                                 handleLoadAttendees(ev.id, true);
                                               } catch (err: any) { showMessage('Error', err.message); }
                                             }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CalendarDays, Plus, X, Trash2 } from 'lucide-react';
 import { Event, CustomField, EventType } from '../domain/entities';
-import { MAX_TABLE_DAYS, eventTable, legacyPrice, roundCents } from '../domain/pricing';
+import { MAX_PRICE_OPTIONS, MAX_TABLE_DAYS, eventOptions, eventTable, legacyPrice, parsePriceOptions, roundCents } from '../domain/pricing';
 import { Modal } from './components/Modal';
 import { PriceTableEditor, PriceTableDraft, draftToTable } from './components/PriceTableEditor';
 import { ImageField } from './components/ImageField';
@@ -43,6 +43,9 @@ function initialDraft(ev: Event | null | undefined, defaultType: EventType): { d
   };
 }
 
+/** Opción de precio de un torneo o viaje mientras se edita */
+type OptionDraft = { label: string; price: number | '' };
+
 export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'campus', otherEvents = [] }: Props) {
   const [type, setType] = useState<EventType>(defaultType);
   const [title, setTitle] = useState('');
@@ -53,6 +56,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
   const [description, setDescription] = useState('');
   const [priceDraft, setPriceDraft] = useState<PriceTableDraft>({ byDays: true, rows: [[]], extra: '' });
   const [pricesConverted, setPricesConverted] = useState(false);
+  const [priceOptions, setPriceOptions] = useState<OptionDraft[]>([{ label: '', price: '' }]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [maxCapacity, setMaxCapacity] = useState<number | ''>('');
   const [active, setActive] = useState(true);
@@ -66,6 +70,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
     const { draft, converted } = initialDraft(initial, defaultType);
     setPriceDraft(draft);
     setPricesConverted(converted);
+    setPriceOptions(initial ? eventOptions({ ...initial, type: 'torneo' }) ?? [{ label: '', price: '' }] : [{ label: '', price: '' }]);
     if (initial) {
       setType(initial.type || 'campus');
       setTitle(initial.title);
@@ -120,8 +125,17 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
       setError(`Un evento puede tener como mucho ${MAX_TABLE_DAYS} fechas.`);
       return;
     }
-    const priceTable = draftToTable(priceDraft, dates.length);
-    if (!priceTable) {
+    // Torneos y viajes: precio por jugador (fijo o por opciones); campus: tabla de precios
+    const isTorneo = type === 'torneo';
+    const options = isTorneo ? parsePriceOptions(priceOptions.map(o => ({ label: o.label.trim(), price: o.price }))) : null;
+    const priceTable = isTorneo ? null : draftToTable(priceDraft, dates.length);
+    if (isTorneo && !options) {
+      setError(priceOptions.length > 1
+        ? 'Cada opción necesita un nombre y un precio (pon 0 si es gratis).'
+        : 'Pon el precio por jugador (0 si es gratis).');
+      return;
+    }
+    if (!isTorneo && !priceTable) {
       setError('Rellena todas las casillas de la tabla de precios (pon 0 si es gratis).');
       return;
     }
@@ -129,9 +143,10 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
     try {
       await onSave({
         title, date: dates[0], dates, location, imageUrl, description,
-        schedule, type, price_table: priceTable,
+        schedule, type, price_table: priceTable, price_options: options,
         // Los campos del sistema anterior quedan sin uso; price_per_day = precio más bajo, para listados
-        price_per_day: priceTable.prices[0][0], price_tiers: [], attendee_discounts: [],
+        price_per_day: options ? Math.min(...options.map(o => o.price)) : priceTable!.prices[0][0],
+        price_tiers: [], attendee_discounts: [],
         custom_fields: customFields, max_capacity: maxCapacity === '' ? null : maxCapacity,
         active,
       });
@@ -234,17 +249,50 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
         {/* Pricing */}
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '16px' }}>
           <label style={{ fontWeight: 700, marginBottom: '12px', display: 'block' }}>💰 Precios</label>
-          {pricesConverted && (
-            <p style={{ color: '#f59e0b', fontSize: '0.85rem', margin: '0 0 12px' }}>
-              Precios pasados a tabla desde los descuentos que tenía. Revísalos y guarda.
-            </p>
+          {type === 'torneo' ? (
+            <div>
+              <p style={{ color: '#aaa', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                Precio por jugador para todo el evento (cada jugador se inscribe por separado, sin descuentos).
+                Si hay varios precios (p. ej. según use el autobús), añade una opción por cada uno y la familia elige.
+              </p>
+              {priceOptions.map((o, i) => (
+                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                  <input value={o.label} maxLength={80} style={{ flex: 1 }}
+                    placeholder={priceOptions.length > 1 ? 'Ej.: Ida y vuelta en bus' : 'Nombre (opcional si solo hay un precio)'}
+                    onChange={e => setPriceOptions(priceOptions.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+                  <input type="number" min="0" step="0.01" value={o.price} placeholder="€" style={{ width: '110px' }}
+                    onChange={e => setPriceOptions(priceOptions.map((x, j) => j === i ? { ...x, price: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) } : x))} />
+                  {priceOptions.length > 1 && (
+                    <button type="button" onClick={() => setPriceOptions(priceOptions.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', color: '#e53935', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                  )}
+                </div>
+              ))}
+              {priceOptions.length < MAX_PRICE_OPTIONS && (
+                <button type="button" onClick={() => setPriceOptions([...priceOptions, { label: '', price: '' }])}
+                  style={{ background: 'none', border: '1px dashed rgba(255,255,255,0.2)', color: '#aaa', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                  + Añadir otra opción de precio
+                </button>
+              )}
+              <p style={{ color: '#888', fontSize: '0.8rem', margin: '10px 0 0' }}>
+                Para becas o precios especiales, crea cupones desde la tarjeta del evento (botón 🎟️) una vez guardado.
+              </p>
+            </div>
+          ) : (
+            <>
+              {pricesConverted && (
+                <p style={{ color: '#f59e0b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                  Precios pasados a tabla desde los descuentos que tenía. Revísalos y guarda.
+                </p>
+              )}
+              <PriceTableEditor draft={priceDraft} onChange={draft => { setPriceDraft(draft); setPricesConverted(false); }}
+                numDates={dates.length}
+                copySources={otherEvents.flatMap(ev => {
+                  const table = ev.type === 'torneo' ? null : eventTable(ev);
+                  return table ? [{ id: ev.id, title: ev.title, table }] : [];
+                })} />
+            </>
           )}
-          <PriceTableEditor draft={priceDraft} onChange={draft => { setPriceDraft(draft); setPricesConverted(false); }}
-            numDates={dates.length}
-            copySources={otherEvents.flatMap(ev => {
-              const table = eventTable(ev);
-              return table ? [{ id: ev.id, title: ev.title, table }] : [];
-            })} />
           <div className="form-group" style={{ marginTop: '16px', maxWidth: '260px' }}>
             <label>Aforo máximo (asistentes)</label>
             <input type="number" min="1" value={maxCapacity} onChange={e => setMaxCapacity(e.target.value ? Number(e.target.value) : '')} placeholder="Ilimitado" />

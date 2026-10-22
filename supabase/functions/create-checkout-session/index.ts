@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
-import { eventPrice, eventTable, roundCents } from "../_shared/pricing.ts";
+import { eventOptions, eventPrice, eventTable, isTournament, roundCents } from "../_shared/pricing.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,39 +66,125 @@ interface DbItem {
 
 const MAX_CART_LINES = 50;
 const MAX_OPTION_LENGTH = 100;
+const MAX_NAME_LENGTH = 100;
+
+type FormField = { name: string; type: 'text' | 'categorical'; options?: string[]; required: boolean };
 
 /**
- * Comprueba las opciones elegidas (talla, nombre del jugador...) contra las del producto:
- * solo campos que existen, valores de la lista en los de elegir, textos cortos y los obligatorios puestos.
- * Devuelve el texto que se guarda en el pedido, o lanza un error en español.
+ * Comprueba lo que ha rellenado el usuario (talla, nombre del jugador...) contra los campos
+ * definidos: solo campos que existen, valores de la lista en los de elegir, textos cortos
+ * y los obligatorios puestos. Devuelve los valores limpios (sin los vacíos), en el orden
+ * de los campos, o lanza un error en español. `changed` es el mensaje si llega un campo
+ * que ya no existe (el producto o el evento se ha editado mientras tanto).
  */
-function validateOptions(item: DbItem, raw: unknown): string {
-  if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) throw new Error("Opciones no válidas.");
-  const options = (raw || {}) as Record<string, unknown>;
-  const fields = [...(item.custom_fields || [])];
-  // Tallas antiguas (columna sizes) como campo "Talla" obligatorio, igual que en la web
-  if (item.sizes?.length && !fields.some(f => f.name === 'Talla')) {
-    fields.push({ name: 'Talla', type: 'categorical', options: item.sizes, required: true });
+function checkFields(fields: FormField[], raw: unknown, what: string, changed: string): Record<string, string> {
+  if (raw != null && (typeof raw !== 'object' || Array.isArray(raw))) throw new Error("Datos no válidos.");
+  const values = (raw || {}) as Record<string, unknown>;
+  for (const key of Object.keys(values)) {
+    if (!fields.some(f => f.name === key)) throw new Error(changed);
   }
-  const parts: string[] = [];
-  for (const key of Object.keys(options)) {
-    if (!fields.some(f => f.name === key)) throw new Error(`Las opciones de "${item.name}" han cambiado: quítalo del carrito y vuelve a añadirlo.`);
-  }
+  const clean: Record<string, string> = {};
   for (const field of fields) {
-    const value = options[field.name];
+    const value = values[field.name];
     if (value != null && typeof value !== 'string') throw new Error(`"${field.name}" no es válido.`);
     const text = (value || '').trim();
     if (!text) {
-      if (field.required) throw new Error(`Falta "${field.name}" en "${item.name}".`);
+      if (field.required) throw new Error(`Falta "${field.name}" en "${what}".`);
       continue;
     }
     if (text.length > MAX_OPTION_LENGTH) throw new Error(`"${field.name}" es demasiado largo (máximo ${MAX_OPTION_LENGTH} caracteres).`);
     if (field.type === 'categorical' && !(field.options || []).some(o => String(o).trim() === text)) {
       throw new Error(`"${text}" no es una opción de "${field.name}".`);
     }
-    parts.push(`${field.name}: ${text}`);
+    clean[field.name] = text;
   }
-  return parts.join(' | ');
+  return clean;
+}
+
+/** Opciones de un producto de la tienda, como texto para el pedido. */
+function validateOptions(item: DbItem, raw: unknown): string {
+  const fields: FormField[] = [...(item.custom_fields || [])];
+  // Tallas antiguas (columna sizes) como campo "Talla" obligatorio, igual que en la web
+  if (item.sizes?.length && !fields.some(f => f.name === 'Talla')) {
+    fields.push({ name: 'Talla', type: 'categorical', options: item.sizes, required: true });
+  }
+  const values = checkFields(fields, raw, item.name, `Las opciones de "${item.name}" han cambiado: quítalo del carrito y vuelve a añadirlo.`);
+  return Object.entries(values).map(([k, v]) => `${k}: ${v}`).join(' | ');
+}
+
+/** Clave de la inscripción de un jugador: su nombre sin mayúsculas, tildes ni espacios de más. */
+function attendeeKey(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Código de cupón como lo guarda el panel: mayúsculas, sin espacios ni guiones. null si no hay. */
+function couponCode(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') throw new Error("Cupón no válido.");
+  const code = raw.toUpperCase().replace(/[\s-]/g, '');
+  if (!code) return null;
+  if (!/^[A-Z0-9]{4,20}$/.test(code)) throw new Error("Este cupón no existe o no es de este evento.");
+  return code;
+}
+
+interface Coupon {
+  id: string;
+  code: string;
+  price: number;
+  stripe_session_id: string | null;
+}
+
+/**
+ * Cupón del evento listo para usar, o un error. Un cupón apunta al último pago en el que
+ * se usó: está gastado si ese pago se completó, y ocupado mientras siga abierto.
+ * `owner` es quien se inscribe: si el pago abierto es de su misma inscripción (mismo
+ * usuario y jugador), no cuenta como ocupado, porque al reintentar se cierra antes de
+ * abrir el nuevo. Con `attendeeKey` null (solo consultar el precio) vale cualquier
+ * inscripción del mismo usuario.
+ */
+async function findUsableCoupon(
+  admin: any, eventId: string, code: string, owner: { userId: string; attendeeKey: string | null },
+): Promise<Coupon> {
+  const { data: coupon, error } = await admin
+    .from('event_coupons')
+    .select('id, code, price, stripe_session_id')
+    .eq('event_id', eventId)
+    .eq('code', code)
+    .maybeSingle();
+  if (error) throw new Error("No se pudo comprobar el cupón.");
+  if (!coupon) throw new Error("Este cupón no existe o no es de este evento.");
+
+  const sessionId: string | null = coupon.stripe_session_id;
+  if (sessionId) {
+    const { data: reg, error: regError } = await admin
+      .from('event_registrations')
+      .select('status, user_id, attendee_key')
+      .eq('stripe_session_id', sessionId)
+      .maybeSingle();
+    if (regError) throw new Error("No se pudo comprobar el cupón.");
+    if (reg?.status === 'completed') throw new Error("Este cupón ya se ha usado.");
+    const ownRetry = reg?.status === 'pending' && reg.user_id === owner.userId &&
+      (owner.attendeeKey === null || reg.attendee_key === owner.attendeeKey);
+    if (!ownRetry && sessionId.startsWith('cs_')) {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.status === 'complete') throw new Error("Este cupón ya se ha usado.");
+      if (session.status === 'open') {
+        throw new Error("Este cupón se está usando en otro pago ahora mismo. Si es tuyo, termina o cancela ese pago, o espera media hora.");
+      }
+    }
+  }
+  return { id: coupon.id, code: coupon.code, price: Number(coupon.price), stripe_session_id: sessionId };
+}
+
+/**
+ * Asigna el cupón a un pago nuevo solo si nadie lo ha cogido desde que se comprobó
+ * (sigue apuntando al mismo pago de antes). false si otro pago se ha adelantado.
+ */
+async function claimCoupon(admin: any, coupon: Coupon, sessionId: string, userId: string): Promise<boolean> {
+  let query = admin.from('event_coupons').update({ stripe_session_id: sessionId, user_id: userId }).eq('id', coupon.id);
+  query = coupon.stripe_session_id ? query.eq('stripe_session_id', coupon.stripe_session_id) : query.is('stripe_session_id', null);
+  const { data, error } = await query.select('id');
+  return !error && Array.isArray(data) && data.length === 1;
 }
 
 async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminClient: any): Promise<Response> {
@@ -164,6 +250,18 @@ serve(async (req: Request) => {
     // El email es siempre el de la cuenta, no uno que mande el navegador
     const userEmail = user.email;
 
+    // Precio de un cupón antes de pagar, para enseñarlo en el formulario
+    if (body.checkCoupon !== undefined) {
+      const eventId = body.checkCoupon?.eventId;
+      const code = couponCode(body.checkCoupon?.code);
+      if (typeof eventId !== 'string' || !code) throw new Error("Escribe el código del cupón.");
+      const { data: ev } = await supabaseAdminClient.from('events').select('type, active').eq('id', eventId).maybeSingle();
+      if (!ev || ev.active === false) throw new Error("Este evento ya no admite inscripciones.");
+      if (!isTournament(ev)) throw new Error("Los cupones solo valen para torneos y viajes.");
+      const coupon = await findUsableCoupon(supabaseAdminClient, eventId, code, { userId: user.id, attendeeKey: null });
+      return new Response(JSON.stringify({ price: coupon.price }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
     // Inscripción a un campus, torneo o viaje (checkoutType 'campus' para todos los eventos)
     if (checkoutType === 'campus') {
       if (!campusRegistration) throw new Error("Missing campus registration data");
@@ -176,20 +274,25 @@ serve(async (req: Request) => {
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('title, type, active, dates, price_per_day, price_tiers, attendee_discounts, price_table, max_capacity')
+        .select('title, type, active, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
         
       if (eventError || !dbEvent) {
         throw new Error(`Failed to securely fetch event constraints: ${eventError?.message}`);
       }
-      const eventNoun = dbEvent.type === 'torneo' ? 'evento' : 'campus';
+      const tournament = isTournament(dbEvent);
+      const eventNoun = tournament ? 'evento' : 'campus';
       if (dbEvent.active === false) throw new Error(`Este ${eventNoun} ya no admite inscripciones.`);
 
       // 2. Validate the registration against the event before pricing it
       const numAttendees = campusRegistration.numAttendees;
       if (!isPositiveInt(numAttendees, MAX_ATTENDEES)) {
         throw new Error(`El número de asistentes debe ser un entero entre 1 y ${MAX_ATTENDEES}.`);
+      }
+      // Torneos y viajes: cada inscripción es de un jugador, que paga su precio sin descuentos
+      if (tournament && numAttendees !== 1) {
+        throw new Error("En torneos y viajes se inscribe a un jugador cada vez.");
       }
 
       const attendeeNames = campusRegistration.attendeeNames;
@@ -199,6 +302,9 @@ serve(async (req: Request) => {
         attendeeNames.some((n: unknown) => typeof n !== 'string' || !n.trim())
       ) {
         throw new Error("Hace falta un nombre por cada asistente.");
+      }
+      if (attendeeNames.some((n: string) => n.trim().length > MAX_NAME_LENGTH)) {
+        throw new Error(`Cada nombre puede tener como mucho ${MAX_NAME_LENGTH} caracteres.`);
       }
 
       const selectedDays = campusRegistration.selectedDays;
@@ -213,19 +319,32 @@ serve(async (req: Request) => {
       }
       // Con precio por evento completo no se eligen días: se va a todos
       const table = eventTable(dbEvent);
-      // Una tabla rota nunca debe acabar cobrando con el sistema anterior (o gratis)
-      if (dbEvent.price_table != null && !table) throw new Error("El precio de este evento no está bien configurado.");
-      if (table && !table.byDays && selectedDays.length !== eventDays.size) {
+      const options = eventOptions(dbEvent);
+      // Una tabla o unas opciones rotas nunca deben acabar cobrando con el sistema anterior (o gratis)
+      if (tournament ? !options : (dbEvent.price_table != null && !table)) {
+        throw new Error("El precio de este evento no está bien configurado.");
+      }
+      if ((tournament || (table && !table.byDays)) && selectedDays.length !== eventDays.size) {
         throw new Error(`Este ${eventNoun} se paga completo: hay que inscribirse a todos sus días.`);
       }
 
-      const customData = campusRegistration.customData ?? {};
-      if (
-        typeof customData !== 'object' || Array.isArray(customData) ||
-        Object.values(customData).some((v) => typeof v !== 'string')
-      ) {
-        throw new Error("Datos adicionales no válidos.");
+      // Opción de precio elegida (p. ej. con o sin autobús); con una sola no hace falta elegir
+      let option: { label: string; price: number } | null = null;
+      if (tournament) {
+        const index = options!.length === 1 ? (campusRegistration.priceOption ?? 0) : campusRegistration.priceOption;
+        if (!Number.isInteger(index) || index < 0 || index >= options!.length) {
+          throw new Error("Elige una de las opciones de precio.");
+        }
+        option = options![index];
       }
+
+      const customData = checkFields(dbEvent.custom_fields || [], campusRegistration.customData, dbEvent.title,
+        `El formulario de este ${eventNoun} ha cambiado: recarga la página y vuelve a rellenarlo.`);
+
+      // En torneos cada jugador tiene su inscripción; en campus hay una por cuenta
+      const key = tournament ? attendeeKey(attendeeNames[0]) : '';
+      const code = couponCode(campusRegistration.coupon);
+      if (code && !tournament) throw new Error("Los cupones solo valen para torneos y viajes.");
 
       // Una inscripción ya pagada no se puede volver a abrir desde aquí
       const { data: existing } = await supabaseAdminClient
@@ -233,8 +352,18 @@ serve(async (req: Request) => {
         .select('status, stripe_session_id')
         .eq('event_id', campusRegistration.eventId)
         .eq('user_id', user.id)
+        .eq('attendee_key', key)
         .maybeSingle();
-      if (existing?.status === 'completed') throw new Error(`Ya tienes una inscripción pagada en este ${eventNoun}.`);
+      if (existing?.status === 'completed') {
+        throw new Error(tournament
+          ? `${attendeeNames[0].trim()} ya está inscrito en este ${eventNoun}.`
+          : `Ya tienes una inscripción pagada en este ${eventNoun}.`);
+      }
+
+      // El cupón se comprueba antes de tocar nada; se asigna al pago nuevo más abajo
+      const coupon = code
+        ? await findUsableCoupon(supabaseAdminClient, campusRegistration.eventId, code, { userId: user.id, attendeeKey: key })
+        : null;
 
       // Si había un pago a medias (otra pestaña, o volvió atrás sin cancelar), se cierra
       // antes de abrir otro: si no, al pagar el antiguo no habría inscripción que confirmar.
@@ -247,16 +376,15 @@ serve(async (req: Request) => {
         if (previous.status === 'open') await stripe.checkout.sessions.expire(previousSession);
       }
 
-      // Aforo: cuentan las inscripciones no canceladas de los demás (la propia se sustituye)
+      // Aforo: cuentan las inscripciones no canceladas, menos la que se está rehaciendo
       if (dbEvent.max_capacity) {
         const { data: others, error: capacityError } = await supabaseAdminClient
           .from('event_registrations')
-          .select('num_attendees, status')
-          .eq('event_id', campusRegistration.eventId)
-          .neq('user_id', user.id);
+          .select('num_attendees, status, user_id, attendee_key')
+          .eq('event_id', campusRegistration.eventId);
         if (capacityError) throw new Error(`No se pudo comprobar el aforo: ${capacityError.message}`);
         const taken = (others || [])
-          .filter((r: any) => r.status !== 'cancelled')
+          .filter((r: any) => r.status !== 'cancelled' && !(r.user_id === user.id && r.attendee_key === key))
           .reduce((sum: number, r: any) => sum + (Number(r.num_attendees) || 0), 0);
         const left = Number(dbEvent.max_capacity) - taken;
         if (numAttendees > left) {
@@ -265,15 +393,22 @@ serve(async (req: Request) => {
         }
       }
 
-      // 3. Precio calculado aquí, nunca el que manda el navegador: con la tabla de
-      // precios del evento o, si no tiene, con el sistema anterior (_shared/pricing.ts)
+      // 3. Precio calculado aquí, nunca el que manda el navegador: el del cupón, el de la
+      // opción del torneo o el de la tabla del campus (_shared/pricing.ts)
       const numDays = selectedDays.length;
-      const safeTotalAmount = roundCents(eventPrice(dbEvent, numAttendees, numDays));
+      const safeTotalAmount = roundCents(
+        coupon ? coupon.price : option ? option.price : eventPrice(dbEvent, numAttendees, numDays),
+      );
       if (!Number.isFinite(safeTotalAmount) || safeTotalAmount < 0) throw new Error("El precio de este evento no está bien configurado.");
+
+      // Lo elegido queda a la vista del club en la inscripción
+      if (option?.label) customData['Opción de precio'] = option.label;
+      if (coupon) customData['Cupón'] = coupon.code;
 
       const registration = {
         event_id: campusRegistration.eventId,
         user_id: user.id,
+        attendee_key: key,
         selected_days: selectedDays,
         num_attendees: numAttendees,
         attendee_names: attendeeNames.map((n: string) => n.trim()),
@@ -281,14 +416,17 @@ serve(async (req: Request) => {
         status: 'pending',
         custom_data: customData
       };
+      const couponTaken = () => new Error("Este cupón se acaba de usar en otro pago. Si crees que es un error, habla con el club.");
 
-      // Evento gratis: no hay nada que cobrar, la inscripción queda confirmada
+      // Gratis (evento gratis o cupón de 0 €): no hay nada que cobrar, la inscripción queda confirmada
       if (safeTotalAmount === 0) {
+        const freeSessionId = `free_${crypto.randomUUID().substring(0, 8)}`;
+        if (coupon && !(await claimCoupon(supabaseAdminClient, coupon, freeSessionId, user.id))) throw couponTaken();
         const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
           ...registration,
           status: 'completed',
-          stripe_session_id: `free_${crypto.randomUUID().substring(0, 8)}`
-        }, { onConflict: 'event_id,user_id' });
+          stripe_session_id: freeSessionId
+        }, { onConflict: 'event_id,user_id,attendee_key' });
 
         if (insertError) throw new Error("DB insert failed: " + insertError.message);
 
@@ -299,15 +437,15 @@ serve(async (req: Request) => {
       if (safeTotalAmount < 0.5) throw new Error("El importe mínimo para pagar con tarjeta es 0,50 €.");
       const finalPrice = Math.round(safeTotalAmount * 100);
 
+      const detail = tournament
+        ? [attendeeNames[0].trim(), option?.label, coupon ? `cupón ${coupon.code}` : ''].filter(Boolean).join(' | ')
+        : table && !table.byDays
+          ? `${numAttendees} asist. | evento completo`
+          : `${numAttendees} asist. | ${numDays} ${numDays === 1 ? 'día' : 'días'}`;
       const line_items = [{
         price_data: {
           currency: 'eur',
-          product_data: { 
-            name: `Inscripción: ${dbEvent.title}`, 
-            description: table && !table.byDays
-              ? `${numAttendees} asist. | evento completo`
-              : `${numAttendees} asist. | ${numDays} ${numDays === 1 ? 'día' : 'días'}`
-          },
+          product_data: { name: `Inscripción: ${dbEvent.title}`, description: detail },
           unit_amount: finalPrice,
         },
         quantity: 1,
@@ -324,11 +462,17 @@ serve(async (req: Request) => {
         metadata: { userId: user.id, eventId: campusRegistration.eventId, type: 'campus' }
       });
 
+      // Si otro pago se ha llevado el cupón mientras tanto, este no se puede usar
+      if (coupon && !(await claimCoupon(supabaseAdminClient, coupon, session.id, user.id))) {
+        await stripe.checkout.sessions.expire(session.id);
+        throw couponTaken();
+      }
+
       // Upsert registration as pending
       const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
         ...registration,
         stripe_session_id: session.id
-      }, { onConflict: 'event_id,user_id' });
+      }, { onConflict: 'event_id,user_id,attendee_key' });
 
       if (insertError) throw new Error("DB insert failed: " + insertError.message);
 
