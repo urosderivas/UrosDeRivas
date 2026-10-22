@@ -13,6 +13,9 @@
 -- 3. event_coupons: códigos que da el club (p. ej. becas). Cada código es de un evento,
 --    vale una sola vez y fija el precio final que se paga. Solo los admins los ven y
 --    crean; solo la función de pago (con la clave de servicio) los aplica.
+--
+-- Parte 1 de 2: lo que se añade. La parte 2 (20261022101731) quita la restricción
+-- antigua de una inscripción por cuenta y ajusta los permisos.
 
 -- 1. Opciones de precio
 create or replace function public.is_valid_price_options(o jsonb)
@@ -46,9 +49,14 @@ $$;
 
 alter table public.events add column if not exists price_options jsonb;
 
-alter table public.events drop constraint if exists events_price_options_check;
-alter table public.events add constraint events_price_options_check
-  check (public.is_valid_price_options(price_options));
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'events_price_options_check') then
+    alter table public.events add constraint events_price_options_check
+      check (public.is_valid_price_options(price_options));
+  end if;
+end;
+$$;
 
 -- Los torneos guardados con tabla pasan a precio fijo: el de 1 asistente
 update public.events
@@ -67,7 +75,6 @@ begin
   end if;
 end;
 $$;
-alter table public.event_registrations drop constraint if exists event_registrations_event_id_user_id_key;
 
 -- Cambiar el estado de una inscripción concreta (con varias por cuenta, la cuenta ya no basta)
 create or replace function public.update_registration_status(p_registration_id uuid, p_status text)
@@ -90,9 +97,6 @@ begin
   update event_registrations set status = p_status where id = p_registration_id;
 end;
 $function$;
-
-revoke execute on function public.update_registration_status(uuid, text) from public, anon;
-grant execute on function public.update_registration_status(uuid, text) to authenticated;
 
 -- 3. Cupones
 create table if not exists public.event_coupons (
@@ -118,18 +122,17 @@ create index if not exists event_coupons_event_id_idx on public.event_coupons (e
 
 alter table public.event_coupons enable row level security;
 
--- El panel solo crea (código, precio, nota), lee y borra; asignar un cupón a un pago
--- es cosa de la función de pago
-revoke all on public.event_coupons from anon, authenticated;
-grant select, delete on public.event_coupons to authenticated;
-grant insert (event_id, code, price, note) on public.event_coupons to authenticated;
-
-drop policy if exists "Admins manage coupons" on public.event_coupons;
-create policy "Admins manage coupons" on public.event_coupons
-  for all
-  using (
-    exists (select 1 from public.user_roles where user_roles.user_id = (select auth.uid()) and user_roles.role = 'admin')
-  )
-  with check (
-    exists (select 1 from public.user_roles where user_roles.user_id = (select auth.uid()) and user_roles.role = 'admin')
-  );
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'event_coupons' and policyname = 'Admins manage coupons') then
+    create policy "Admins manage coupons" on public.event_coupons
+      for all
+      using (
+        exists (select 1 from public.user_roles where user_roles.user_id = (select auth.uid()) and user_roles.role = 'admin')
+      )
+      with check (
+        exists (select 1 from public.user_roles where user_roles.user_id = (select auth.uid()) and user_roles.role = 'admin')
+      );
+  end if;
+end;
+$$;
