@@ -23,6 +23,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
 
   
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,9 +43,10 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
       setStripePriceId(initial.stripe_price_id || '');
 
       setCustomFields(initial.custom_fields || []);
+      setActive(initial.active !== false);
     } else {
       setName(''); setPrice(''); setImageUrl(''); setDescription('');
-      setStripePriceId(''); setCustomFields([]);
+      setStripePriceId(''); setCustomFields([]); setActive(true);
     }
     setError('');
   }, [initial, isOpen]);
@@ -88,6 +90,7 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
         sizes: [],
         custom_fields: customFields,
         stripe_price_id: stripePriceId || undefined,
+        active,
       });
       onClose();
     } catch (e: any) {
@@ -191,6 +194,11 @@ export function MarketItemModal({ isOpen, onClose, onSave, initial }: Props) {
                 </div>
               </div>
             </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+              Visible para los usuarios
+            </label>
 
             {error && <p className="modal-error">{error}</p>}
 
