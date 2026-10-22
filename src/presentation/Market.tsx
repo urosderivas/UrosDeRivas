@@ -24,6 +24,10 @@ export function Market() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Los productos ocultos solo los ve quien gestiona la tienda (marcados como ocultos)
+  const isShopStaff = user?.role === 'admin' || user?.role === 'tienda';
+  const shownItems = isShopStaff ? items : items.filter(i => i.active !== false);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -40,12 +44,12 @@ export function Market() {
   const productParam = new URLSearchParams(location.search).get('producto');
   useEffect(() => {
     if (!productParam) return;
-    const item = items.find(i => i.id === productParam);
+    const item = shownItems.find(i => i.id === productParam);
     if (!item) return;
     setSelectedItem(item);
     // Se quita del enlace para que no se vuelva a abrir al cerrarlo o recargar
     navigate('/market', { replace: true });
-  }, [productParam, items, navigate]);
+  }, [productParam, shownItems, navigate]);
 
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
@@ -151,7 +155,7 @@ export function Market() {
           <div>
             <p className="market-kicker">Uros de Rivas</p>
             <h1>Tienda oficial</h1>
-            {!loading && items.length > 0 && <p className="market-count">{items.length} {items.length === 1 ? 'producto' : 'productos'}</p>}
+            {!loading && shownItems.length > 0 && <p className="market-count">{shownItems.length} {shownItems.length === 1 ? 'producto' : 'productos'}</p>}
           </div>
           <div className="market-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button className="btn-cart-toggle" onClick={() => setCartOpen(true)}>
@@ -160,7 +164,7 @@ export function Market() {
               <span className="cart-label">Carrito</span>
             </button>
             {user && <button className="btn-secondary hidden-mobile" onClick={() => setOrdersModalOpen(true)}>📌 Mis Pedidos</button>}
-            <AdminGuard>
+            <AdminGuard roles={['admin', 'tienda']}>
               <button className="btn-admin-add hidden-mobile" onClick={handleOpenCreate}>+ Añadir Producto</button>
             </AdminGuard>
           </div>
@@ -169,13 +173,14 @@ export function Market() {
         <div className="products-grid">
           {loading ? (
             <SkeletonGrid />
-          ) : items.length === 0 ? (
+          ) : shownItems.length === 0 ? (
             <p className="no-items">Próximamente disponible.</p>
           ) : (
-            items.map(item => (
+            shownItems.map(item => (
               <ProductCard key={item.id} item={item} onOpen={() => setSelectedItem(item)} adminActions={
-                <AdminGuard>
+                <AdminGuard roles={['admin', 'tienda']}>
                   <div className="admin-card-actions" onClick={e => e.stopPropagation()}>
+                    {item.active === false && <span className="product-hidden-badge" title="Los usuarios no lo ven. Se vuelve a mostrar desde el panel o editándolo.">OCULTO</span>}
                     <button className="btn-admin-edit" onClick={() => handleOpenEdit(item)} title="Editar">✏️</button>
                     <button className="btn-admin-delete" onClick={() => handleDelete(item.id)} title="Borrar">X</button>
                   </div>

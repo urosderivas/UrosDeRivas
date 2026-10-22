@@ -458,3 +458,14 @@
   flex: 1;
   border-radius: 50px;
 }
+
+.product-hidden-badge {
+  align-self: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}

@@ -67,6 +67,19 @@ function eventSaveError(error: any): Error {
   return error instanceof Error ? error : new Error(error?.message || 'No se pudo guardar el evento.');
 }
 
+// Producto de la base de datos a producto de la web
+const mapItem = (item: any): MarketItem => ({
+  id: item.id,
+  name: item.name,
+  price: item.price,
+  imageUrl: item.image_url,
+  description: item.description,
+  sizes: item.sizes,
+  custom_fields: item.custom_fields || [],
+  stripe_price_id: item.stripe_price_id,
+  active: item.active !== false,
+});
+
 export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort {
   async getUser(): Promise<User | null> {
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -138,17 +151,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getItems(): Promise<MarketItem[]> {
     const { data, error } = await supabase.from('market_items').select('*');
     if (error) throw error;
-    // Map DB fields to Domain if necessary
-    return data.map(item => ({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      imageUrl: item.image_url,
-      description: item.description,
-      sizes: item.sizes,
-      custom_fields: item.custom_fields || [],
-      stripe_price_id: item.stripe_price_id,
-    }));
+    return data.map(mapItem);
   }
 
   async createItem(item: Omit<MarketItem, 'id'>): Promise<MarketItem> {
@@ -160,9 +163,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       sizes: item.sizes || [],
       custom_fields: item.custom_fields || [],
       stripe_price_id: item.stripe_price_id,
+      active: item.active ?? true,
     }).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
+    return mapItem(data);
   }
 
   async updateItem(id: string, item: Partial<MarketItem>): Promise<MarketItem> {
@@ -174,10 +178,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (item.sizes !== undefined) payload.sizes = item.sizes;
     if (item.custom_fields !== undefined) payload.custom_fields = item.custom_fields;
     if (item.stripe_price_id !== undefined) payload.stripe_price_id = item.stripe_price_id;
+    if (item.active !== undefined) payload.active = item.active;
 
     const { data, error } = await supabase.from('market_items').update(payload).eq('id', id).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
+    return mapItem(data);
   }
 
   async deleteItem(id: string): Promise<void> {

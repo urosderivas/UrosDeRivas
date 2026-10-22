@@ -240,6 +240,14 @@ export function AdminPanel() {
     setItems(data);
   };
 
+  // Ocultar un producto (sin stock, de otra temporada...) sin borrarlo
+  const handleToggleItemActive = async (item: MarketItem) => {
+    try {
+      const updated = await adapter.updateItem(item.id, { active: item.active === false });
+      setItems(prev => prev.map(i => i.id === item.id ? updated : i));
+    } catch (e: any) { showMessage('Error', e.message); }
+  };
+
   const handleDeleteItem = async (id: string) => {
     setConfirmPrompt({
       open: true,
@@ -1047,18 +1055,26 @@ export function AdminPanel() {
             <th>Nombre</th>
             <th>Precio</th>
             <th>Descripción</th>
+            <th>Visible</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> :
-            items.length === 0 ? <tr><td colSpan={5} className="table-empty">Tienda vacía.</td></tr> :
+          {loading ? <tr><td colSpan={6} className="table-empty">Cargando...</td></tr> :
+            items.length === 0 ? <tr><td colSpan={6} className="table-empty">Tienda vacía.</td></tr> :
               items.map(item => (
-                <tr key={item.id}>
+                <tr key={item.id} style={item.active === false ? { opacity: 0.55 } : undefined}>
                   <td><img src={item.imageUrl} alt={item.name} className="market-thumb" /></td>
                   <td>{item.name}</td>
                   <td>€{item.price}</td>
                   <td className="description-cell">{item.description}</td>
+                  <td>
+                    <button type="button" className={`status-badge status-toggle ${item.active !== false ? 'completed' : 'cancelled'}`}
+                      title={item.active !== false ? 'Visible en la tienda. Pulsa para ocultarlo.' : 'Oculto: no sale en la tienda ni se puede comprar. Pulsa para mostrarlo.'}
+                      onClick={() => handleToggleItemActive(item)}>
+                      {item.active !== false ? 'SÍ' : 'NO'}
+                    </button>
+                  </td>
                   <td>
                     <div className="admin-actions-cell">
                       <button className="btn-icon" title="Editar" onClick={() => { setEditItem(item); setModalOpen(true); }}><Pencil size={16} /></button>

@@ -62,6 +62,7 @@ interface DbItem {
   image_url?: string;
   sizes?: string[] | null;
   custom_fields?: { name: string; type: 'text' | 'categorical'; options?: string[]; required: boolean }[] | null;
+  active?: boolean | null;
 }
 
 const MAX_CART_LINES = 50;
@@ -511,6 +512,9 @@ serve(async (req: Request) => {
     for (const cartItem of cartItems as CartItemPayload[]) {
       const dbItem = dbItemsMap.get(cartItem.itemId);
       if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
+      if (dbItem.active === false) {
+        throw new Error(`"${dbItem.name}" ya no está a la venta. Quítalo del carrito para seguir.`);
+      }
       if (!isPositiveInt(cartItem.quantity, MAX_ITEM_QUANTITY)) {
         throw new Error(`La cantidad debe ser un entero entre 1 y ${MAX_ITEM_QUANTITY}.`);
       }

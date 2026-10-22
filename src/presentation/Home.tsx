@@ -36,6 +36,7 @@ function slideText(body: string): string {
 
 export function Home() {
   const { items, fetchItems } = useStore();
+  const shopItems = items.filter(i => i.active !== false);
   const navigate = useNavigate();
   const [news, setNews] = useState<NewsPost[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
@@ -122,14 +123,14 @@ export function Home() {
         ))}
       </section>
 
-      {items.length > 0 && (
+      {shopItems.length > 0 && (
         <section className="home-shop">
           <div className="home-section-head">
             <h3>Tienda oficial</h3>
             <Link to="/market" className="home-see-all">Ver toda la tienda <ArrowRight size={16} /></Link>
           </div>
           <div className="home-shop-row">
-            {items.slice(0, 4).map(item => (
+            {shopItems.slice(0, 4).map(item => (
               <ProductCard key={item.id} item={item} onOpen={() => navigate(`/market?producto=${item.id}`)} />
             ))}
           </div>

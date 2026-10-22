@@ -23,6 +23,8 @@ export interface MarketItem {
   sizes?: string[];
   stripe_price_id?: string;
   custom_fields?: CustomField[];
+  /** Si sale en la tienda; un producto oculto no se puede comprar */
+  active?: boolean;
 }
 
 export interface CartItem {
