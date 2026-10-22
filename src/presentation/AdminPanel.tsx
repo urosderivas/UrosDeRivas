@@ -3,6 +3,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
 import { isFreeEvent, startingPrice } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
+import { registrationDetail } from '../utils/registrations';
 import { AdminGuard } from './AdminGuard';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
@@ -869,7 +870,7 @@ export function AdminPanel() {
                                     buyer_name: att.user_email ? att.user_email.split('@')[0] : 'Desconocido',
                                     buyer_email: att.user_email || '',
                                     item_name: ev.title,
-                                    size: `${(att.attendee_names || []).join(', ')} | ${formatDateRanges(att.selected_days || [], { weekday: false })}`,
+                                    size: registrationDetail(att),
                                     quantity: 1,
                                     amount: Number(att.amount),
                                     status: att.status,

@@ -1,11 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { formatDateRanges } from '../utils/dates';
-
-/** Detalle de una inscripción para el justificante y el QR: jugadores, fechas y lo elegido (opción de precio, cupón...). */
-function registrationDetail(r: any): string {
-  const extras = Object.entries(r.custom_data || {}).map(([k, v]) => `${k}: ${v}`);
-  return [(r.attendee_names || []).join(', '), formatDateRanges(r.selected_days || [], { weekday: false }), ...extras].join(' | ');
-}
+import { registrationDetail } from '../utils/registrations';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
 import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
 
