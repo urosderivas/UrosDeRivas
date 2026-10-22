@@ -20,6 +20,7 @@ import { takeLoginNext } from './utils/loginRedirect';
 
 // El panel (con el PDF, el Excel y el escáner QR) solo lo descargan los admins
 const AdminPanel = lazy(() => import('./presentation/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const Appointments = lazy(() => import('./presentation/Appointments').then(m => ({ default: m.Appointments })));
 
 function TelemetryTracker() {
   const { logActivity } = useStore();
@@ -83,6 +84,7 @@ function App() {
             <Route path="/events" element={<Events key="campus" kind="campus" />} />
             <Route path="/torneos" element={<Events key="torneo" kind="torneo" />} />
             <Route path="/sponsors" element={<Sponsors />} />
+            <Route path="/citas" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><Appointments /></Suspense>} />
             <Route path="/admin" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><AdminPanel /></Suspense>} />
             <Route path="/login" element={<Login />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />

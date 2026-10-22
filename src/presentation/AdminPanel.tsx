@@ -5,6 +5,8 @@ import { isFreeEvent, startingPrice } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
 import { registrationDetail } from '../utils/registrations';
 import { AdminGuard } from './AdminGuard';
+import { AppointmentsAdmin } from './AppointmentsAdmin';
+import { ROLES, ROLE_LABELS, Role, STAFF_ROLES } from '../domain/roles';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
@@ -20,10 +22,32 @@ const QrScannerModal = lazy(() => import('./components/QrScannerModal').then(m =
 
 const adapter = new SupabaseAdapter();
 
+type Tab = 'users' | 'stats' | 'orders' | 'market' | 'events' | 'citas';
+
+const TAB_LABELS: Record<Tab, string> = {
+  users: 'Usuarios',
+  stats: 'Estadísticas',
+  orders: 'Pedidos',
+  market: 'Catálogo Tienda',
+  events: 'Eventos e inscripciones',
+  citas: 'Citas',
+};
+
+/** Pestañas de cada rol: la base de datos solo deja hacer a cada uno lo de sus pestañas. */
+const ROLE_TABS: Record<Role, Tab[]> = {
+  admin: ['users', 'stats', 'orders', 'market', 'events', 'citas'],
+  coach: ['stats', 'events'],
+  tienda: ['orders', 'market'],
+  fisio: ['citas'],
+  user: [],
+};
+
 export function AdminPanel() {
   const { user } = useStore();
   const isAdmin = user?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>(user?.role === 'coach' ? 'stats' : 'users');
+  const tabs = ROLE_TABS[user?.role || 'user'];
+  const [activeTab, setActiveTab] = useState<Tab>(tabs[0] || 'stats');
+  const canSee = (tab: Tab) => tabs.includes(tab);
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -54,7 +78,9 @@ export function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'users' && user?.role === 'admin') {
+      if (!canSee(activeTab)) {
+        // Sin permiso para esta pestaña: no se pide nada
+      } else if (activeTab === 'users') {
         const data = await adapter.getSystemUsers();
         setSystemUsers(data);
       } else if (activeTab === 'stats') {
@@ -64,18 +90,21 @@ export function AdminPanel() {
           const sysUsers = await adapter.getSystemUsers();
           setSystemUsers(sysUsers);
         }
-      } else if (activeTab === 'orders' && user?.role === 'admin') {
+      } else if (activeTab === 'orders') {
         const data = await adapter.getOrders();
         setOrders(data);
         // Auto-sync Stripe statuses on load
         setTimeout(() => handleSyncAllStripe(data), 100);
-      } else if (activeTab === 'market' && user?.role === 'admin') {
+      } else if (activeTab === 'market') {
         const data = await adapter.getItems();
         setItems(data);
-      } else if (activeTab === 'events' && (user?.role === 'admin' || user?.role === 'coach')) {
+      } else if (activeTab === 'events') {
         const data = await adapter.getEvents();
         setEvents(data);
         setTimeout(() => handleSyncAllCampusStripe(data), 100);
+      } else if (activeTab === 'citas' && isAdmin) {
+        // El admin elige a qué fisio crearle el calendario
+        setSystemUsers(await adapter.getSystemUsers());
       }
     } catch (e) {
       console.error(e);
@@ -153,9 +182,14 @@ export function AdminPanel() {
     }
   };
 
+  // El rol llega después del primer render: se abre la primera pestaña del rol
+  useEffect(() => {
+    if (tabs.length) setActiveTab(tabs[0]);
+  }, [user?.role]);
+
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, user?.role]);
 
   const handleDeleteLog = async (id: string) => {
     setConfirmPrompt({
@@ -553,12 +587,28 @@ export function AdminPanel() {
     const ws = XLSX.utils.json_to_sheet(systemUsers.map(u => ({
       'ID': u.id,
       'Email': u.email,
-      'Rol': u.role,
+      'Rol': ROLE_LABELS[u.role as Role] || u.role,
       'Fecha Registro': new Date(u.created_at).toLocaleString('es-ES')
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
     XLSX.writeFile(wb, "Reporte_Usuarios_Uros.xlsx");
+  };
+
+  const handleChangeRole = (sysUser: { id: string; email: string; role: string }, role: Role) => {
+    const warning = role === 'admin'
+      ? `\n\nUn administrador puede hacerlo TODO: usuarios, pedidos, eventos, roles…`
+      : '';
+    setConfirmPrompt({
+      open: true,
+      message: `¿Cambiar el rol de ${sysUser.email} a "${ROLE_LABELS[role]}"?${warning}`,
+      action: async () => {
+        try {
+          await adapter.setUserRole(sysUser.id, role);
+          setSystemUsers(prev => prev.map(u => u.id === sysUser.id ? { ...u, role } : u));
+        } catch (e: any) { showMessage('Error', e.message); }
+      },
+    });
   };
 
   const renderUsers = () => (
@@ -584,7 +634,15 @@ export function AdminPanel() {
               systemUsers.map(sysUser => (
                 <tr key={sysUser.id}>
                   <td>{sysUser.email}</td>
-                  <td><span className={`status-badge ${sysUser.role === 'admin' ? 'completed' : sysUser.role === 'coach' ? 'processing' : 'pending'}`}>{sysUser.role?.toUpperCase() || 'USER'}</span></td>
+                  <td>
+                    {sysUser.id === user?.id ? (
+                      <span className="status-badge completed" title="Tu rol solo lo puede cambiar otro administrador">{ROLE_LABELS[sysUser.role as Role] || sysUser.role}</span>
+                    ) : (
+                      <select className="status-dropdown" value={sysUser.role || 'user'} onChange={e => handleChangeRole(sysUser, e.target.value as Role)}>
+                        {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                    )}
+                  </td>
                   <td>{new Date(sysUser.created_at).toLocaleDateString()}</td>
                   <td>
                     <button className="btn-icon delete" title="Eliminar cuenta" onClick={() => handleDeleteUser(sysUser.id)}><XCircle size={16} /></button>
@@ -1012,47 +1070,32 @@ export function AdminPanel() {
   );
 
   return (
-    <AdminGuard roles={['admin', 'coach']} fallback={<div className="page-padding"><h2>Acceso Denegado</h2></div>}>
+    <AdminGuard roles={STAFF_ROLES} fallback={<div className="page-padding"><h2>Acceso Denegado</h2></div>}>
       <div className="admin-panel animate-fade-in">
         <div className="admin-header">
-          <h2>Panel de {user?.role === 'admin' ? 'Administrador' : 'Entrenador'}</h2>
+          <h2>Panel de {user?.role === 'admin' ? 'Administrador' : ROLE_LABELS[user?.role || 'user']}</h2>
           <button onClick={fetchData} className="btn-secondary">
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
           </button>
         </div>
 
         <div className="admin-tabs">
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-              Usuarios
+          {tabs.map(tab => (
+            <button key={tab} className={`tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
+              {TAB_LABELS[tab]}
             </button>
-          )}
-          <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
-            Estadísticas
-          </button>
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-              Pedidos
-            </button>
-          )}
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'market' ? 'active' : ''}`} onClick={() => setActiveTab('market')}>
-              Catálogo Tienda
-            </button>
-          )}
-          <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
-            Eventos e inscripciones
-          </button>
+          ))}
         </div>
 
         <div className="admin-content-area">
           {loading && <div className="loading-state">Cargando...</div>}
           <div className="admin-tab-content">
-            {activeTab === 'users' && renderUsers()}
-            {activeTab === 'stats' && renderStats()}
-            {activeTab === 'orders' && renderOrders()}
-            {activeTab === 'market' && renderMarket()}
-            {activeTab === 'events' && renderEvents()}
+            {canSee(activeTab) && activeTab === 'users' && renderUsers()}
+            {canSee(activeTab) && activeTab === 'stats' && renderStats()}
+            {canSee(activeTab) && activeTab === 'orders' && renderOrders()}
+            {canSee(activeTab) && activeTab === 'market' && renderMarket()}
+            {canSee(activeTab) && activeTab === 'events' && renderEvents()}
+            {canSee(activeTab) && activeTab === 'citas' && <AppointmentsAdmin systemUsers={systemUsers} />}
           </div>
         </div>
       </div>

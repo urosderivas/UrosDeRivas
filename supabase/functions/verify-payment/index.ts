@@ -16,7 +16,7 @@ serve(async (req: Request) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("Stripe key not configured");
 
-    // Solo admins y entrenadores pueden consultar pagos en Stripe
+    // Solo admins, entrenadores y el gestor de la tienda pueden consultar pagos en Stripe
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -32,7 +32,7 @@ serve(async (req: Request) => {
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle();
-    if (!roleRow || !['admin', 'coach'].includes(roleRow.role)) {
+    if (!roleRow || !['admin', 'coach', 'tienda'].includes(roleRow.role)) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,

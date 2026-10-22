@@ -1,10 +1,11 @@
 import { ReactNode } from 'react';
 import { useStore } from './store';
+import type { Role } from '../domain/roles';
 
 interface AdminGuardProps {
   children: ReactNode;
   fallback?: ReactNode;
-  roles?: ('admin' | 'coach' | 'user')[];
+  roles?: Role[];
 }
 
 export function AdminGuard({ children, fallback = null, roles = ['admin'] }: AdminGuardProps) {

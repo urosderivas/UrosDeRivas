@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { MyOrdersModal } from './MyOrdersModal';
 import './Navbar.css';
 import { clubLogoUrl } from '../utils/media';
+import { isStaff, ROLE_LABELS } from '../domain/roles';
 
 export function Navbar() {
   const { user, signOut, cart } = useStore();
@@ -26,16 +27,17 @@ export function Navbar() {
           <Link to="/events" onClick={() => setIsOpen(false)}>CAMPUS</Link>
           <Link to="/torneos" onClick={() => setIsOpen(false)}>TORNEOS Y VIAJES</Link>
           <Link to="/market" onClick={() => setIsOpen(false)}>TIENDA</Link>
+          <Link to="/citas" onClick={() => setIsOpen(false)}>CITAS</Link>
           <Link to="/sponsors" onClick={() => setIsOpen(false)}>PATROCINADORES</Link>
-          {user && (user.role === 'admin' || user.role === 'coach') && (
-            <Link to="/admin" onClick={() => setIsOpen(false)}>ESTADÍSTICAS</Link>
+          {isStaff(user?.role) && (
+            <Link to="/admin" onClick={() => setIsOpen(false)}>ADMIN</Link>
           )}
           
           {user ? (
             <div className="auth-box">
               {user.role !== 'user' && (
                 <span className={`user-badge role-${user.role}`}>
-                  {user.role === 'admin' ? 'Admin' : 'Entrenador'}
+                  {ROLE_LABELS[user.role]}
                 </span>
               )}
               <button onClick={() => setOrdersOpen(true)} className="btn-cart" title="Mis Pedidos">

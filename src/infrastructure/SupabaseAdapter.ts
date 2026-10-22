@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabase';
 import { registrationDetail } from '../utils/registrations';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
+import type { Role } from '../domain/roles';
 import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
 
 /** Registros de actividad que enseña el panel (los más recientes) */
@@ -472,6 +473,12 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     const { data, error } = await supabase.rpc('get_system_users');
     if (error) { console.error('Error fetching users:', error); return []; }
     return data || [];
+  }
+
+  /** Cambia el rol de otro usuario (solo admins; nadie cambia el suyo). */
+  async setUserRole(userId: string, role: Role): Promise<void> {
+    const { error } = await supabase.rpc('set_user_role', { target_user_id: userId, new_role: role });
+    if (error) throw error;
   }
 
   async deleteUser(id: string): Promise<void> {

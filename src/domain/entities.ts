@@ -1,9 +1,10 @@
 import type { PriceOption, PriceTable } from './pricing';
+import type { Role } from './roles';
 
 export interface User {
   id: string;
   email: string;
-  role: 'admin' | 'coach' | 'user';
+  role: Role;
 }
 
 export interface CustomField {
@@ -137,4 +138,47 @@ export interface NewsPost {
   /** Campus, torneo o viaje relacionado (opcional) */
   eventId?: string;
   publishedAt: string;
+}
+
+/** Horario semanal de un calendario: "1" = lunes ... "7" = domingo, tramos ["09:00", "13:00"] en hora de Madrid. */
+export type WeeklyHours = Record<string, [string, string][]>;
+
+/** Calendario de citas de un fisio o recuperador. */
+export interface AppointmentProvider {
+  id: string;
+  user_id: string;
+  name: string;
+  service: string;
+  description: string | null;
+  duration_minutes: number;
+  weekly_hours: WeeklyHours;
+  min_notice_hours: number;
+  max_days_ahead: number;
+  cancel_hours: number;
+  active: boolean;
+}
+
+export type AppointmentStatus = 'booked' | 'done' | 'no_show' | 'cancelled';
+
+export interface Appointment {
+  id: string;
+  provider_id: string;
+  user_id: string | null;
+  user_email: string | null;
+  patient_name: string;
+  notes: string | null;
+  starts_at: string;
+  ends_at: string;
+  status: AppointmentStatus;
+  created_at: string;
+  provider?: Pick<AppointmentProvider, 'name' | 'service' | 'cancel_hours'>;
+}
+
+/** Hueco cerrado en un calendario (vacaciones, un torneo...). */
+export interface AppointmentBlock {
+  id: string;
+  provider_id: string;
+  starts_at: string;
+  ends_at: string;
+  note: string | null;
 }
