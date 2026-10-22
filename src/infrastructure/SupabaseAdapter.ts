@@ -462,13 +462,17 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data;
   }
 
+  /** Estado en Stripe de varias sesiones, de 100 en 100 (la función no acepta más de una vez). */
   async checkStripePaymentsBatch(sessionIds: string[]): Promise<Record<string, { payment_status: string; status: string }>> {
-    if (sessionIds.length === 0) return {};
-    const { data, error } = await supabase.functions.invoke('verify-payment', {
-      body: { sessionIds } // Array mode supported by our new Edge layout
-    });
-    if (error) throw error;
-    return data;
+    const results: Record<string, { payment_status: string; status: string }> = {};
+    for (let i = 0; i < sessionIds.length; i += 100) {
+      const { data, error } = await supabase.functions.invoke('verify-payment', {
+        body: { sessionIds: sessionIds.slice(i, i + 100) }
+      });
+      if (error) throw error;
+      Object.assign(results, data);
+    }
+    return results;
   }
 
   // ============================================

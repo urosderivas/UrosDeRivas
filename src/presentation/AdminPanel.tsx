@@ -320,9 +320,23 @@ export function AdminPanel() {
     </>
   );
 
-  const handleSyncAllStripe = async (ordersList?: Order[]) => {
+  // ¿Pagado con tarjeta? Manda lo último que ha dicho Stripe en el panel; si no se ha
+  // consultado, lo que ya dejaron el webhook o una sincronización anterior en el estado.
+  const orderPaid = (o: Order) =>
+    stripeStatuses[o.id] !== undefined ? stripeStatuses[o.id] === 'paid' : o.status === 'processing' || o.status === 'completed';
+  const orderChecked = (o: Order) => stripeStatuses[o.id] !== undefined || orderPaid(o);
+  const registrationPaid = (att: any) =>
+    stripeStatuses[att.stripe_session_id] !== undefined ? stripeStatuses[att.stripe_session_id] === 'paid' : att.status === 'completed';
+  const registrationChecked = (att: any) => stripeStatuses[att.stripe_session_id] !== undefined || registrationPaid(att);
+
+  /**
+   * Comprueba en Stripe los pagos de los pedidos. Al abrir la pestaña solo los pendientes
+   * (los demás ya los confirmó el webhook o una sincronización anterior); el botón
+   * "Sincronizar todos" los comprueba todos y lo que diga Stripe pasa a ser lo que se ve.
+   */
+  const handleSyncAllStripe = async (ordersList?: Order[], all = false) => {
     setSyncingStripe(true);
-    const target = ordersList || orders;
+    const target = (ordersList || orders).filter(o => all || o.status === 'pending');
 
     // Sesiones de Stripe sin repetir (un carrito con varios artículos comparte sesión)
     const sessionIdsToVerify = [...new Set(
@@ -366,7 +380,7 @@ export function AdminPanel() {
 
   const generateReceipt = (groupKey: string, groupOrders: Order[]) => {
     const first = groupOrders[0];
-    const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
+    const isPaidStripe = !!first.stripe_session_id?.startsWith('cs_') && orderPaid(first);
     const paymentStatus = isPaidStripe ? 'paid_stripe' : invoicePaymentStatus(groupKey, groupOrders);
 
     InvoiceGenerator.generateReceiptPdf({
@@ -454,7 +468,7 @@ export function AdminPanel() {
       const qty = o.quantity || 1;
       const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
       const isStripeOrder = o.stripe_session_id && o.stripe_session_id.startsWith('cs_');
-      const isPaidStripe = stripeStatuses[o.id] === 'paid';
+      const isPaidStripe = orderPaid(o);
 
       return {
         'Reserva ID / Sesión': o.stripe_session_id || o.id,
@@ -486,7 +500,7 @@ export function AdminPanel() {
     return (
       <div className="admin-table-container">
         <div className="table-toolbar">
-          <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
+          <button className="btn-primary" onClick={() => handleSyncAllStripe(undefined, true)} disabled={syncingStripe}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
           <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
@@ -516,8 +530,8 @@ export function AdminPanel() {
                   const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
                   const allCompleted = groupOrders.every(o => o.status === 'completed');
                   const isStripeOrder = groupId.startsWith('cs_');
-                  const isPaidStripe = stripeStatuses[first.id] === 'paid';
-                  const stripeChecked = stripeStatuses[first.id] !== undefined;
+                  const isPaidStripe = orderPaid(first);
+                  const stripeChecked = orderChecked(first);
 
                   return (
                     <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
@@ -729,7 +743,8 @@ export function AdminPanel() {
     } catch (e: any) { showMessage('Error', e.message); }
   };
 
-    const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
+    /** Igual que en Pedidos: al abrir, solo las inscripciones pendientes; con el botón, todas. */
+    const handleSyncAllCampusStripe = async (eventsList?: any[], all = false) => {
     setSyncingStripe(true);
     // Auto-fetch attendees for all events if missing
     const updatedAttendees = { ...attendees };
@@ -747,7 +762,7 @@ export function AdminPanel() {
     const attMap: any[] = [];
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
-        if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
+        if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_') && (all || att.status === 'pending')) {
           attMap.push({ att });
         }
       }
@@ -820,7 +835,7 @@ export function AdminPanel() {
       if (atts.length > 0) {
         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
           const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
-          const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
+          const isPaidStripe = registrationPaid(a);
 
           return {
             'Reserva (Stripe)': a.stripe_session_id || 'Manual',
@@ -847,7 +862,7 @@ export function AdminPanel() {
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
         <h3>Campus, torneos e inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe()} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
+          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe(undefined, true)} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
           <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
@@ -926,9 +941,8 @@ export function AdminPanel() {
                                 {attendees[ev.id].map((att: any) => {
                                   const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
                                   const isFreeReg = att.stripe_session_id?.startsWith('free_');
-                                  // stripeStatuses map might hold the checked status
-                                  const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
-                                  const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
+                                  const isPaidStripe = registrationPaid(att);
+                                  const stripeChecked = registrationChecked(att);
 
                                   // Build mock Order for the receipt
                                   const dummyOrder = {

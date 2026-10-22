@@ -188,6 +188,11 @@ async function claimCoupon(admin: any, coupon: Coupon, sessionId: string, userId
   return !error && Array.isArray(data) && data.length === 1;
 }
 
+/** Error al guardar la inscripción: el del aforo (lo lanza la base de datos) se enseña tal cual. */
+function registrationError(error: { code?: string; message: string }): Error {
+  return new Error(error.code === 'P0001' ? error.message : "DB insert failed: " + error.message);
+}
+
 async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminClient: any): Promise<Response> {
   if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) throw new Error("Invalid session id");
 
@@ -519,7 +524,7 @@ serve(async (req: Request) => {
           stripe_session_id: freeSessionId
         }, { onConflict: 'event_id,user_id,attendee_key' });
 
-        if (insertError) throw new Error("DB insert failed: " + insertError.message);
+        if (insertError) throw registrationError(insertError);
 
         return new Response(JSON.stringify({ url: null, free: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
       }
@@ -565,7 +570,11 @@ serve(async (req: Request) => {
         stripe_session_id: session.id
       }, { onConflict: 'event_id,user_id,attendee_key' });
 
-      if (insertError) throw new Error("DB insert failed: " + insertError.message);
+      if (insertError) {
+        // Sin inscripción no se puede cobrar (p. ej. otra familia ha cogido la última plaza)
+        await stripe.checkout.sessions.expire(session.id).catch(() => {});
+        throw registrationError(insertError);
+      }
 
       return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
