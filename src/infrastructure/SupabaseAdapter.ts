@@ -1,5 +1,11 @@
 import { supabase } from '../utils/supabase';
 import { formatDateRanges } from '../utils/dates';
+
+/** Detalle de una inscripción para el justificante y el QR: jugadores, fechas y lo elegido (opción de precio, cupón...). */
+function registrationDetail(r: any): string {
+  const extras = Object.entries(r.custom_data || {}).map(([k, v]) => `${k}: ${v}`);
+  return [(r.attendee_names || []).join(', '), formatDateRanges(r.selected_days || [], { weekday: false }), ...extras].join(' | ');
+}
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
 import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
 
@@ -384,7 +390,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       buyer_name: '',
       buyer_email: '',
       item_name: r.events?.title || 'Campus',
-      size: `${(r.attendee_names || []).join(', ')} | ${formatDateRanges(r.selected_days || [], { weekday: false })}`,
+      size: registrationDetail(r),
       quantity: 1,
       amount: r.amount,
       status: r.status,
@@ -601,7 +607,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         status: r.status,
         buyer_name: userEmail ? userEmail.split('@')[0] : (r.attendee_names?.[0] || 'Desconocido'),
         buyer_email: userEmail,
-        item_name: r.events?.title || 'Campus',
+        item_name: `${r.events?.title || 'Campus'} [${registrationDetail(r)}]`,
         amount: r.amount || 0,
         stripe_session_id: sessionId,
       };
