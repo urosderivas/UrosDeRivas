@@ -1,11 +1,12 @@
 import { supabase } from '../utils/supabase';
-import { Appointment, AppointmentBlock, AppointmentProvider, AppointmentStatus } from '../domain/entities';
+import { Appointment, AppointmentBlock, AppointmentProvider, AppointmentStatus, DayHours } from '../domain/entities';
 
 /** Mensajes en español para los fallos que la base de datos da en inglés. */
 function friendly(error: any): Error {
   const msg: string = error?.message || 'Error desconocido';
   if (msg.includes('appointment_providers_user_id_key')) return new Error('Esa persona ya tiene un calendario.');
   if (msg.includes('appointment_providers_hours_check')) return new Error('Revisa el horario: cada tramo tiene que empezar antes de acabar.');
+  if (msg.includes('appointment_day_hours_ranges_check')) return new Error('Revisa el horario: cada tramo tiene que empezar antes de acabar y no solaparse.');
   if (msg.includes('appointment_blocks_range_check')) return new Error('El bloqueo tiene que acabar después de empezar (y durar como mucho 120 días).');
   if (msg.includes('row-level security')) return new Error('No tienes permiso para hacer esto.');
   return new Error(msg);
@@ -87,6 +88,31 @@ export class AppointmentsAdapter {
   async setStatus(appointmentId: string, status: AppointmentStatus): Promise<void> {
     const { error } = await supabase.rpc('set_appointment_status', { p_appointment_id: appointmentId, p_status: status });
     if (error) throw friendly(error);
+  }
+
+  /** Días con horario propio entre dos días de Madrid (ambos incluidos), por día ("2026-11-03"). */
+  async getDayHours(providerId: string, from: string, to: string): Promise<DayHours> {
+    const { data, error } = await supabase.from('appointment_day_hours')
+      .select('day, ranges')
+      .eq('provider_id', providerId)
+      .gte('day', from)
+      .lte('day', to);
+    if (error) throw friendly(error);
+    return Object.fromEntries((data || []).map((r: any) => [r.day, r.ranges]));
+  }
+
+  /** Guarda el horario de varios días: null = vuelve al horario semanal. */
+  async saveDayHours(providerId: string, days: Record<string, [string, string][] | null>): Promise<void> {
+    const reset = Object.keys(days).filter(d => days[d] === null);
+    const upsert = Object.keys(days).filter(d => days[d] !== null).map(day => ({ provider_id: providerId, day, ranges: days[day] }));
+    if (upsert.length) {
+      const { error } = await supabase.from('appointment_day_hours').upsert(upsert, { onConflict: 'provider_id,day' });
+      if (error) throw friendly(error);
+    }
+    if (reset.length) {
+      const { error } = await supabase.from('appointment_day_hours').delete().eq('provider_id', providerId).in('day', reset);
+      if (error) throw friendly(error);
+    }
   }
 
   /** Bloqueos que aún no han terminado. */

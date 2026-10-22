@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useStore } from './store';
-import { Appointment, AppointmentBlock, AppointmentProvider, AppointmentStatus, WeeklyHours } from '../domain/entities';
+import { Appointment, AppointmentBlock, AppointmentProvider, AppointmentStatus, DayHours, WeeklyHours } from '../domain/entities';
 import { AppointmentsAdapter, ProviderDraft } from '../infrastructure/AppointmentsAdapter';
 import { addDays, formatDayLong, isoWeekday, madridDay, madridTime, madridToDate, madridToday } from '../utils/madrid';
 import './AppointmentsAdmin.css';
@@ -17,7 +17,9 @@ const STATUS: Record<AppointmentStatus, { label: string; color: string }> = {
   cancelled: { label: 'Cancelada', color: '#777' },
 };
 
-const emptyDraft = (userId: string, name = ''): ProviderDraft => ({
+const SECTION_LABELS = { agenda: 'Agenda', weeks: 'Semana a semana', settings: 'Horario habitual y ajustes', blocks: 'Días cerrados' };
+
+const emptyDraft = (userId: string | null, name = ''): ProviderDraft => ({
   user_id: userId,
   name,
   service: SERVICES[0],
@@ -30,16 +32,33 @@ const emptyDraft = (userId: string, name = ''): ProviderDraft => ({
   active: true,
 });
 
+type Ranges = [string, string][];
+
+/** Tramos ordenados, para comparar dos horarios de un día. */
+const sameRanges = (a: Ranges = [], b: Ranges = []) =>
+  JSON.stringify([...a].sort((x, y) => x[0].localeCompare(y[0]))) === JSON.stringify([...b].sort((x, y) => x[0].localeCompare(y[0])));
+
+/** Mensaje si los tramos de un día no valen (vacío si están bien). */
+function rangesProblem(label: string, ranges: Ranges): string {
+  const sorted = [...ranges].sort((a, b) => a[0].localeCompare(b[0]));
+  for (let i = 0; i < sorted.length; i++) {
+    const [from, to] = sorted[i];
+    if (!from || !to || from >= to) return `${label}: cada tramo tiene que empezar antes de acabar.`;
+    if (i > 0 && from < sorted[i - 1][1]) return `${label}: hay tramos que se solapan.`;
+  }
+  return '';
+}
+
 /**
  * Pestaña "Citas" del panel. Un fisio gestiona su calendario (agenda, horario y bloqueos);
- * un admin elige cualquier calendario y puede crear el de cada fisio.
+ * un admin elige cualquier calendario, los crea y decide qué fisio lleva cada uno (o ninguno).
  */
 export function AppointmentsAdmin({ systemUsers }: { systemUsers: { id: string; email: string; role: string }[] }) {
   const { user } = useStore();
   const isAdmin = user?.role === 'admin';
   const [providers, setProviders] = useState<AppointmentProvider[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
-  const [section, setSection] = useState<'agenda' | 'settings' | 'blocks'>('agenda');
+  const [section, setSection] = useState<keyof typeof SECTION_LABELS>('agenda');
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,7 +78,9 @@ export function AppointmentsAdmin({ systemUsers }: { systemUsers: { id: string; 
   useEffect(() => { load(); }, []);
 
   const selected = providers.find(p => p.id === selectedId) || null;
-  const physios = systemUsers.filter(u => u.role === 'fisio' && !providers.some(p => p.user_id === u.id));
+  // Fisios que pueden llevar un calendario: los que aún no tienen uno, más el que ya lo lleva
+  const ownerOptions = (current: string | null) => systemUsers.filter(u =>
+    u.id === current || (u.role === 'fisio' && !providers.some(p => p.user_id === u.id)));
 
   if (loading) return <p className="appt-admin-muted">Cargando calendarios…</p>;
 
@@ -76,13 +97,7 @@ export function AppointmentsAdmin({ systemUsers }: { systemUsers: { id: string; 
     return (
       <div className="appt-admin">
         <h3>Nuevo calendario</h3>
-        {physios.length === 0 ? (
-          <p className="appt-admin-muted">
-            Primero da el rol <b>Fisio</b> a la persona en la pestaña Usuarios. Cada fisio tiene un calendario.
-          </p>
-        ) : (
-          <NewProviderForm physios={physios} onSaved={p => { setCreating(false); load(p.id); }} />
-        )}
+        <ProviderSettings draft={emptyDraft(null)} owners={ownerOptions(null)} onSaved={p => { setCreating(false); load(p.id); }} />
         {providers.length > 0 && <button className="appt-admin-link" onClick={() => setCreating(false)}>Volver</button>}
         {error && <p className="appt-admin-error">{error}</p>}
       </div>
@@ -101,17 +116,19 @@ export function AppointmentsAdmin({ systemUsers }: { systemUsers: { id: string; 
       </div>
 
       <div className="appt-admin-sections">
-        {(['agenda', 'settings', 'blocks'] as const).map(s => (
+        {(['agenda', 'weeks', 'settings', 'blocks'] as const).map(s => (
           <button key={s} className={section === s ? 'active' : ''} onClick={() => setSection(s)}>
-            {s === 'agenda' ? 'Agenda' : s === 'settings' ? 'Horario y ajustes' : 'Días cerrados'}
+            {SECTION_LABELS[s]}
           </button>
         ))}
       </div>
 
       {error && <p className="appt-admin-error">{error}</p>}
       {selected && section === 'agenda' && <Agenda key={selected.id} provider={selected} />}
+      {selected && section === 'weeks' && <WeekHours key={selected.id} provider={selected} />}
       {selected && section === 'settings' && (
         <ProviderSettings key={selected.id} draft={selected} id={selected.id} canDelete={isAdmin}
+          owners={isAdmin ? ownerOptions(selected.user_id) : undefined}
           onSaved={p => load(p.id)} onDeleted={() => load()} />
       )}
       {selected && section === 'blocks' && <Blocks key={selected.id} provider={selected} />}
@@ -119,23 +136,11 @@ export function AppointmentsAdmin({ systemUsers }: { systemUsers: { id: string; 
   );
 }
 
-function NewProviderForm({ physios, onSaved }: { physios: { id: string; email: string }[]; onSaved: (p: AppointmentProvider) => void }) {
-  const [userId, setUserId] = useState(physios[0].id);
-  return (
-    <>
-      <label className="appt-admin-field">Fisio
-        <select value={userId} onChange={e => setUserId(e.target.value)}>
-          {physios.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
-        </select>
-      </label>
-      <ProviderSettings key={userId} draft={emptyDraft(userId)} onSaved={onSaved} />
-    </>
-  );
-}
-
 /** Horario semanal, duración y reglas de reserva de un calendario. */
-function ProviderSettings({ draft, id, canDelete, onSaved, onDeleted }: {
+function ProviderSettings({ draft, id, canDelete, owners, onSaved, onDeleted }: {
   draft: ProviderDraft | AppointmentProvider; id?: string; canDelete?: boolean;
+  /** Solo para admins: a qué fisio se puede asignar */
+  owners?: { id: string; email: string }[];
   onSaved: (p: AppointmentProvider) => void; onDeleted?: () => void;
 }) {
   const [form, setForm] = useState<ProviderDraft>(() => {
@@ -157,12 +162,8 @@ function ProviderSettings({ draft, id, canDelete, onSaved, onDeleted }: {
     if (!form.name.trim()) return 'Pon el nombre que verán los usuarios.';
     if (!form.service.trim()) return 'Pon el servicio (por ejemplo Fisioterapia).';
     for (const [day, ranges] of Object.entries(form.weekly_hours)) {
-      const sorted = [...ranges].sort((a, b) => a[0].localeCompare(b[0]));
-      for (let i = 0; i < sorted.length; i++) {
-        const [from, to] = sorted[i];
-        if (!from || !to || from >= to) return `${DAY_NAMES[Number(day) - 1]}: cada tramo tiene que empezar antes de acabar.`;
-        if (i > 0 && from < sorted[i - 1][1]) return `${DAY_NAMES[Number(day) - 1]}: hay tramos que se solapan.`;
-      }
+      const problem = rangesProblem(DAY_NAMES[Number(day) - 1], ranges);
+      if (problem) return problem;
     }
     return '';
   };
@@ -197,40 +198,27 @@ function ProviderSettings({ draft, id, canDelete, onSaved, onDeleted }: {
           <datalist id="appt-services">{SERVICES.map(s => <option key={s} value={s} />)}</datalist>
         </label>
       </div>
+      {owners && (
+        <label className="appt-admin-field">Quién lo lleva
+          <select value={form.user_id || ''} onChange={e => set('user_id', e.target.value || null)}>
+            <option value="">Administración (sin fisio)</option>
+            {owners.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
+          </select>
+          <span className="appt-admin-muted">
+            El fisio asignado gestiona este calendario desde su cuenta; los admins siempre pueden. Para que alguien salga en la lista, dale el rol Fisio en Usuarios.
+          </span>
+        </label>
+      )}
       <label className="appt-admin-field">Descripción (opcional)
         <textarea value={form.description || ''} maxLength={1000} rows={2} onChange={e => set('description', e.target.value)}
           placeholder="Dónde es la consulta, qué traer…" />
       </label>
 
-      <h4>Horario semanal <span className="appt-admin-muted">(hora de Madrid)</span></h4>
+      <h4>Horario habitual <span className="appt-admin-muted">(hora de Madrid; para cambiar una semana concreta, usa "Semana a semana")</span></h4>
       <div className="appt-week">
         {DAY_NAMES.map((name, i) => {
           const day = String(i + 1);
-          const ranges = form.weekly_hours[day] || [];
-          return (
-            <div key={day} className="appt-week-day">
-              <label className="appt-week-toggle">
-                <input type="checkbox" checked={ranges.length > 0}
-                  onChange={e => setRanges(day, e.target.checked ? [['09:00', '14:00']] : [])} />
-                {name}
-              </label>
-              <div className="appt-week-ranges">
-                {ranges.length === 0 ? <span className="appt-admin-muted">Sin citas</span> : ranges.map((r, j) => (
-                  <span key={j} className="appt-range">
-                    <input type="time" value={r[0]} step={300} onChange={e => setRanges(day, ranges.map((x, k) => k === j ? [e.target.value, x[1]] : x))} />
-                    –
-                    <input type="time" value={r[1]} step={300} onChange={e => setRanges(day, ranges.map((x, k) => k === j ? [x[0], e.target.value] : x))} />
-                    <button type="button" title="Quitar tramo" onClick={() => setRanges(day, ranges.filter((_, k) => k !== j))}><Trash2 size={14} /></button>
-                  </span>
-                ))}
-                {ranges.length > 0 && ranges.length < 6 && (
-                  <button type="button" className="appt-admin-link" onClick={() => setRanges(day, [...ranges, [ranges[ranges.length - 1][1], '20:00']])}>
-                    <Plus size={14} /> Tramo
-                  </button>
-                )}
-              </div>
-            </div>
-          );
+          return <RangesEditor key={day} label={name} ranges={form.weekly_hours[day] || []} onChange={r => setRanges(day, r)} />;
         })}
       </div>
 
@@ -268,6 +256,169 @@ function ProviderSettings({ draft, id, canDelete, onSaved, onDeleted }: {
         {id && canDelete && <button type="button" className="appt-admin-danger" onClick={handleDelete}>Borrar calendario</button>}
       </div>
     </form>
+  );
+}
+
+/** Un día del horario: casilla "hay citas" y sus tramos (hasta 6). */
+function RangesEditor({ label, ranges, onChange, disabled, whenChecked = [['09:00', '14:00']], children }: {
+  label: string; ranges: Ranges; onChange: (r: Ranges) => void; disabled?: boolean; whenChecked?: Ranges; children?: React.ReactNode;
+}) {
+  return (
+    <div className={`appt-week-day ${disabled ? 'past' : ''}`}>
+      <label className="appt-week-toggle">
+        <input type="checkbox" checked={ranges.length > 0} disabled={disabled}
+          onChange={e => onChange(e.target.checked ? (whenChecked.length ? whenChecked : [['09:00', '14:00']]) : [])} />
+        {label}
+      </label>
+      <div className="appt-week-ranges">
+        {ranges.length === 0 ? <span className="appt-admin-muted">Sin citas</span> : ranges.map((r, j) => (
+          <span key={j} className="appt-range">
+            <input type="time" value={r[0]} step={300} disabled={disabled} onChange={e => onChange(ranges.map((x, k) => k === j ? [e.target.value, x[1]] : x))} />
+            –
+            <input type="time" value={r[1]} step={300} disabled={disabled} onChange={e => onChange(ranges.map((x, k) => k === j ? [x[0], e.target.value] : x))} />
+            {!disabled && <button type="button" title="Quitar tramo" onClick={() => onChange(ranges.filter((_, k) => k !== j))}><Trash2 size={14} /></button>}
+          </span>
+        ))}
+        {!disabled && ranges.length > 0 && ranges.length < 6 && (
+          <button type="button" className="appt-admin-link" onClick={() => onChange([...ranges, [ranges[ranges.length - 1][1], '20:00']])}>
+            <Plus size={14} /> Tramo
+          </button>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Semana a semana: el horario de una semana concreta (p. ej. el jueves en vez del viernes).
+ * Lo que coincide con el horario habitual no se guarda aparte, así que si luego cambia el habitual, esos días también.
+ */
+function WeekHours({ provider }: { provider: AppointmentProvider }) {
+  const today = madridToday();
+  const thisWeek = addDays(today, 1 - isoWeekday(today));
+  const [weekStart, setWeekStart] = useState(thisWeek);
+  const [stored, setStored] = useState<DayHours>({});
+  const [week, setWeek] = useState<DayHours>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const habitual = (day: string): Ranges => provider.weekly_hours[String(isoWeekday(day))] || [];
+
+  const load = async () => {
+    setLoading(true); setError('');
+    try {
+      const found = await adapter.getDayHours(provider.id, days[0], days[6]);
+      setStored(found);
+      setWeek(Object.fromEntries(days.map(d => [d, found[d] ?? habitual(d)])));
+    } catch (e: any) { setError(e.message); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [weekStart, provider.id]);
+
+  const dirty = !loading && days.some(d => !sameRanges(week[d], stored[d] ?? habitual(d)));
+
+  const go = (start: string) => {
+    if (dirty && !window.confirm('Hay cambios sin guardar en esta semana. ¿Salir sin guardarlos?')) return;
+    setNotice('');
+    setWeekStart(start);
+  };
+
+  /** Lo que hay que guardar para que `targetDays` queden con `ranges`: null = como el habitual. */
+  const changes = (targetDays: string[], ranges: Ranges[], current: DayHours) => {
+    const out: Record<string, Ranges | null> = {};
+    targetDays.forEach((d, i) => {
+      if (d < today) return;
+      if (sameRanges(ranges[i], habitual(d))) { if (current[d]) out[d] = null; }
+      else if (!current[d] || !sameRanges(ranges[i], current[d])) out[d] = ranges[i];
+    });
+    return out;
+  };
+
+  const validate = () => {
+    for (const d of days) {
+      const problem = rangesProblem(formatDayLong(d), week[d] || []);
+      if (problem) return problem;
+    }
+    return '';
+  };
+
+  const handleSave = async () => {
+    const problem = validate();
+    if (problem) { setError(problem); return; }
+    setSaving(true); setError(''); setNotice('');
+    try {
+      await adapter.saveDayHours(provider.id, changes(days, days.map(d => week[d] || []), stored));
+      await load();
+      setNotice('✓ Semana guardada');
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const handleCopyNext = async () => {
+    const next = days.map(d => addDays(d, 7));
+    setSaving(true); setError(''); setNotice('');
+    try {
+      const nextStored = await adapter.getDayHours(provider.id, next[0], next[6]);
+      await adapter.saveDayHours(provider.id, changes(next, days.map(d => week[d] || []), nextStored));
+      setWeekStart(next[0]);
+      setNotice('✓ Copiada a esta semana');
+    } catch (e: any) { setError(e.message); }
+    setSaving(false);
+  };
+
+  const changedDays = days.filter(d => !sameRanges(week[d], habitual(d)));
+
+  return (
+    <div className="appt-agenda">
+      <p className="appt-admin-muted">
+        Cambia el horario solo de una semana (por ejemplo, el jueves en vez del viernes). Los días que no toques siguen el horario habitual.
+        Para vacaciones o varios días seguidos, usa "Días cerrados".
+      </p>
+      <div className="appt-agenda-nav">
+        <button onClick={() => go(addDays(weekStart, -7))} aria-label="Semana anterior" disabled={weekStart <= thisWeek}><ChevronLeft size={18} /></button>
+        <b>Semana del {formatDayLong(weekStart).toLowerCase()}</b>
+        <button onClick={() => go(addDays(weekStart, 7))} aria-label="Semana siguiente"><ChevronRight size={18} /></button>
+        {weekStart !== thisWeek && <button className="appt-admin-link" onClick={() => go(thisWeek)}>Esta semana</button>}
+      </div>
+
+      {loading ? <p className="appt-admin-muted">Cargando…</p> : (
+        <div className="appt-week dated">
+          {days.map(d => {
+            const past = d < today;
+            const changed = !sameRanges(week[d], habitual(d));
+            return (
+              <RangesEditor key={d} label={formatDayLong(d)} ranges={week[d] || []} disabled={past} whenChecked={habitual(d)}
+                onChange={r => { setWeek(w => ({ ...w, [d]: r })); setNotice(''); }}>
+                {changed && <span className="appt-week-badge">Solo esta semana</span>}
+                {changed && !past && (
+                  <button type="button" className="appt-admin-link" onClick={() => { setWeek(w => ({ ...w, [d]: habitual(d) })); setNotice(''); }}>
+                    Volver al habitual
+                  </button>
+                )}
+              </RangesEditor>
+            );
+          })}
+        </div>
+      )}
+
+      {error && <p className="appt-admin-error">{error}</p>}
+      <div className="appt-settings-actions">
+        <button className="btn-modal-save" onClick={handleSave} disabled={saving || loading || !dirty}>
+          {saving ? 'Guardando…' : 'Guardar semana'}
+        </button>
+        <button className="appt-admin-link" onClick={handleCopyNext} disabled={saving || loading || dirty || changedDays.length === 0}
+          title={dirty ? 'Guarda antes la semana' : ''}>
+          Copiar esta semana a la siguiente
+        </button>
+        {notice && <span className="appt-admin-muted">{notice}</span>}
+      </div>
+      <p className="appt-admin-muted">Las citas ya reservadas no se mueven ni se cancelan solas: si quitas un día con citas, revísalas en la Agenda.</p>
+    </div>
   );
 }
 

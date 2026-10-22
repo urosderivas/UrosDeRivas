@@ -40,6 +40,14 @@
 .appt-week-ranges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; }
 .appt-range { display: inline-flex; align-items: center; gap: 6px; }
 .appt-range button { background: none; border: none; color: #e53935; cursor: pointer; }
+.appt-week-day.past { opacity: 0.45; }
+.appt-week.dated .appt-week-toggle { width: 230px; }
+.appt-week-day .appt-week-toggle:has(+ .appt-week-ranges .appt-week-badge) { color: var(--accent-gold); }
+.appt-week-badge {
+  font-size: 0.75rem; font-weight: 800; color: #000; background: var(--accent-gold);
+  border-radius: 999px; padding: 0.15rem 0.6rem;
+}
+.appt-agenda-nav > button:disabled, .appt-admin-link:disabled { opacity: 0.35; cursor: default; }
 
 /* Agenda */
 .appt-agenda { display: flex; flex-direction: column; gap: 1rem; }

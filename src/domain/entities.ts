@@ -148,7 +148,8 @@ export type WeeklyHours = Record<string, [string, string][]>;
 /** Calendario de citas de un fisio o recuperador. */
 export interface AppointmentProvider {
   id: string;
-  user_id: string;
+  /** Fisio que lo gestiona; vacío = lo gestiona administración */
+  user_id: string | null;
   name: string;
   service: string;
   description: string | null;
@@ -175,6 +176,9 @@ export interface Appointment {
   created_at: string;
   provider?: Pick<AppointmentProvider, 'name' | 'service' | 'cancel_hours'>;
 }
+
+/** Horario de un día concreto que sustituye al semanal ese día ([] = ese día no hay citas). */
+export type DayHours = Record<string, [string, string][]>;
 
 /** Hueco cerrado en un calendario (vacaciones, un torneo...). */
 export interface AppointmentBlock {
