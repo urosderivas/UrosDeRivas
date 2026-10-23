@@ -140,6 +140,8 @@ export interface NewsPost {
   /** Campus, torneo o viaje relacionado (opcional) */
   eventId?: string;
   publishedAt: string;
+  /** false = oculta: solo la ven los admins */
+  active: boolean;
 }
 
 /** Horario semanal de un calendario: "1" = lunes ... "7" = domingo, tramos ["09:00", "13:00"] en hora de Madrid. */

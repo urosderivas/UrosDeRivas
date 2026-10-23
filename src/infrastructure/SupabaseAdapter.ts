@@ -301,14 +301,14 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
     return data.map((n: any) => ({
       id: n.id, title: n.title, body: n.body || '', imageUrl: n.image_url || undefined,
-      eventId: n.event_id || undefined, publishedAt: n.published_at,
+      eventId: n.event_id || undefined, publishedAt: n.published_at, active: n.active !== false,
     }));
   }
 
   async saveNews(post: Omit<NewsPost, 'id'>, id?: string): Promise<void> {
     const payload: any = {
       title: post.title, body: post.body, image_url: post.imageUrl || null,
-      event_id: post.eventId || null, published_at: post.publishedAt,
+      event_id: post.eventId || null, published_at: post.publishedAt, active: post.active,
     };
     if (!id) payload.created_by = (await this.getUser())?.id;
     const { error } = id
