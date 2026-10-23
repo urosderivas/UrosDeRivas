@@ -1,0 +1,17 @@
+# Avisa (con un PR) cuando hay actualizaciones de seguridad o nuevas versiones
+# de las librerías de la web y de las acciones del despliegue. Una vez al mes y
+# agrupadas, para no llenar el repositorio de PRs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      dependencias:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

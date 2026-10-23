@@ -1,0 +1,161 @@
+.appointments-page {
+  padding: 4rem 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: 80vh;
+}
+
+.appt-muted { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.appt-error { color: var(--danger-text); margin: 0.75rem 0; }
+.appt-notice {
+  margin: 0.75rem 0; padding: 0.75rem 1rem; border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.08); border: 1px solid rgba(var(--accent-rgb), 0.35); color: var(--text-primary);
+}
+.appt-info-price { font-size: 1.3rem; font-weight: 800; color: var(--accent-text); }
+.appt-info-price span { font-size: 0.85rem; font-weight: 400; color: var(--text-secondary); }
+
+/* Calendarios */
+.appt-providers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.appt-provider-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+  padding: 1.5rem;
+  background: var(--secondary-bg);
+  border: 1px solid rgba(var(--tint), 0.08);
+  border-top: 4px solid var(--accent-gold);
+  border-radius: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.appt-provider-card:hover { transform: translateY(-3px); border-color: rgba(var(--accent-rgb), 0.5); }
+.appt-provider-service {
+  color: var(--accent-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.appt-provider-name { font-size: 1.4rem; font-weight: 800; }
+.appt-provider-duration { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 0.95rem; }
+.appt-provider-desc { color: var(--text-secondary); font-size: 0.9rem; white-space: pre-line; }
+.appt-provider-cta { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 0.5rem; color: var(--accent-text); font-weight: 700; }
+
+/* Reserva: información | calendario | horas */
+.appt-booking {
+  display: grid;
+  grid-template-columns: 240px 1fr 260px;
+  background: var(--secondary-bg);
+  border: 1px solid rgba(var(--tint), 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.appt-booking > * { padding: 1.5rem; }
+.appt-info { border-right: 1px solid rgba(var(--tint), 0.08); display: flex; flex-direction: column; gap: 0.5rem; }
+.appt-info h2 { font-size: 1.5rem; }
+.appt-info-desc { color: var(--text-secondary); font-size: 0.9rem; white-space: pre-line; }
+.appt-back { display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--accent-text); cursor: pointer; padding: 0; margin-bottom: 0.75rem; font-size: 0.9rem; }
+
+.appt-month { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.appt-month h3 { font-size: 1.1rem; }
+.appt-month button {
+  background: rgba(var(--tint), 0.06); border: none; color: var(--text-primary);
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+}
+.appt-month button:disabled { opacity: 0.25; cursor: default; }
+
+.appt-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.appt-weekday { text-align: center; color: var(--text-secondary); font-size: 0.75rem; font-weight: 700; padding-bottom: 4px; }
+.appt-day {
+  aspect-ratio: 1;
+  max-width: 48px;
+  width: 100%;
+  justify-self: center;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: rgba(var(--tint), 0.3);
+  font-size: 0.95rem;
+}
+.appt-day.today { text-decoration: underline; }
+.appt-day.available {
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+.appt-day.available:hover { background: rgba(var(--accent-rgb), 0.28); }
+.appt-day.selected { background: var(--accent-gold); color: var(--on-accent); }
+
+.appt-times { border-left: 1px solid rgba(var(--tint), 0.08); display: flex; flex-direction: column; gap: 0.75rem; }
+.appt-times h3 { font-size: 1rem; }
+.appt-slot-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.appt-slot {
+  padding: 0.7rem;
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
+  border-radius: 8px;
+  background: none;
+  color: var(--accent-text);
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.appt-slot:hover { background: rgba(var(--accent-rgb), 0.12); }
+.appt-slot.selected { background: var(--accent-gold); color: var(--on-accent); }
+
+.appt-form { display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid rgba(var(--tint), 0.08); padding-top: 0.75rem; }
+.appt-form-when { font-weight: 800; }
+.appt-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-secondary); }
+.appt-form input, .appt-form textarea {
+  background: var(--primary-bg); border: 1px solid rgba(var(--tint), 0.15); border-radius: 8px;
+  color: var(--text-primary); padding: 0.6rem; font: inherit;
+}
+.appt-btn {
+  padding: 0.8rem 1.4rem; border-radius: 50px; border: none; cursor: pointer;
+  background: var(--accent-gold); color: var(--on-accent); font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+}
+.appt-btn:disabled { opacity: 0.6; cursor: default; }
+.appt-login a { color: var(--accent-text); }
+
+.appt-done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.75rem; padding: 2.5rem 1.5rem; }
+.appt-done > * { padding: 0; }
+.appt-done-when { font-size: 1.3rem; font-weight: 800; color: var(--accent-text); }
+
+/* Mis citas */
+.appt-mine { margin-top: 3rem; }
+.appt-mine h2 { margin-bottom: 1rem; }
+.appt-mine ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.appt-mine-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: 0.9rem 1.1rem; background: var(--secondary-bg); border-radius: 10px;
+  border-left: 4px solid var(--accent-gold);
+}
+.appt-mine-row div { display: flex; flex-direction: column; }
+.appt-mine-row span { color: var(--text-secondary); font-size: 0.9rem; }
+.appt-mine-row.status-cancelled { border-left-color: var(--border-strong); opacity: 0.7; }
+.appt-mine-row.status-done { border-left-color: #10b981; }
+.appt-mine-row.status-no_show { border-left-color: #e53935; }
+.appt-cancel { background: none; border: 1px solid #e53935; color: #e53935; border-radius: 20px; padding: 0.35rem 0.9rem; cursor: pointer; white-space: nowrap; }
+.appt-mine details { margin-top: 1rem; }
+.appt-mine summary { cursor: pointer; color: var(--text-secondary); margin-bottom: 0.75rem; }
+
+@media (max-width: 900px) {
+  .appt-booking { grid-template-columns: 1fr; }
+  .appt-info { border-right: none; border-bottom: 1px solid rgba(var(--tint), 0.08); }
+  .appt-times { border-left: none; border-top: 1px solid rgba(var(--tint), 0.08); }
+  .appt-slot-list { flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .appt-slot { flex: 1 0 80px; }
+}
+
+@media (max-width: 600px) {
+  .appointments-page { padding: 2rem 1rem; }
+  .appt-mine-row { flex-direction: column; align-items: flex-start; }
+}

@@ -89,7 +89,7 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="📷 Escanear justificante (QR)">
       <div style={{ textAlign: 'center' }}>
-        <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px' }}>
           Apunta la cámara al código QR del justificante de pago del cliente para verificar el estado de pago.
         </p>
 
@@ -101,13 +101,13 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
             margin: '0 auto',
             borderRadius: '12px',
             overflow: 'hidden',
-            background: '#111',
+            background: 'var(--secondary-bg)',
             minHeight: '300px',
           }}
         />
 
         {scanning && (
-          <p style={{ color: '#d4af37', marginTop: '12px', fontSize: '0.85rem' }}>
+          <p style={{ color: 'var(--accent-text)', marginTop: '12px', fontSize: '0.85rem' }}>
             🔍 Buscando código QR...
           </p>
         )}
@@ -119,7 +119,7 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
             borderRadius: '10px',
             padding: '12px',
             marginTop: '12px',
-            color: '#ff6b6b',
+            color: 'var(--danger-text)',
             fontSize: '0.9rem',
           }}>
             ⚠️ {error}
@@ -131,9 +131,9 @@ export function QrScannerModal({ isOpen, onClose, onResult }: QrScannerModalProp
           style={{
             marginTop: '16px',
             padding: '10px 24px',
-            background: 'rgba(255,255,255,0.1)',
-            color: '#fff',
-            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(var(--tint), 0.1)',
+            color: 'var(--text-primary)',
+            border: '1px solid rgba(var(--tint), 0.2)',
             borderRadius: '8px',
             cursor: 'pointer',
             fontSize: '0.9rem',

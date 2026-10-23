@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { StripeAdapter } from '../infrastructure/StripeAdapter';
@@ -13,7 +13,7 @@ import { ShoppingCart } from 'lucide-react';
 import { CartSidebar } from './components/CartSidebar';
 import { ProductModal } from './ProductModal';
 import { takeCartCheckout } from './store';
-import { fallbackImageUrl, resolveImageUrl, showFallbackImage } from '../utils/media';
+import { ProductCard } from './components/ProductCard';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
@@ -22,6 +22,11 @@ const stripeAdapter = new StripeAdapter();
 export function Market() {
   const { user, items, loading, fetchItems, cart, addToCart, clearCart } = useStore();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Los productos ocultos solo los ve quien gestiona la tienda (marcados como ocultos)
+  const isShopStaff = user?.role === 'admin' || user?.role === 'tienda';
+  const shownItems = isShopStaff ? items : items.filter(i => i.active !== false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
@@ -35,6 +40,17 @@ export function Market() {
   // Producto abierto en la ventana de compra
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
 
+  // Enlace directo a un producto desde la portada: /market?producto=<id>
+  const productParam = new URLSearchParams(location.search).get('producto');
+  useEffect(() => {
+    if (!productParam) return;
+    const item = shownItems.find(i => i.id === productParam);
+    if (!item) return;
+    setSelectedItem(item);
+    // Se quita del enlace para que no se vuelva a abrir al cerrarlo o recargar
+    navigate('/market', { replace: true });
+  }, [productParam, shownItems, navigate]);
+
   const showMessage = (title: string, message: string) => {
     setMessageAlert({ open: true, title, message });
   };
@@ -46,13 +62,19 @@ export function Market() {
       if (takeCartCheckout()) clearCart();
       showMessage('Pago Completado', '¡Pago completado con éxito! El club se pondrá en contacto contigo para la entrega. Puedes seguir el estado en "Mis pedidos".');
     }
+    if (params.get('carrito')) setCartOpen(true);
     if (params.get('canceled')) {
       takeCartCheckout();
       stripeAdapter.cancelPendingCheckout().finally(() =>
         showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.')
       );
     }
-  }, [fetchItems, clearCart, location.search]);
+    // Avisos ya atendidos: se limpian del enlace para que otro clic en el carrito
+    // vuelva a abrirlo y recargar no repita el mensaje
+    if (params.get('success') || params.get('carrito') || params.get('canceled')) {
+      navigate('/market', { replace: true });
+    }
+  }, [fetchItems, clearCart, location.search, navigate]);
 
   const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
     if (editItem) {
@@ -130,7 +152,11 @@ export function Market() {
     <>
       <div className="market-container">
         <div className="market-header">
-          <h1>Tienda Oficial</h1>
+          <div>
+            <p className="market-kicker">Uros de Rivas</p>
+            <h1>Tienda oficial</h1>
+            {!loading && shownItems.length > 0 && <p className="market-count">{shownItems.length} {shownItems.length === 1 ? 'producto' : 'productos'}</p>}
+          </div>
           <div className="market-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button className="btn-cart-toggle" onClick={() => setCartOpen(true)}>
               <ShoppingCart size={20} />
@@ -138,7 +164,7 @@ export function Market() {
               <span className="cart-label">Carrito</span>
             </button>
             {user && <button className="btn-secondary hidden-mobile" onClick={() => setOrdersModalOpen(true)}>📌 Mis Pedidos</button>}
-            <AdminGuard>
+            <AdminGuard roles={['admin', 'tienda']}>
               <button className="btn-admin-add hidden-mobile" onClick={handleOpenCreate}>+ Añadir Producto</button>
             </AdminGuard>
           </div>
@@ -147,31 +173,19 @@ export function Market() {
         <div className="products-grid">
           {loading ? (
             <SkeletonGrid />
-          ) : items.length === 0 ? (
+          ) : shownItems.length === 0 ? (
             <p className="no-items">Próximamente disponible.</p>
           ) : (
-            items.map(item => (
-              <div key={item.id} className="product-card animate-fade-in" onClick={() => setSelectedItem(item)}
-                role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setSelectedItem(item); }}>
-                <AdminGuard>
+            shownItems.map(item => (
+              <ProductCard key={item.id} item={item} onOpen={() => setSelectedItem(item)} adminActions={
+                <AdminGuard roles={['admin', 'tienda']}>
                   <div className="admin-card-actions" onClick={e => e.stopPropagation()}>
+                    {item.active === false && <span className="product-hidden-badge" title="Los usuarios no lo ven. Se vuelve a mostrar desde el panel o editándolo.">OCULTO</span>}
                     <button className="btn-admin-edit" onClick={() => handleOpenEdit(item)} title="Editar">✏️</button>
                     <button className="btn-admin-delete" onClick={() => handleDelete(item.id)} title="Borrar">X</button>
                   </div>
                 </AdminGuard>
-                <div className="product-image-wrap">
-                  <img src={item.imageUrl ? resolveImageUrl(item.imageUrl) : fallbackImageUrl} alt={item.name}
-                    className="product-img" loading="lazy" onError={showFallbackImage} />
-                </div>
-                <div className="product-info">
-                  <h3 className="product-name">{item.name.trim()}</h3>
-                  {item.description && <p className="product-desc">{item.description}</p>}
-                  <div className="product-footer-actions">
-                    <span className="product-price">{item.price.toFixed(2)} €</span>
-                    <span className="btn-buy product-open">Comprar</span>
-                  </div>
-                </div>
-              </div>
+              } />
             ))
           )}
         </div>

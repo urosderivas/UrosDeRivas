@@ -11,7 +11,7 @@ interface Props {
 export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel }: Props) {
   return (
     <Modal isOpen={isOpen} onClose={onCancel} title={title}>
-      <div style={{ padding: '1rem', color: '#ccc', textAlign: 'center' }}>
+      <div style={{ padding: '1rem', color: 'var(--text-soft)', textAlign: 'center' }}>
         <p style={{ marginBottom: '1.5rem', fontSize: '1.1rem', lineHeight: '1.5' }}>{message}</p>
         <div className="modal-actions" style={{ borderTop: 'none', paddingTop: 0, justifyContent: 'center', marginTop: '1rem' }}>
           <button className="btn-modal-cancel" onClick={onCancel} style={{ flex: '1' }}>CANCELAR</button>

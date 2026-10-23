@@ -1,0 +1,33 @@
+.promo-bar {
+  background: var(--accent-gold);
+  color: var(--on-accent);
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0.5rem 1rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.promo-message {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  animation: promoIn 0.5s ease-out;
+}
+
+.promo-bar a { color: inherit; text-decoration: none; }
+.promo-bar a:hover { text-decoration: underline; }
+
+@keyframes promoIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .promo-bar { font-size: 0.7rem; letter-spacing: 0.5px; }
+}

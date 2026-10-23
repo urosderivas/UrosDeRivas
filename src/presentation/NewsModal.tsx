@@ -68,10 +68,17 @@ export function NewsModal({ isOpen, onClose, onSave, initial, events }: Props) {
         <ImageField label="Imagen" value={imageUrl} onChange={setImageUrl} folder="news" />
         <div className="form-row">
           <div className="form-group">
-            <label>Campus relacionado <span className="label-hint">(opcional)</span></label>
+            <label>Campus, torneo o viaje <span className="label-hint">(opcional)</span></label>
             <select value={eventId} onChange={e => setEventId(e.target.value)}>
               <option value="">Ninguno</option>
-              {events.map(ev => <option key={ev.id} value={ev.id}>{ev.title}</option>)}
+              {(['campus', 'torneo'] as const).map(kind => {
+                const group = events.filter(ev => ev.type === kind);
+                return group.length > 0 && (
+                  <optgroup key={kind} label={kind === 'campus' ? 'Campus' : 'Torneos y viajes'}>
+                    {group.map(ev => <option key={ev.id} value={ev.id}>{ev.title}</option>)}
+                  </optgroup>
+                );
+              })}
             </select>
           </div>
           <div className="form-group">

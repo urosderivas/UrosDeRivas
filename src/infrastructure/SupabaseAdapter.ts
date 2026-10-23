@@ -1,6 +1,84 @@
 import { supabase } from '../utils/supabase';
+import { registrationDetail } from '../utils/registrations';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
-import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost } from '../domain/entities';
+import type { Role } from '../domain/roles';
+import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
+
+/** Registros de actividad que enseña el panel (los más recientes) */
+const LOGS_SHOWN = 500;
+const MAX_IMAGE_SIDE = 1600;
+
+/**
+ * Reduce una foto a como mucho 1600 px de lado y la guarda en WebP. Si no se
+ * puede (formato raro, GIF animado) o no sale más pequeña, se sube la original.
+ */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.82));
+    return blob && blob.type === 'image/webp' && blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
+// Sin 0/O ni 1/I/L, para que se puedan dictar y copiar a mano sin confusiones
+const COUPON_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const COUPON_LENGTH = 6;
+
+function randomCouponCode(): string {
+  // Se descartan los bytes del final del rango para que todas las letras salgan igual de a menudo
+  const limit = 256 - (256 % COUPON_ALPHABET.length);
+  let code = '';
+  while (code.length < COUPON_LENGTH) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) {
+      if (b < limit && code.length < COUPON_LENGTH) code += COUPON_ALPHABET[b % COUPON_ALPHABET.length];
+    }
+  }
+  return code;
+}
+
+function couponSaveError(error: any): Error {
+  const text = `${error?.message || ''} ${error?.details || ''}`;
+  if (text.includes('event_coupons_price_check')) return new Error('El precio del cupón tiene que ser 0 (gratis) o al menos 0,50 €.');
+  if (text.includes('event_coupons_note_check')) return new Error('La nota puede tener como mucho 120 caracteres.');
+  return error instanceof Error ? error : new Error(error?.message || 'No se pudieron guardar los cupones.');
+}
+
+/** Errores de la base de datos al guardar un evento, en palabras para el admin. */
+function eventSaveError(error: any): Error {
+  const text = `${error?.message || ''} ${error?.details || ''}`;
+  if (text.includes('events_price_table_check')) {
+    return new Error('La tabla de precios está incompleta o no cuadra con las fechas. Revisa que todas las casillas tengan precio.');
+  }
+  if (text.includes('events_price_options_check')) {
+    return new Error('Revisa los precios: cada opción necesita nombre y precio (si solo hay una, el nombre puede ir vacío).');
+  }
+  if (text.includes('events_type_check')) {
+    return new Error('Este tipo de evento aún no está activado en la base de datos.');
+  }
+  return error instanceof Error ? error : new Error(error?.message || 'No se pudo guardar el evento.');
+}
+
+// Producto de la base de datos a producto de la web
+const mapItem = (item: any): MarketItem => ({
+  id: item.id,
+  name: item.name,
+  price: item.price,
+  imageUrl: item.image_url,
+  description: item.description,
+  sizes: item.sizes,
+  custom_fields: item.custom_fields || [],
+  stripe_price_id: item.stripe_price_id,
+  active: item.active !== false,
+});
 
 export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort {
   async getUser(): Promise<User | null> {
@@ -73,17 +151,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getItems(): Promise<MarketItem[]> {
     const { data, error } = await supabase.from('market_items').select('*');
     if (error) throw error;
-    // Map DB fields to Domain if necessary
-    return data.map(item => ({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      imageUrl: item.image_url,
-      description: item.description,
-      sizes: item.sizes,
-      custom_fields: item.custom_fields || [],
-      stripe_price_id: item.stripe_price_id,
-    }));
+    return data.map(mapItem);
   }
 
   async createItem(item: Omit<MarketItem, 'id'>): Promise<MarketItem> {
@@ -95,9 +163,10 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       sizes: item.sizes || [],
       custom_fields: item.custom_fields || [],
       stripe_price_id: item.stripe_price_id,
+      active: item.active ?? true,
     }).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
+    return mapItem(data);
   }
 
   async updateItem(id: string, item: Partial<MarketItem>): Promise<MarketItem> {
@@ -109,10 +178,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (item.sizes !== undefined) payload.sizes = item.sizes;
     if (item.custom_fields !== undefined) payload.custom_fields = item.custom_fields;
     if (item.stripe_price_id !== undefined) payload.stripe_price_id = item.stripe_price_id;
+    if (item.active !== undefined) payload.active = item.active;
 
     const { data, error } = await supabase.from('market_items').update(payload).eq('id', id).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.name, price: data.price, imageUrl: data.image_url, description: data.description, sizes: data.sizes, custom_fields: data.custom_fields, stripe_price_id: data.stripe_price_id };
+    return mapItem(data);
   }
 
   async deleteItem(id: string): Promise<void> {
@@ -123,23 +193,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getEvents(): Promise<Event[]> {
     const { data, error } = await supabase.from('events').select('*').order('date', { ascending: false });
     if (error) throw error;
-    return data.map((e: any) => ({
-      id: e.id,
-      title: e.title,
-      date: e.date,
-      dates: e.dates || [],
-      location: e.location,
-      imageUrl: e.image_url,
-      description: e.description,
-      schedule: e.schedule,
-      type: e.type,
-      price_per_day: e.price_per_day || 0,
-      price_tiers: e.price_tiers || [],
-      attendee_discounts: e.attendee_discounts || [],
-      custom_fields: e.custom_fields || [],
-      max_capacity: e.max_capacity,
-      active: e.active !== false,
-    }));
+    return data.map((e: any) => this.mapEvent(e));
   }
 
   async createEvent(event: Omit<Event, 'id'>): Promise<Event> {
@@ -152,16 +206,18 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       image_url: event.imageUrl,
       description: event.description,
       schedule: event.schedule,
-      type: 'campus',
+      type: event.type || 'campus',
       price_per_day: event.price_per_day || 0,
       price_tiers: event.price_tiers || [],
       attendee_discounts: event.attendee_discounts || [],
+      price_table: event.price_table ?? null,
+      price_options: event.price_options ?? null,
       custom_fields: event.custom_fields || [],
       max_capacity: event.max_capacity,
       active: event.active !== false,
       created_by: user?.id,
     }).select().single();
-    if (error) throw error;
+    if (error) throw eventSaveError(error);
     return this.mapEvent(data);
   }
 
@@ -177,14 +233,16 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (event.price_per_day !== undefined) payload.price_per_day = event.price_per_day;
     if (event.price_tiers !== undefined) payload.price_tiers = event.price_tiers;
     if (event.attendee_discounts !== undefined) payload.attendee_discounts = event.attendee_discounts;
+    if (event.price_table !== undefined) payload.price_table = event.price_table;
+    if (event.price_options !== undefined) payload.price_options = event.price_options;
     if (event.custom_fields !== undefined) payload.custom_fields = event.custom_fields;
     if (event.max_capacity !== undefined) payload.max_capacity = event.max_capacity;
     if (event.active !== undefined) payload.active = event.active;
-    payload.type = 'campus';
+    if (event.type !== undefined) payload.type = event.type;
 
     const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
-    if (error) throw error;
-    if (!data || data.length === 0) throw new Error('No se pudo actualizar el campus. Puede que no tengas permisos si no eres el creador.');
+    if (error) throw eventSaveError(error);
+    if (!data || data.length === 0) throw new Error('No se pudo actualizar el evento. Puede que no tengas permisos si no eres el creador.');
     
     return this.mapEvent(data[0]);
   }
@@ -193,9 +251,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return {
       id: e.id, title: e.title, date: e.date, dates: e.dates || [],
       location: e.location, imageUrl: e.image_url, description: e.description,
-      schedule: e.schedule, type: e.type,
-      price_per_day: e.price_per_day || 0, price_tiers: e.price_tiers || [],
-      attendee_discounts: e.attendee_discounts || [], custom_fields: e.custom_fields || [],
+      schedule: e.schedule, type: e.type === 'torneo' ? 'torneo' : 'campus',
+      price_per_day: Number(e.price_per_day) || 0, price_tiers: e.price_tiers || [],
+      attendee_discounts: e.attendee_discounts || [], price_table: e.price_table ?? null,
+      price_options: e.price_options ?? null,
+      custom_fields: e.custom_fields || [],
       max_capacity: e.max_capacity, active: e.active !== false,
     };
   }
@@ -264,9 +324,11 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
 
   /** Sube una imagen al bucket público "media" y devuelve su URL. */
   async uploadImage(file: File, folder: 'sponsors' | 'news' | 'events' | 'products'): Promise<string> {
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    // Las fotos del móvil pesan varios MB: se reducen antes de subirlas
+    const upload = await shrinkImage(file);
+    const ext = upload.type === 'image/webp' ? 'webp' : (file.name.split('.').pop() || 'jpg').toLowerCase();
     const path = `${folder}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
+    const { error } = await supabase.storage.from('media').upload(path, upload, { contentType: upload.type });
     if (error) throw error;
     return supabase.storage.from('media').getPublicUrl(path).data.publicUrl;
   }
@@ -277,21 +339,25 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async getCampusRegistrations(eventId: string): Promise<any[]> {
     const { data, error } = await supabase.rpc('get_event_registrations', { target_event_id: eventId });
     if (error) { console.error('Error fetching registrations', error); return []; }
-    // Enrich with registration details from the table
+    // Enrich with registration details from the table (una cuenta puede tener varias en torneos)
     const { data: regs } = await supabase.from('event_registrations')
       .select('*')
       .eq('event_id', eventId);
-    const regMap = (regs || []).reduce((acc: any, r: any) => { acc[r.user_id] = r; return acc; }, {});
-    return (data || []).map((d: any) => ({
-      ...d,
-      selected_days: regMap[d.user_id]?.selected_days || [],
-      num_attendees: regMap[d.user_id]?.num_attendees || 1,
-      attendee_names: regMap[d.user_id]?.attendee_names || [],
-      amount: regMap[d.user_id]?.amount || 0,
-      status: regMap[d.user_id]?.status || 'pending',
-      stripe_session_id: regMap[d.user_id]?.stripe_session_id,
-      custom_data: regMap[d.user_id]?.custom_data || {},
-    }));
+    const regMap = (regs || []).reduce((acc: any, r: any) => { acc[r.id] = r; return acc; }, {});
+    return (data || []).map((d: any) => {
+      const r = regMap[d.registration_id] || {};
+      return {
+        ...d,
+        id: d.registration_id,
+        selected_days: r.selected_days || [],
+        num_attendees: r.num_attendees || 1,
+        attendee_names: r.attendee_names || [],
+        amount: r.amount || 0,
+        status: r.status || 'pending',
+        stripe_session_id: r.stripe_session_id,
+        custom_data: r.custom_data || {},
+      };
+    });
   }
 
   /** Asistentes inscritos por campus (sin canceladas). Vacío si la función aún no existe. */
@@ -303,12 +369,13 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return map;
   }
 
-  async getUserRegistrations(userId: string): Promise<Record<string, string>> {
-    const { data, error } = await supabase.from('event_registrations').select('event_id, status').eq('user_id', userId);
-    if (error) return {};
-    const map: Record<string, string> = {};
-    for (const r of data) map[r.event_id] = r.status;
-    return map;
+  async getUserRegistrations(userId: string): Promise<OwnRegistration[]> {
+    const { data, error } = await supabase.from('event_registrations')
+      .select('id, event_id, status, attendee_names, created_at')
+      .eq('user_id', userId)
+      .order('created_at');
+    if (error) return [];
+    return (data || []).map((r: any) => ({ id: r.id, event_id: r.event_id, status: r.status, attendee_names: r.attendee_names || [] }));
   }
 
   async getUserFullRegistrations(userId: string): Promise<any[]> {
@@ -318,12 +385,12 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) return [];
     // map to match 'order' interface for the modal
     return data.map(r => ({
-      id: r.event_id + '_' + userId,
+      id: r.id,
       event_id: r.event_id,
       buyer_name: '',
       buyer_email: '',
       item_name: r.events?.title || 'Campus',
-      size: `${(r.attendee_names || []).join(', ')} | ${(r.selected_days || []).join(', ')}`,
+      size: registrationDetail(r),
       quantity: 1,
       amount: r.amount,
       status: r.status,
@@ -337,25 +404,49 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return this.getCampusRegistrations(eventId);
   }
 
-  async removeEventRegistration(eventId: string, userId: string): Promise<void> {
-    const { error } = await supabase.from('event_registrations').delete().match({ event_id: eventId, user_id: userId });
+  async removeEventRegistration(registrationId: string): Promise<void> {
+    const { error } = await supabase.from('event_registrations').delete().eq('id', registrationId);
     if (error) throw error;
   }
 
-  async updateRegistrationStatus(eventId: string, userId: string, status: string): Promise<void> {
-    const { error } = await supabase.rpc('update_admin_campus_status', { 
-      p_event_id: eventId, 
-      p_user_id: userId, 
-      p_status: status 
+  async updateRegistrationStatus(registrationId: string, status: string): Promise<void> {
+    const { error } = await supabase.rpc('update_registration_status', {
+      p_registration_id: registrationId,
+      p_status: status
     });
-    // Fallback if rpc hasn't been uploaded yet (which might fail silently or throw due to RLS)
-    if (error) {
-      console.warn("RPC update_admin_campus_status failed, trying direct update (may fail silently if RLS blocks):", error);
-      const { error: err2 } = await supabase.from('event_registrations')
-        .update({ status })
-        .match({ event_id: eventId, user_id: userId });
-      if (err2) throw err2;
+    if (error) throw error;
+  }
+
+  // ============================================
+  // CUPONES (torneos y viajes)
+  // ============================================
+  async getCoupons(eventId: string): Promise<EventCoupon[]> {
+    const { data, error } = await supabase.from('event_coupons')
+      .select('id, event_id, code, price, note, created_at, stripe_session_id')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((c: any) => ({ ...c, price: Number(c.price) }));
+  }
+
+  /** Crea `count` códigos de un solo uso con el mismo precio final. */
+  async createCoupons(eventId: string, count: number, price: number, note: string): Promise<EventCoupon[]> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rows = Array.from({ length: count }, () => ({ event_id: eventId, code: randomCouponCode(), price, note: note.trim() || null }));
+      const { data, error } = await supabase.from('event_coupons')
+        .insert(rows)
+        .select('id, event_id, code, price, note, created_at, stripe_session_id');
+      // Un código repetido (muy raro) hace fallar el lote: se genera otro
+      if (error?.code === '23505') continue;
+      if (error) throw couponSaveError(error);
+      return (data || []).map((c: any) => ({ ...c, price: Number(c.price) }));
     }
+    throw new Error('No se pudieron generar los cupones. Vuelve a intentarlo.');
+  }
+
+  async deleteCoupon(id: string): Promise<void> {
+    const { error } = await supabase.from('event_coupons').delete().eq('id', id);
+    if (error) throw error;
   }
 
   async verifyPayment(sessionId: string): Promise<boolean> {
@@ -371,13 +462,17 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data;
   }
 
+  /** Estado en Stripe de varias sesiones, de 100 en 100 (la función no acepta más de una vez). */
   async checkStripePaymentsBatch(sessionIds: string[]): Promise<Record<string, { payment_status: string; status: string }>> {
-    if (sessionIds.length === 0) return {};
-    const { data, error } = await supabase.functions.invoke('verify-payment', {
-      body: { sessionIds } // Array mode supported by our new Edge layout
-    });
-    if (error) throw error;
-    return data;
+    const results: Record<string, { payment_status: string; status: string }> = {};
+    for (let i = 0; i < sessionIds.length; i += 100) {
+      const { data, error } = await supabase.functions.invoke('verify-payment', {
+        body: { sessionIds: sessionIds.slice(i, i + 100) }
+      });
+      if (error) throw error;
+      Object.assign(results, data);
+    }
+    return results;
   }
 
   // ============================================
@@ -389,13 +484,20 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     return data || [];
   }
 
+  /** Cambia el rol de otro usuario (solo admins; nadie cambia el suyo). */
+  async setUserRole(userId: string, role: Role): Promise<void> {
+    const { error } = await supabase.rpc('set_user_role', { target_user_id: userId, new_role: role });
+    if (error) throw error;
+  }
+
   async deleteUser(id: string): Promise<void> {
     const { error } = await supabase.rpc('delete_user_account', { target_user_id: id });
     if (error) throw error;
   }
 
   async getLogs(): Promise<SystemLog[]> {
-    const { data, error } = await supabase.from('system_logs').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('system_logs').select('*')
+      .order('created_at', { ascending: false }).limit(LOGS_SHOWN);
     if (error) throw error;
     return data;
   }
@@ -406,21 +508,25 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async createLog(actionType: string, metadata?: any): Promise<void> {
-    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada
-    const user = await this.getUser();
-    if (!user) return;
-    const payload: any = { action_type: actionType, metadata, user_id: user.id };
+    // La RLS solo acepta logs de usuarios con sesión; sin sesión no se envía nada.
+    // getSession lee la sesión guardada, sin pedirla otra vez al servidor.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const payload: any = { action_type: actionType, metadata, user_id: session.user.id };
 
     const { error } = await supabase.from('system_logs').insert(payload);
     // Silently fail for telemetry if needed, but log to console
     if (error) console.error("Telemetry error", error);
   }
 
-  async getOrders(): Promise<Order[]> {
-    const { data, error } = await supabase.from('orders').select(`
+  /** Todos los pedidos que puede ver quien llama (un admin, los de todos), o solo los de userId. */
+  async getOrders(userId?: string): Promise<Order[]> {
+    let query = supabase.from('orders').select(`
       *,
       market_items ( name )
-    `).order('created_at', { ascending: false });
+    `);
+    if (userId) query = query.eq('user_id', userId);
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
     
     return data.map((o: any) => ({
@@ -450,40 +556,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
   }
 
-  async createOrderLocal(items: { itemId: string; quantity: number; options: Record<string, string> }[], userEmail: string): Promise<void> {
-    const user = await this.getUser();
-    if (!user) throw new Error("Debes iniciar sesión.");
-
-    const sessionId = `local_${crypto.randomUUID().substring(0, 8)}`;
-    const rows = items.map(ci => {
-      const textOptionsStr = Object.entries(ci.options || {}).map(([k,v]) => `${k}: ${v}`).join(' | ');
-      return {
-        user_id: user.id,
-        buyer_name: user.email.split('@')[0],
-        buyer_email: userEmail,
-        item_id: ci.itemId,
-        size: textOptionsStr || null,
-        quantity: ci.quantity,
-        amount: 0,
-        status: 'pending',
-        stripe_session_id: sessionId
-      };
-    });
-
-    // Fetch actual prices from DB for security
-    const itemIds = items.map(i => i.itemId);
-    const { data: dbItems } = await supabase.from('market_items').select('id, price').in('id', itemIds);
-    if (dbItems) {
-      const priceMap = new Map(dbItems.map((i: any) => [i.id, i.price]));
-      for (let i = 0; i < rows.length; i++) {
-        rows[i].amount = (priceMap.get(items[i].itemId) || 0) * items[i].quantity;
-      }
-    }
-
-    const { error } = await supabase.from('orders').insert(rows);
-    if (error) throw new Error("Error creando pedido: " + error.message);
-  }
-
   /**
    * Look up an order or campus registration by its stripe_session_id.
    * Used by the QR scanner verification flow.
@@ -497,29 +569,28 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     item_name: string;
     amount: number;
     stripe_session_id: string;
-    is_local: boolean;
   }> {
-    const empty = { found: false, type: null as any, status: '', buyer_name: '', buyer_email: '', item_name: '', amount: 0, stripe_session_id: sessionId, is_local: false };
+    const empty = { found: false, type: null as any, status: '', buyer_name: '', buyer_email: '', item_name: '', amount: 0, stripe_session_id: sessionId };
 
     // 1. Search in orders table
     const { data: orderData } = await supabase
       .from('orders')
       .select('*, market_items(name)')
-      .eq('stripe_session_id', sessionId)
-      .limit(1);
+      .eq('stripe_session_id', sessionId);
 
     if (orderData && orderData.length > 0) {
+      // Un carrito son varias filas con la misma sesión: se enseña el pedido entero
       const o = orderData[0];
+      const statuses = [...new Set(orderData.map((r: any) => r.status))];
       return {
         found: true,
         type: 'order',
-        status: o.status,
+        status: statuses.length === 1 ? statuses[0] : statuses.join(' / '),
         buyer_name: o.buyer_name,
         buyer_email: o.buyer_email,
-        item_name: o.market_items?.name || 'Producto',
-        amount: o.amount,
+        item_name: orderData.map((r: any) => `${r.quantity > 1 ? r.quantity + '× ' : ''}${r.market_items?.name || 'Producto'}`).join(', '),
+        amount: orderData.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0),
         stripe_session_id: sessionId,
-        is_local: sessionId.startsWith('local_'),
       };
     }
 
@@ -546,10 +617,9 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         status: r.status,
         buyer_name: userEmail ? userEmail.split('@')[0] : (r.attendee_names?.[0] || 'Desconocido'),
         buyer_email: userEmail,
-        item_name: r.events?.title || 'Campus',
+        item_name: `${r.events?.title || 'Campus'} [${registrationDetail(r)}]`,
         amount: r.amount || 0,
         stripe_session_id: sessionId,
-        is_local: sessionId.startsWith('local_'),
       };
     }
 

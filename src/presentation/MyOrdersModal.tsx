@@ -4,7 +4,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
 import { ShoppingBag, FileText } from 'lucide-react';
-import { InvoiceGenerator, InvoiceData, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
+import type { InvoiceData } from '../application/services/InvoiceGenerator';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
@@ -18,9 +18,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const data = await adapter.getOrders();
-        // Un admin puede leer todos los pedidos; aquí solo van los suyos
-        let allOrders = (data || []).filter(o => !user || o.user_id === user.id);
+        // Un admin puede leer todos los pedidos; aquí solo se piden los suyos
+        let allOrders = user ? await adapter.getOrders(user.id) : [];
         
         if (user) {
           const campusRegs = await adapter.getUserFullRegistrations(user.id);
@@ -54,6 +53,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   const handleGenerateInvoice = async (groupOrders: Order[], groupId: string) => {
     setGeneratingPdf(groupId);
     try {
+      // El generador de PDF pesa mucho: se descarga solo al pedir un justificante
+      const { InvoiceGenerator, invoicePaymentStatus } = await import('../application/services/InvoiceGenerator');
       const paymentStatus = invoicePaymentStatus(groupId, groupOrders);
 
       const invoiceData: InvoiceData = {
@@ -141,7 +142,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
                     <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem' }}>
                       <span>
                         <strong>{o.item_name}</strong>
-                        {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700 }}> x{o.quantity}</span>}
+                        {(o.quantity || 1) > 1 && <span style={{ color: 'var(--accent-text)', fontWeight: 700 }}> x{o.quantity}</span>}
                         {o.size && <span style={{ color: 'var(--text-secondary)', marginLeft: '6px' }}>({o.size})</span>}
                       </span>
                       <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', marginLeft: '12px' }}>
@@ -152,7 +153,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 {/* Footer: total + invoice button */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(var(--tint), 0.08)', paddingTop: '8px' }}>
                   <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--primary-color)' }}>
                     Total: €{groupTotal.toFixed(2)}
                   </span>
@@ -161,8 +162,8 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
                     disabled={generatingPdf === groupId}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '5px',
-                      background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#ccc', padding: '5px 12px', borderRadius: '6px',
+                      background: 'rgba(var(--tint), 0.08)', border: '1px solid rgba(var(--tint), 0.15)',
+                      color: 'var(--text-soft)', padding: '5px 12px', borderRadius: '6px',
                       fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600
                     }}
                   >

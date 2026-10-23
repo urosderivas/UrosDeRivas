@@ -1,6 +1,6 @@
 /* Página de patrocinadores (antes era una sección de Inicio) */
 .sponsors-section {
-  background-color: #050505; /* Blacker background for depth */
+  background-color: var(--primary-bg); /* Blacker background for depth */
   padding: 6rem 1rem 10rem;
   text-align: center;
   position: relative;
@@ -12,7 +12,7 @@
 }
 
 .sponsors-section h3 {
-  color: var(--accent-gold);
+  color: var(--accent-text);
   text-transform: uppercase;
   font-size: 2.8rem;
   font-weight: 850;
@@ -45,7 +45,7 @@
 .sponsor-item {
   flex: 0 1 calc(20% - 1.6rem); /* 5 columns */
   min-width: 200px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--tint), 0.03);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 16px;
@@ -56,14 +56,14 @@
   justify-content: center;
   transition: all 0.7s cubic-bezier(0.19, 1, 0.22, 1);
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--tint), 0.05);
 }
 
 .sponsor-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--tint), 0.08);
   transform: translateY(-10px) rotateX(10deg) rotateY(10deg);
   border-color: var(--accent-gold);
-  box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 15px rgba(212, 175, 55, 0.2);
+  box-shadow: 0 20px 50px rgba(var(--shadow-rgb), calc(0.8 * var(--shadow-k))), 0 0 15px rgba(var(--accent-rgb), 0.2);
 }
 
 .sponsor-item img {

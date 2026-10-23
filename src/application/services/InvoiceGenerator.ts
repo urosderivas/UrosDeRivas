@@ -1,7 +1,9 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 import { Order } from '../../domain/entities';
 import { CLUB, clubAddressLine } from '../../config';
+import { clubLogoUrl } from '../../utils/media';
 
 export interface InvoiceData {
   orderGroupId: string;
@@ -9,20 +11,21 @@ export interface InvoiceData {
   clientEmail: string;
   orders: Order[];
   date?: Date;
-  /** 'paid_stripe' | 'paid_hand' | 'pending' */
-  paymentStatus: 'paid_stripe' | 'paid_hand' | 'pending';
+  paymentStatus: 'paid_stripe' | 'free' | 'paid' | 'pending';
 }
 
 /**
  * Estado de pago de un grupo de pedidos. Los pagados por Stripe pasan a
  * "processing" (pendiente de entrega) en cuanto llega el webhook, así que
- * cuentan ya como pagados; el resto solo cuando un admin los completa.
+ * cuentan ya como pagados. Los gratuitos no tienen pago; los pedidos antiguos
+ * sin pago online solo cuentan como pagados si un admin los completó.
  */
 export function invoicePaymentStatus(groupKey: string, orders: Order[]): InvoiceData['paymentStatus'] {
   if (groupKey.startsWith('cs_')) {
     return orders.every(o => o.status === 'processing' || o.status === 'completed') ? 'paid_stripe' : 'pending';
   }
-  return orders.every(o => o.status === 'completed') ? 'paid_hand' : 'pending';
+  if (groupKey.startsWith('free_')) return 'free';
+  return orders.every(o => o.status === 'completed') ? 'paid' : 'pending';
 }
 
 export class InvoiceGenerator {
@@ -54,15 +57,16 @@ export class InvoiceGenerator {
     // Las sesiones de Stripe empiezan todas por "cs_test_"/"cs_live_": el final es lo que las distingue
     const shortId = orderGroupId.slice(-8).toUpperCase();
 
-    // 1. Load Logo — use the black bull on a light grey rect for visibility
-    const logoUrl = `${import.meta.env.BASE_URL}assets/navbar_black_bull.png`;
+    // 1. Escudo del club sobre un recuadro gris claro
+    const logoUrl = clubLogoUrl;
     const logoBase64 = await this.getBase64ImageFromUrl(logoUrl);
 
     if (logoBase64) {
       // Light grey background rect behind the logo
       doc.setFillColor(240, 240, 240);
       doc.roundedRect(12, 12, 26, 26, 3, 3, 'F');
-      doc.addImage(logoBase64, 'PNG', 14, 14, 22, 22);
+      // El escudo es más alto que ancho (519 × 664): se centra sin deformarlo
+      doc.addImage(logoBase64, 'PNG', 16.4, 14, 17.2, 22);
     }
 
     // -- Header Section --
@@ -159,8 +163,11 @@ export class InvoiceGenerator {
     if (paymentStatus === 'paid_stripe') {
       statusLabel = 'PAGADO (Stripe):';
       doc.setTextColor(34, 139, 34); // green
-    } else if (paymentStatus === 'paid_hand') {
-      statusLabel = 'PAGADO EN MANO:';
+    } else if (paymentStatus === 'free') {
+      statusLabel = 'GRATUITO:';
+      doc.setTextColor(34, 139, 34); // green
+    } else if (paymentStatus === 'paid') {
+      statusLabel = 'PAGADO:';
       doc.setTextColor(34, 139, 34); // green
     }
 
@@ -170,19 +177,13 @@ export class InvoiceGenerator {
 
     // Anti-falsification QR Code
     try {
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=uros_id_${orderGroupId}`;
-      const qrRes = await fetch(qrUrl);
-      const qrBlob = await qrRes.blob();
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(qrBlob);
-      });
+      // Se genera en el navegador: el código no sale a ningún servicio externo
+      const base64 = await QRCode.toDataURL(`uros_id_${orderGroupId}`, { width: 200, margin: 1 });
       doc.addImage(base64, 'PNG', 14, startY - 5, 25, 25);
       doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
       doc.text(`ID Validación: ${shortId}`, 14, startY + 23);
-    } catch (e) { console.error("Could not fetch QR code", e); }
+    } catch (e) { console.error("Could not generate QR code", e); }
 
     // Footer mark
     doc.setFontSize(8);

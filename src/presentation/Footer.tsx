@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { CLUB } from '../config';
 import './Footer.css';
+import { clubLogoUrl } from '../utils/media';
 
 export function Footer() {
   return (
     <footer className="footer">
       <div className="footer-content">
         <div className="footer-brand">
-          <img src={`${import.meta.env.BASE_URL}assets/navbar_black_bull.png`} alt={CLUB.shortName} className="footer-logo" />
+          <img src={clubLogoUrl} alt={CLUB.shortName} className="footer-logo" />
           <h3>{CLUB.legalName.toUpperCase()}</h3>
         </div>
 

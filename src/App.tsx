@@ -1,15 +1,15 @@
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
 import { useStore } from './presentation/store';
 import { Navbar } from './presentation/Navbar';
+import { PromoBar } from './presentation/components/PromoBar';
+import { SponsorsStrip } from './presentation/components/SponsorsStrip';
 import { Footer } from './presentation/Footer';
 import { Home } from './presentation/Home';
 import { Login } from './presentation/Login';
 import { Market } from './presentation/Market';
 import { Events } from './presentation/Events';
 import { Sponsors } from './presentation/Sponsors';
-import { Clasificaciones } from './presentation/Clasificaciones';
-import { AdminPanel } from './presentation/AdminPanel';
 import { PrivacyPolicy } from './presentation/PrivacyPolicy';
 import { LegalNotice } from './presentation/LegalNotice';
 import { CookiesPolicy } from './presentation/CookiesPolicy';
@@ -17,6 +17,10 @@ import { CookieBanner } from './presentation/CookieBanner';
 import { NotFound } from './presentation/NotFound';
 import { consumeExpiredEmailLink, consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
 import { takeLoginNext } from './utils/loginRedirect';
+
+// El panel (con el PDF, el Excel y el escáner QR) solo lo descargan los admins
+const AdminPanel = lazy(() => import('./presentation/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const Appointments = lazy(() => import('./presentation/Appointments').then(m => ({ default: m.Appointments })));
 
 function TelemetryTracker() {
   const { logActivity } = useStore();
@@ -71,22 +75,27 @@ function App() {
       <TelemetryTracker />
       <AuthRedirects />
       <div className="app-container" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <PromoBar />
         <Navbar />
         <main style={{ flex: 1 }}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/market" element={<Market />} />
-            <Route path="/events" element={<Events />} />
+            <Route path="/events" element={<Events key="campus" kind="campus" />} />
+            <Route path="/torneos" element={<Events key="torneo" kind="torneo" />} />
             <Route path="/sponsors" element={<Sponsors />} />
-            <Route path="/clasificaciones" element={<Clasificaciones />} />
-            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/citas" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><Appointments /></Suspense>} />
+            <Route path="/admin" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><AdminPanel /></Suspense>} />
             <Route path="/login" element={<Login />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/legal" element={<LegalNotice />} />
             <Route path="/cookies" element={<CookiesPolicy />} />
+            {/* Sección retirada: los enlaces antiguos llevan a Inicio */}
+            <Route path="/clasificaciones" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
+        <SponsorsStrip />
         <Footer />
         <CookieBanner />
       </div>

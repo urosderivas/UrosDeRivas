@@ -1,7 +1,12 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState, Fragment, lazy, Suspense } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
+import { isFreeEvent, startingPrice } from '../domain/pricing';
+import { formatDateRanges } from '../utils/dates';
+import { registrationDetail } from '../utils/registrations';
 import { AdminGuard } from './AdminGuard';
+import { AppointmentsAdmin } from './AppointmentsAdmin';
+import { ROLES, ROLE_LABELS, Role, STAFF_ROLES } from '../domain/roles';
 import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
@@ -10,14 +15,39 @@ import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight } from 'l
 import './AdminPanel.css';
 import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import * as XLSX from 'xlsx';
-import { QrScannerModal } from './components/QrScannerModal';
 import { CLUPIK } from '../config';
+
+// El escáner (html5-qrcode) solo se descarga al abrirlo
+const QrScannerModal = lazy(() => import('./components/QrScannerModal').then(m => ({ default: m.QrScannerModal })));
 
 const adapter = new SupabaseAdapter();
 
+type Tab = 'users' | 'stats' | 'orders' | 'market' | 'events' | 'citas';
+
+const TAB_LABELS: Record<Tab, string> = {
+  users: 'Usuarios',
+  stats: 'Estadísticas',
+  orders: 'Pedidos',
+  market: 'Catálogo Tienda',
+  events: 'Eventos e inscripciones',
+  citas: 'Citas',
+};
+
+/** Pestañas de cada rol: la base de datos solo deja hacer a cada uno lo de sus pestañas. */
+const ROLE_TABS: Record<Role, Tab[]> = {
+  admin: ['users', 'stats', 'orders', 'market', 'events', 'citas'],
+  coach: ['stats', 'events'],
+  tienda: ['orders', 'market'],
+  fisio: ['citas'],
+  user: [],
+};
+
 export function AdminPanel() {
   const { user } = useStore();
-  const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'orders' | 'market' | 'events'>(user?.role === 'coach' ? 'stats' : 'users');
+  const isAdmin = user?.role === 'admin';
+  const tabs = ROLE_TABS[user?.role || 'user'];
+  const [activeTab, setActiveTab] = useState<Tab>(tabs[0] || 'stats');
+  const canSee = (tab: Tab) => tabs.includes(tab);
 
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -48,7 +78,9 @@ export function AdminPanel() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'users' && user?.role === 'admin') {
+      if (!canSee(activeTab)) {
+        // Sin permiso para esta pestaña: no se pide nada
+      } else if (activeTab === 'users') {
         const data = await adapter.getSystemUsers();
         setSystemUsers(data);
       } else if (activeTab === 'stats') {
@@ -58,18 +90,21 @@ export function AdminPanel() {
           const sysUsers = await adapter.getSystemUsers();
           setSystemUsers(sysUsers);
         }
-      } else if (activeTab === 'orders' && user?.role === 'admin') {
+      } else if (activeTab === 'orders') {
         const data = await adapter.getOrders();
         setOrders(data);
         // Auto-sync Stripe statuses on load
         setTimeout(() => handleSyncAllStripe(data), 100);
-      } else if (activeTab === 'market' && user?.role === 'admin') {
+      } else if (activeTab === 'market') {
         const data = await adapter.getItems();
         setItems(data);
-      } else if (activeTab === 'events' && (user?.role === 'admin' || user?.role === 'coach')) {
+      } else if (activeTab === 'events') {
         const data = await adapter.getEvents();
         setEvents(data);
         setTimeout(() => handleSyncAllCampusStripe(data), 100);
+      } else if (activeTab === 'citas' && isAdmin) {
+        // El admin elige a qué fisio crearle el calendario
+        setSystemUsers(await adapter.getSystemUsers());
       }
     } catch (e) {
       console.error(e);
@@ -147,9 +182,14 @@ export function AdminPanel() {
     }
   };
 
+  // El rol llega después del primer render: se abre la primera pestaña del rol
+  useEffect(() => {
+    if (tabs.length) setActiveTab(tabs[0]);
+  }, [user?.role]);
+
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, user?.role]);
 
   const handleDeleteLog = async (id: string) => {
     setConfirmPrompt({
@@ -198,6 +238,14 @@ export function AdminPanel() {
     }
     const data = await adapter.getItems();
     setItems(data);
+  };
+
+  // Ocultar un producto (sin stock, de otra temporada...) sin borrarlo
+  const handleToggleItemActive = async (item: MarketItem) => {
+    try {
+      const updated = await adapter.updateItem(item.id, { active: item.active === false });
+      setItems(prev => prev.map(i => i.id === item.id ? updated : i));
+    } catch (e: any) { showMessage('Error', e.message); }
   };
 
   const handleDeleteItem = async (id: string) => {
@@ -262,7 +310,7 @@ export function AdminPanel() {
                     <td><span className="badge-action">{log.action_type}</span></td>
                     <td><pre className="metadata-box">{log.metadata ? JSON.stringify(log.metadata) : '-'}</pre></td>
                     <td>
-                      <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete"><Trash2 size={16} /></button>
+                      {isAdmin && <button onClick={() => handleDeleteLog(log.id)} className="btn-icon delete" title="Borrar"><Trash2 size={16} /></button>}
                     </td>
                   </tr>
                 ))}
@@ -272,17 +320,28 @@ export function AdminPanel() {
     </>
   );
 
-  const handleSyncAllStripe = async (ordersList?: Order[]) => {
-    setSyncingStripe(true);
-    const target = ordersList || orders;
+  // ¿Pagado con tarjeta? Manda lo último que ha dicho Stripe en el panel; si no se ha
+  // consultado, lo que ya dejaron el webhook o una sincronización anterior en el estado.
+  const orderPaid = (o: Order) =>
+    stripeStatuses[o.id] !== undefined ? stripeStatuses[o.id] === 'paid' : o.status === 'processing' || o.status === 'completed';
+  const orderChecked = (o: Order) => stripeStatuses[o.id] !== undefined || orderPaid(o);
+  const registrationPaid = (att: any) =>
+    stripeStatuses[att.stripe_session_id] !== undefined ? stripeStatuses[att.stripe_session_id] === 'paid' : att.status === 'completed';
+  const registrationChecked = (att: any) => stripeStatuses[att.stripe_session_id] !== undefined || registrationPaid(att);
 
-    // Extract all pending Stripe session IDs
-    const sessionIdsToVerify: string[] = [];
-    for (const order of target) {
-      if (order.stripe_session_id && order.stripe_session_id.startsWith('cs_')) {
-        sessionIdsToVerify.push(order.stripe_session_id);
-      }
-    }
+  /**
+   * Comprueba en Stripe los pagos de los pedidos. Al abrir la pestaña solo los pendientes
+   * (los demás ya los confirmó el webhook o una sincronización anterior); el botón
+   * "Sincronizar todos" los comprueba todos y lo que diga Stripe pasa a ser lo que se ve.
+   */
+  const handleSyncAllStripe = async (ordersList?: Order[], all = false) => {
+    setSyncingStripe(true);
+    const target = (ordersList || orders).filter(o => all || o.status === 'pending');
+
+    // Sesiones de Stripe sin repetir (un carrito con varios artículos comparte sesión)
+    const sessionIdsToVerify = [...new Set(
+      target.map(o => o.stripe_session_id).filter((id): id is string => !!id && id.startsWith('cs_'))
+    )];
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
 
@@ -290,6 +349,7 @@ export function AdminPanel() {
     if (sessionIdsToVerify.length > 0) {
       try {
         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
+        const updates: Promise<unknown>[] = [];
         for (const order of target) {
           if (order.stripe_session_id && batchResults[order.stripe_session_id]) {
             const result = batchResults[order.stripe_session_id];
@@ -298,14 +358,15 @@ export function AdminPanel() {
             // Auto-update DB based on Stripe status (only if still pending). An open
             // session is also "unpaid" while the buyer is still paying: cancel only expired ones.
             if (result.payment_status === 'paid' && order.status === 'pending') {
-              await adapter.updateOrderStatus(order.id, 'processing');
+              updates.push(adapter.updateOrderStatus(order.id, 'processing'));
             } else if (result.status === 'expired' && order.status === 'pending') {
-              await adapter.updateOrderStatus(order.id, 'cancelled');
+              updates.push(adapter.updateOrderStatus(order.id, 'cancelled'));
             }
           } else if (!order.stripe_session_id) {
             newStatuses[order.id] = 'no_session';
           }
         }
+        await Promise.all(updates);
       } catch (err) {
         console.error("Batch verification failed:", err);
       }
@@ -319,7 +380,7 @@ export function AdminPanel() {
 
   const generateReceipt = (groupKey: string, groupOrders: Order[]) => {
     const first = groupOrders[0];
-    const isPaidStripe = stripeStatuses[first.id] === 'paid' || stripeStatuses[first.stripe_session_id || ''] === 'paid';
+    const isPaidStripe = !!first.stripe_session_id?.startsWith('cs_') && orderPaid(first);
     const paymentStatus = isPaidStripe ? 'paid_stripe' : invoicePaymentStatus(groupKey, groupOrders);
 
     InvoiceGenerator.generateReceiptPdf({
@@ -363,7 +424,7 @@ export function AdminPanel() {
       }
 
       // Build result message
-      const typeLabel = result.type === 'campus' ? '🏀 Inscripción Campus' : '🛒 Pedido Tienda';
+      const typeLabel = result.type === 'campus' ? '🏀 Inscripción (campus, torneo o viaje)' : '🛒 Pedido Tienda';
       const statusEmoji = result.status === 'completed' ? '✅' : result.status === 'cancelled' ? '❌' : '⏳';
 
       let paymentLine = '';
@@ -373,10 +434,11 @@ export function AdminPanel() {
           : stripeStatus === 'error'
             ? '⚠️ No se pudo verificar con Stripe'
             : '❌ NO PAGADO en Stripe';
+      } else if (sessionId.startsWith('free_')) {
+        paymentLine = '✅ Gratis (sin pago)';
       } else {
-        paymentLine = result.status === 'completed'
-          ? '✅ PAGADO EN MANO'
-          : '❌ NO pagado en mano';
+        // Pedidos e inscripciones antiguos, de antes de que todo se pagara con tarjeta
+        paymentLine = '⚠️ Sin pago online (registro antiguo)';
       }
 
       const msg = [
@@ -388,9 +450,13 @@ export function AdminPanel() {
         `📌 Estado BD: ${statusEmoji} ${result.status}`,
         '',
         `💳 ${paymentLine}`,
-      ].join('\n');
+      ];
+      // En la tienda "Completado" significa entregado: avisar para no entregarlo dos veces
+      if (result.type === 'order' && result.status === 'completed') {
+        msg.push('', '⚠️ YA ENTREGADO: este pedido ya se marcó como entregado. No lo entregues otra vez.');
+      }
 
-      showMessage('🔍 Resultado de Verificación', msg);
+      showMessage('🔍 Resultado de Verificación', msg.join('\n'));
     } catch (err: any) {
       showMessage('Error', `No se pudo verificar: ${err.message}`);
     }
@@ -402,8 +468,7 @@ export function AdminPanel() {
       const qty = o.quantity || 1;
       const unitPrice = qty > 1 ? (o.amount / qty) : o.amount;
       const isStripeOrder = o.stripe_session_id && o.stripe_session_id.startsWith('cs_');
-      const isPaidStripe = stripeStatuses[o.id] === 'paid';
-      const allCompleted = o.status === 'completed';
+      const isPaidStripe = orderPaid(o);
 
       return {
         'Reserva ID / Sesión': o.stripe_session_id || o.id,
@@ -416,8 +481,7 @@ export function AdminPanel() {
         'Precio Unitario': unitPrice,
         'Importe Total': o.amount,
         'Estado': o.status,
-        'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
-        'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+        'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : o.stripe_session_id?.startsWith('free_') ? 'Gratis' : 'Sin pago online'
       };
     }));
     const wb = XLSX.utils.book_new();
@@ -436,13 +500,13 @@ export function AdminPanel() {
     return (
       <div className="admin-table-container">
         <div className="table-toolbar">
-          <button className="btn-primary" onClick={() => handleSyncAllStripe()} disabled={syncingStripe}>
+          <button className="btn-primary" onClick={() => handleSyncAllStripe(undefined, true)} disabled={syncingStripe}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
-          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9', color: '#fff' }}>
             {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
           </button>
-          <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', marginLeft: 'auto' }}>
+          <button className="btn-primary" onClick={exportOrdersExcel} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff', marginLeft: 'auto' }}>
             📊 Exportar Excel
           </button>
         </div>
@@ -454,7 +518,7 @@ export function AdminPanel() {
               <th>Desglose Pedido</th>
               <th>Total (€)</th>
               <th>Estado</th>
-              <th>Pago en mano</th>
+              <th>Pago</th>
               <th>Justificante</th>
             </tr>
           </thead>
@@ -466,11 +530,11 @@ export function AdminPanel() {
                   const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
                   const allCompleted = groupOrders.every(o => o.status === 'completed');
                   const isStripeOrder = groupId.startsWith('cs_');
-                  const isPaidStripe = stripeStatuses[first.id] === 'paid';
-                  const stripeChecked = stripeStatuses[first.id] !== undefined;
+                  const isPaidStripe = orderPaid(first);
+                  const stripeChecked = orderChecked(first);
 
                   return (
-                    <tr key={groupId} style={{ borderBottom: '3px solid #eee' }}>
+                    <tr key={groupId} style={{ borderBottom: '3px solid var(--separator)' }}>
                       <td className="monospace" style={{ fontSize: '0.8rem' }}>
                         {groupId.substring(0, 12)}...
                         {isStripeOrder && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
@@ -478,16 +542,16 @@ export function AdminPanel() {
                       </td>
                       <td>
                         <strong>{first.buyer_name}</strong><br />
-                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{first.buyer_email}</span><br />
-                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(first.created_at).toLocaleDateString()}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{first.buyer_email}</span><br />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(first.created_at).toLocaleDateString()}</span>
                       </td>
                       <td>
                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                           {groupOrders.map(o => (
                             <li key={o.id} style={{ marginBottom: '6px' }}>
                               • <strong>{o.item_name}</strong>
-                              {(o.quantity || 1) > 1 && <span style={{ color: '#d4af37', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
-                              {o.size && <span style={{ color: '#555', marginLeft: '4px' }}>[{o.size}]</span>}
+                              {(o.quantity || 1) > 1 && <span style={{ color: 'var(--accent-text)', fontWeight: 700, marginLeft: '4px' }}>x{o.quantity}</span>}
+                              {o.size && <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>[{o.size}]</span>}
                               <span style={{ marginLeft: '6px', color: '#0e70ab' }}>
                                 {(o.quantity || 1) > 1
                                   ? `(€${(o.amount / o.quantity).toFixed(2)} c/u = €${o.amount.toFixed(2)})`
@@ -517,26 +581,23 @@ export function AdminPanel() {
                           <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
                             {isPaidStripe ? '✅ Online' : 'Online'}
                           </span>
+                        ) : groupId.startsWith('free_') ? (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Gratis</span>
                         ) : (
-                          <input
-                            type="checkbox"
-                            checked={allCompleted}
-                            title="Marcar como pagado en mano"
-                            onChange={(e) => {
-                              const newStatus = e.target.checked ? 'completed' : 'pending';
-                              handleUpdateOrderStatus(groupOrders.map(o => o.id), newStatus as Order['status']);
-                            }}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                          />
+                          // Pedidos antiguos sin pago online: se gestionan con el estado
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Sin pago online</span>
                         )}
                       </td>
                       <td>
                         <button className="btn-secondary" onClick={() => generateReceipt(groupId, groupOrders)} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                           📄 PDF
                         </button>
-                        <button onClick={() => handleDeleteOrder(groupOrders.map(o => o.id), `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
-                          <Trash2 size={16} />
-                        </button>
+                        {/* Borrar pedidos es solo de admins; la tienda cambia su estado */}
+                        {user?.role === 'admin' && (
+                          <button onClick={() => handleDeleteOrder(groupOrders.map(o => o.id), `Pedido Conjunto de ${first.buyer_name}`, first.buyer_name)} className="btn-icon delete" title="Borrar Reserva Completa" style={{ marginTop: '6px' }}>
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )
@@ -551,7 +612,7 @@ export function AdminPanel() {
     const ws = XLSX.utils.json_to_sheet(systemUsers.map(u => ({
       'ID': u.id,
       'Email': u.email,
-      'Rol': u.role,
+      'Rol': ROLE_LABELS[u.role as Role] || u.role,
       'Fecha Registro': new Date(u.created_at).toLocaleString('es-ES')
     })));
     const wb = XLSX.utils.book_new();
@@ -559,11 +620,27 @@ export function AdminPanel() {
     XLSX.writeFile(wb, "Reporte_Usuarios_Uros.xlsx");
   };
 
+  const handleChangeRole = (sysUser: { id: string; email: string; role: string }, role: Role) => {
+    const warning = role === 'admin'
+      ? `\n\nUn administrador puede hacerlo TODO: usuarios, pedidos, eventos, roles…`
+      : '';
+    setConfirmPrompt({
+      open: true,
+      message: `¿Cambiar el rol de ${sysUser.email} a "${ROLE_LABELS[role]}"?${warning}`,
+      action: async () => {
+        try {
+          await adapter.setUserRole(sysUser.id, role);
+          setSystemUsers(prev => prev.map(u => u.id === sysUser.id ? { ...u, role } : u));
+        } catch (e: any) { showMessage('Error', e.message); }
+      },
+    });
+  };
+
   const renderUsers = () => (
     <div className="admin-table-container">
       <div className="table-toolbar" style={{ justifyContent: 'space-between' }}>
         <h3>Usuarios Registrados</h3>
-        <button className="btn-primary" onClick={exportUsersExcel} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+        <button className="btn-primary" onClick={exportUsersExcel} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff' }}>
           📊 Exportar Excel
         </button>
       </div>
@@ -582,7 +659,15 @@ export function AdminPanel() {
               systemUsers.map(sysUser => (
                 <tr key={sysUser.id}>
                   <td>{sysUser.email}</td>
-                  <td><span className={`status-badge ${sysUser.role === 'admin' ? 'completed' : sysUser.role === 'coach' ? 'processing' : 'pending'}`}>{sysUser.role?.toUpperCase() || 'USER'}</span></td>
+                  <td>
+                    {sysUser.id === user?.id ? (
+                      <span className="status-badge completed" title="Tu rol solo lo puede cambiar otro administrador">{ROLE_LABELS[sysUser.role as Role] || sysUser.role}</span>
+                    ) : (
+                      <select className="status-dropdown" value={sysUser.role || 'user'} onChange={e => handleChangeRole(sysUser, e.target.value as Role)}>
+                        {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                      </select>
+                    )}
+                  </td>
                   <td>{new Date(sysUser.created_at).toLocaleDateString()}</td>
                   <td>
                     <button className="btn-icon delete" title="Eliminar cuenta" onClick={() => handleDeleteUser(sysUser.id)}><XCircle size={16} /></button>
@@ -658,50 +743,51 @@ export function AdminPanel() {
     } catch (e: any) { showMessage('Error', e.message); }
   };
 
-    const handleSyncAllCampusStripe = async (eventsList?: any[]) => {
+    /** Igual que en Pedidos: al abrir, solo las inscripciones pendientes; con el botón, todas. */
+    const handleSyncAllCampusStripe = async (eventsList?: any[], all = false) => {
     setSyncingStripe(true);
     // Auto-fetch attendees for all events if missing
-    let updatedAttendees = { ...attendees };
+    const updatedAttendees = { ...attendees };
     const targetEvents = eventsList || events;
-    for (const ev of targetEvents) {
-      if (!updatedAttendees[ev.id]) {
-        try {
-          updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
-        } catch (e) { }
-      }
-    }
+    await Promise.all(targetEvents.filter(ev => !updatedAttendees[ev.id]).map(async ev => {
+      try {
+        updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
+      } catch (e) { }
+    }));
     setAttendees(updatedAttendees);
 
     const newStatuses: Record<string, string> = { ...stripeStatuses };
 
     // Collect all Stripe session IDs from all attendees
-    const sessionIdsToVerify: string[] = [];
     const attMap: any[] = [];
-
     for (const evId in updatedAttendees) {
       for (const att of updatedAttendees[evId]) {
-        if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_')) {
-          sessionIdsToVerify.push(att.stripe_session_id);
-          attMap.push({ evId, att });
+        if (att.stripe_session_id && att.stripe_session_id.startsWith('cs_') && (all || att.status === 'pending')) {
+          attMap.push({ att });
         }
       }
     }
+    const sessionIdsToVerify = [...new Set<string>(attMap.map(({ att }) => att.stripe_session_id))];
 
     // Process all in a single batch
     if (sessionIdsToVerify.length > 0) {
       try {
         const batchResults = await adapter.checkStripePaymentsBatch(sessionIdsToVerify);
-        for (const { evId, att } of attMap) {
+        const updates: Promise<unknown>[] = [];
+        for (const { att } of attMap) {
           const result = batchResults[att.stripe_session_id];
           if (result) {
             newStatuses[att.stripe_session_id] = result.payment_status;
+            // Corregir el estado es cosa de admins (el webhook de Stripe ya lo hace solo)
+            if (!isAdmin) continue;
             if (result.payment_status === 'paid' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'completed');
+              updates.push(adapter.updateRegistrationStatus(att.id, 'completed'));
             } else if (result.status === 'expired' && att.status === 'pending') {
-              await adapter.updateRegistrationStatus(evId, att.user_id, 'cancelled');
+              updates.push(adapter.updateRegistrationStatus(att.id, 'cancelled'));
             }
           }
         }
+        await Promise.all(updates);
       } catch (err) {
         console.error("Batch campus verification failed", err);
       }
@@ -709,11 +795,11 @@ export function AdminPanel() {
 
     setStripeStatuses(newStatuses);
     // Reload UI for the updated ones
-    for (const ev of targetEvents) {
-      if (updatedAttendees[ev.id]) {
+    await Promise.all(targetEvents.filter(ev => updatedAttendees[ev.id]).map(async ev => {
+      try {
         updatedAttendees[ev.id] = await adapter.getEventAttendees(ev.id);
-      }
-    }
+      } catch (e) { }
+    }));
     setAttendees({ ...updatedAttendees });
     setSyncingStripe(false);
   };
@@ -735,10 +821,11 @@ export function AdminPanel() {
 
     const wb = XLSX.utils.book_new();
     const eventsSummary = events.map(e => ({
-      'Campus': e.title,
-      'Fechas': (e.dates || []).join(', ') || new Date(e.date).toLocaleDateString(),
+      'Evento': e.title,
+      'Tipo': e.type === 'torneo' ? 'Torneo / viaje' : 'Campus',
+      'Fechas': e.dates?.length ? formatDateRanges(e.dates, { weekday: false }) : new Date(e.date).toLocaleDateString(),
       'Ubicación': e.location,
-      'Precio/Día': e.price_per_day,
+      'Desde (€)': isFreeEvent(e) ? 0 : startingPrice(e),
       'Inscritos': updatedAttendees[e.id]?.length || 0
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eventsSummary), 'Resumen');
@@ -748,8 +835,7 @@ export function AdminPanel() {
       if (atts.length > 0) {
         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
           const isStripeOrder = a.stripe_session_id && a.stripe_session_id.startsWith('cs_');
-          const isPaidStripe = stripeStatuses[a.stripe_session_id] === 'paid';
-          const allCompleted = a.status === 'completed';
+          const isPaidStripe = registrationPaid(a);
 
           return {
             'Reserva (Stripe)': a.stripe_session_id || 'Manual',
@@ -757,35 +843,35 @@ export function AdminPanel() {
             'Días': (a.selected_days || []).join(', '),
             'Asistentes': a.num_attendees || 1,
             'Nombres': (a.attendee_names || []).join(', '),
+            ...(a.custom_data || {}),
             'Importe': a.amount || 0,
             'Estado': a.status || 'pending',
             'Fecha Inscripción': new Date(a.created_at).toLocaleString('es-ES'),
-            'Pago en mano': !isStripeOrder && allCompleted ? 'Sí' : 'No',
-            'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : (allCompleted ? '✅ Completado' : 'Pendiente')
+            'Pagado': isStripeOrder ? (isPaidStripe ? '✅ Pagado Stripe' : '❌ No pagado') : a.stripe_session_id?.startsWith('free_') ? 'Gratis' : 'Sin pago online'
           };
         }));
         const cleanName = e.title.replace(/[\\/*?:[\]]/g, '').substring(0, 31) || 'Campus';
         XLSX.utils.book_append_sheet(wb, sheet, cleanName);
       }
     });
-    XLSX.writeFile(wb, 'Reporte_Campus_Uros.xlsx');
+    XLSX.writeFile(wb, 'Reporte_Eventos_Uros.xlsx');
   };
 
   const renderEvents = () => (
     <div className="admin-table-container">
       <div className="table-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-        <h3>Campus & Inscripciones</h3>
+        <h3>Campus, torneos e inscripciones</h3>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe()} disabled={syncingStripe} style={{ background: '#d4af37', borderColor: '#b5952f', color: '#111' }}>
+          <button className="btn-primary" onClick={() => handleSyncAllCampusStripe(undefined, true)} disabled={syncingStripe} style={{ background: 'var(--accent-gold)', borderColor: 'var(--accent-strong)', color: '#111' }}>
             {syncingStripe ? <><RefreshCw size={14} className="spin" /> Verificando...</> : '🔄 Sincronizar todos con Stripe'}
           </button>
-          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9' }}>
+          <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9', color: '#fff' }}>
             {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
           </button>
-          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b' }}>
+          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff' }}>
             📥 Importar Eventos Clupik
           </button>
-          <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41' }}>
+          <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff' }}>
             {loadingAttendees === 'export' ? 'Generando...' : '📊 Exportar Excel'}
           </button>
         </div>
@@ -793,29 +879,32 @@ export function AdminPanel() {
       <table className="admin-table">
         <thead>
           <tr>
-            <th>Campus</th>
+            <th>Evento</th>
             <th>Fechas</th>
-            <th>€/Día</th>
+            <th>Desde</th>
             <th>Activo</th>
             <th>Inscripciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={5} className="table-empty">Cargando campus...</td></tr> :
-            events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay campus guardados.</td></tr> :
+          {loading ? <tr><td colSpan={5} className="table-empty">Cargando eventos...</td></tr> :
+            events.length === 0 ? <tr><td colSpan={5} className="table-empty">No hay eventos guardados.</td></tr> :
               events.map(ev => (
                 <Fragment key={ev.id}>
                   <tr 
                     className={`clickable-row ${expandedEvents[ev.id] ? 'expanded' : ''}`}
                     onClick={() => handleLoadAttendees(ev.id)}
                   >
-                    <td><strong>{ev.title}</strong></td>
+                    <td>
+                      <strong>{ev.title}</strong>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{ev.type === 'torneo' ? 'Torneo / viaje' : 'Campus'}</div>
+                    </td>
                     <td style={{ fontSize: '0.8rem' }}>
                       {ev.dates && ev.dates.length > 0
-                        ? ev.dates.map(d => new Date(d + 'T00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })).join(', ')
+                        ? formatDateRanges(ev.dates, { weekday: false })
                         : new Date(ev.date).toLocaleDateString()}
                     </td>
-                    <td>{ev.price_per_day > 0 ? `${ev.price_per_day}€` : 'Gratis'}</td>
+                    <td>{isFreeEvent(ev) ? 'Gratis' : `${startingPrice(ev)}€`}</td>
                     <td>
                       <button type="button" className={`status-badge status-toggle ${ev.active ? 'completed' : 'cancelled'}`}
                         title={ev.active ? 'Visible para los usuarios. Pulsa para ocultarlo.' : 'Oculto. Pulsa para mostrarlo a los usuarios.'}
@@ -844,28 +933,27 @@ export function AdminPanel() {
                                   <th>Desglose Inscripción</th>
                                   <th>Total (€)</th>
                                   <th>Estado</th>
-                                  <th>Pago en mano</th>
+                                  <th>Pago</th>
                                   <th>Justificante</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {attendees[ev.id].map((att: any) => {
                                   const isLocal = !att.stripe_session_id || att.stripe_session_id?.startsWith('local_');
-                                  // stripeStatuses map might hold the checked status
-                                  const isPaidStripe = stripeStatuses[att.stripe_session_id] === 'paid';
-                                  const stripeChecked = stripeStatuses[att.stripe_session_id] !== undefined;
-                                  const allCompleted = att.status === 'completed';
+                                  const isFreeReg = att.stripe_session_id?.startsWith('free_');
+                                  const isPaidStripe = registrationPaid(att);
+                                  const stripeChecked = registrationChecked(att);
 
                                   // Build mock Order for the receipt
                                   const dummyOrder = {
-                                    id: att.event_id + '_' + att.user_id,
+                                    id: att.id,
                                     user_id: att.user_id,
                                     item_id: att.event_id,
                                     event_id: att.event_id,
                                     buyer_name: att.user_email ? att.user_email.split('@')[0] : 'Desconocido',
                                     buyer_email: att.user_email || '',
                                     item_name: ev.title,
-                                    size: `${(att.attendee_names || []).join(', ')} | ${(att.selected_days || []).join(', ')}`,
+                                    size: registrationDetail(att),
                                     quantity: 1,
                                     amount: Number(att.amount),
                                     status: att.status,
@@ -875,23 +963,26 @@ export function AdminPanel() {
                                   } as any;
 
                                   return (
-                                    <tr key={att.user_id}>
+                                    <tr key={att.id}>
                                       <td className="monospace">
-                                        {isLocal ? 'Reserva Manual' : att.stripe_session_id?.substring(0, 12) + '...'}
+                                        {isLocal ? 'Reserva antigua' : isFreeReg ? 'Gratis' : att.stripe_session_id?.substring(0, 12) + '...'}
                                         {!isLocal && isPaidStripe && <div style={{ color: 'green', fontSize: '0.75rem', marginTop: '4px' }}>✅ Pagado Stripe</div>}
                                         {!isLocal && stripeChecked && !isPaidStripe && <div style={{ color: '#e53935', fontSize: '0.75rem', marginTop: '4px' }}>❌ No pagado</div>}
                                       </td>
                                       <td>
                                         <strong>{(att.attendee_names || []).join(', ')}</strong><br />
-                                        <span style={{ fontSize: '0.8rem', color: '#666' }}>{att.user_email}</span><br />
-                                        <span style={{ fontSize: '0.75rem', color: '#999' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{att.user_email}</span><br />
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(att.created_at).toLocaleDateString('es-ES')}</span>
                                       </td>
                                       <td>
                                         <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.85rem' }}>
                                           <li>
                                             • <strong>{ev.title}</strong>
-                                            <span style={{ color: '#555', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {(att.selected_days || []).join(', ')}]</span>
+                                            <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>[{(att.attendee_names || []).join(', ')} | {formatDateRanges(att.selected_days || [], { weekday: false })}]</span>
                                           </li>
+                                          {Object.entries(att.custom_data || {}).map(([k, v]) => (
+                                            <li key={k} style={{ color: 'var(--text-muted)' }}>{k}: <strong>{String(v)}</strong></li>
+                                          ))}
                                         </ul>
                                       </td>
                                       <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>€{Number(att.amount).toFixed(2)}</td>
@@ -899,9 +990,11 @@ export function AdminPanel() {
                                         <select
                                           className="status-dropdown"
                                           value={att.status || 'pending'}
+                                          disabled={!isAdmin}
+                                          title={isAdmin ? undefined : 'Solo un administrador puede cambiar el estado'}
                                           onChange={async (e) => {
                                             try {
-                                              await adapter.updateRegistrationStatus(ev.id, att.user_id, e.target.value);
+                                              await adapter.updateRegistrationStatus(att.id, e.target.value);
                                               handleLoadAttendees(ev.id, true);
                                             } catch (err: any) { showMessage('Error', err.message); }
                                           }}
@@ -912,44 +1005,35 @@ export function AdminPanel() {
                                         </select>
                                       </td>
                                       <td style={{ textAlign: 'center' }}>
-                                        {!isLocal ? (
+                                        {isFreeReg ? (
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Gratis</span>
+                                        ) : !isLocal ? (
                                           <span style={{ fontSize: '0.75rem', color: isPaidStripe ? '#4caf50' : '#888' }}>
                                             {isPaidStripe ? '✅ Online' : 'Online'}
                                           </span>
                                         ) : (
-                                          <input
-                                            type="checkbox"
-                                            checked={allCompleted}
-                                            title="Marcar como pagado en mano"
-                                            onChange={async (e) => {
-                                              const newStatus = e.target.checked ? 'completed' : 'pending';
-                                              try {
-                                                await adapter.updateRegistrationStatus(ev.id, att.user_id, newStatus);
-                                                handleLoadAttendees(ev.id, true);
-                                              } catch (err: any) { showMessage('Error', err.message); }
-                                            }}
-                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                          />
+                                          // Inscripciones antiguas sin pago online: se gestionan con el estado
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-faint)' }}>Sin pago online</span>
                                         )}
                                       </td>
                                       <td>
-                                        <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || `local_${att.user_id}`, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
+                                        <button className="btn-secondary" onClick={() => generateReceipt(att.stripe_session_id || att.user_id, [dummyOrder as any])} style={{ padding: '4px 8px', fontSize: '0.8rem' }}>
                                           📄 PDF
                                         </button>
-                                        <button className="btn-icon delete" title="Cancelar Inscripción" onClick={async () => {
+                                        {isAdmin && <button className="btn-icon delete" title="Eliminar inscripción" onClick={async () => {
                                           setConfirmPrompt({
                                             open: true,
-                                            message: `¿Eliminar inscripción de ${att.user_email}?`,
+                                            message: `¿Eliminar la inscripción de ${(att.attendee_names || []).join(', ') || att.user_email}?`,
                                             action: async () => {
                                               try {
-                                                await adapter.removeEventRegistration(ev.id, att.user_id);
+                                                await adapter.removeEventRegistration(att.id);
                                                 handleLoadAttendees(ev.id, true);
                                               } catch (err: any) { showMessage('Error', err.message); }
                                             }
                                           });
                                         }} style={{ marginTop: '6px' }}>
                                           <Trash2 size={16} />
-                                        </button>
+                                        </button>}
                                       </td>
                                     </tr>
                                   );
@@ -974,7 +1058,7 @@ export function AdminPanel() {
     <div className="admin-table-container">
       <div className="table-toolbar">
         <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
-        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', marginLeft: 'auto' }}>
+        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff', marginLeft: 'auto' }}>
           📥 Importar Catálogo Clupik
         </button>
       </div>
@@ -985,18 +1069,26 @@ export function AdminPanel() {
             <th>Nombre</th>
             <th>Precio</th>
             <th>Descripción</th>
+            <th>Visible</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? <tr><td colSpan={5} className="table-empty">Cargando...</td></tr> :
-            items.length === 0 ? <tr><td colSpan={5} className="table-empty">Tienda vacía.</td></tr> :
+          {loading ? <tr><td colSpan={6} className="table-empty">Cargando...</td></tr> :
+            items.length === 0 ? <tr><td colSpan={6} className="table-empty">Tienda vacía.</td></tr> :
               items.map(item => (
-                <tr key={item.id}>
+                <tr key={item.id} style={item.active === false ? { opacity: 0.55 } : undefined}>
                   <td><img src={item.imageUrl} alt={item.name} className="market-thumb" /></td>
                   <td>{item.name}</td>
                   <td>€{item.price}</td>
                   <td className="description-cell">{item.description}</td>
+                  <td>
+                    <button type="button" className={`status-badge status-toggle ${item.active !== false ? 'completed' : 'cancelled'}`}
+                      title={item.active !== false ? 'Visible en la tienda. Pulsa para ocultarlo.' : 'Oculto: no sale en la tienda ni se puede comprar. Pulsa para mostrarlo.'}
+                      onClick={() => handleToggleItemActive(item)}>
+                      {item.active !== false ? 'SÍ' : 'NO'}
+                    </button>
+                  </td>
                   <td>
                     <div className="admin-actions-cell">
                       <button className="btn-icon" title="Editar" onClick={() => { setEditItem(item); setModalOpen(true); }}><Pencil size={16} /></button>
@@ -1011,47 +1103,32 @@ export function AdminPanel() {
   );
 
   return (
-    <AdminGuard roles={['admin', 'coach']} fallback={<div className="page-padding"><h2>Acceso Denegado</h2></div>}>
+    <AdminGuard roles={STAFF_ROLES} fallback={<div className="page-padding"><h2>Acceso Denegado</h2></div>}>
       <div className="admin-panel animate-fade-in">
         <div className="admin-header">
-          <h2>Panel de {user?.role === 'admin' ? 'Administrador' : 'Entrenador'}</h2>
+          <h2>Panel de {user?.role === 'admin' ? 'Administrador' : ROLE_LABELS[user?.role || 'user']}</h2>
           <button onClick={fetchData} className="btn-secondary">
             <RefreshCw size={16} className={loading ? 'spin' : ''} />
           </button>
         </div>
 
         <div className="admin-tabs">
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-              Usuarios
+          {tabs.map(tab => (
+            <button key={tab} className={`tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
+              {TAB_LABELS[tab]}
             </button>
-          )}
-          <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => setActiveTab('stats')}>
-            Estadísticas
-          </button>
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-              Pedidos
-            </button>
-          )}
-          {user?.role === 'admin' && (
-            <button className={`tab-btn ${activeTab === 'market' ? 'active' : ''}`} onClick={() => setActiveTab('market')}>
-              Catálogo Tienda
-            </button>
-          )}
-          <button className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`} onClick={() => setActiveTab('events')}>
-            Campus & Inscripciones
-          </button>
+          ))}
         </div>
 
         <div className="admin-content-area">
           {loading && <div className="loading-state">Cargando...</div>}
           <div className="admin-tab-content">
-            {activeTab === 'users' && renderUsers()}
-            {activeTab === 'stats' && renderStats()}
-            {activeTab === 'orders' && renderOrders()}
-            {activeTab === 'market' && renderMarket()}
-            {activeTab === 'events' && renderEvents()}
+            {canSee(activeTab) && activeTab === 'users' && renderUsers()}
+            {canSee(activeTab) && activeTab === 'stats' && renderStats()}
+            {canSee(activeTab) && activeTab === 'orders' && renderOrders()}
+            {canSee(activeTab) && activeTab === 'market' && renderMarket()}
+            {canSee(activeTab) && activeTab === 'events' && renderEvents()}
+            {canSee(activeTab) && activeTab === 'citas' && <AppointmentsAdmin systemUsers={systemUsers} />}
           </div>
         </div>
       </div>
@@ -1073,11 +1150,15 @@ export function AdminPanel() {
         }}
         onCancel={() => setConfirmPrompt(prev => ({ ...prev, open: false, action: null }))}
       />
-      <QrScannerModal
-        isOpen={qrScannerOpen}
-        onClose={() => setQrScannerOpen(false)}
-        onResult={handleQrResult}
-      />
+      {qrScannerOpen && (
+        <Suspense fallback={null}>
+          <QrScannerModal
+            isOpen={qrScannerOpen}
+            onClose={() => setQrScannerOpen(false)}
+            onResult={handleQrResult}
+          />
+        </Suspense>
+      )}
     </AdminGuard>
   );
 }

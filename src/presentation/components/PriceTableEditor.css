@@ -1,0 +1,78 @@
+/* Editor de la tabla de precios (formulario de campus / torneos y viajes) */
+.pte { display: flex; flex-direction: column; gap: 12px; }
+.pte-mode { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.9rem; }
+.pte-mode label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.pte-hint { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+
+.pte-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pte-table { border-collapse: collapse; font-size: 0.85rem; }
+.pte-table th, .pte-table td { padding: 4px; text-align: center; }
+.pte-table thead th { color: var(--accent-text); font-weight: 700; white-space: nowrap; padding: 4px 8px; }
+.pte-table tbody th { color: var(--text-secondary); font-weight: 700; padding: 4px 10px; }
+.pte-table input,
+.pte-extra input,
+.pte-tool input,
+.pte-test input {
+  width: 72px;
+  padding: 6px 8px;
+  background: rgba(var(--tint), 0.05);
+  border: 1px solid rgba(var(--tint), 0.12);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: right;
+}
+.pte input.pte-empty { border-color: rgba(229, 57, 53, 0.6); }
+.pte-remove { background: none; border: none; color: #e53935; cursor: pointer; padding: 4px; }
+
+.pte-add {
+  align-self: flex-start;
+  background: none;
+  border: 1px dashed rgba(var(--tint), 0.2);
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.pte-extra, .pte-tool, .pte-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+.pte-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--tint), 0.08);
+}
+.pte-tool button {
+  background: rgba(var(--accent-rgb), 0.15);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-text);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.pte-tool button:disabled { opacity: 0.4; cursor: default; }
+.pte-tool select {
+  padding: 6px 8px;
+  background: #151b22;
+  border: 1px solid rgba(var(--tint), 0.12);
+  border-radius: 6px;
+  color: #fff;
+  max-width: 100%;
+}
+.pte-test {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.pte-test input { width: 56px; }
+.pte-test b { color: var(--accent-text); }

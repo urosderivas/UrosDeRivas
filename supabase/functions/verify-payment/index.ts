@@ -16,7 +16,7 @@ serve(async (req: Request) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("Stripe key not configured");
 
-    // Solo admins y entrenadores pueden consultar pagos en Stripe
+    // Solo admins, entrenadores y el gestor de la tienda pueden consultar pagos en Stripe
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -32,7 +32,7 @@ serve(async (req: Request) => {
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle();
-    if (!roleRow || !['admin', 'coach'].includes(roleRow.role)) {
+    if (!roleRow || !['admin', 'coach', 'tienda'].includes(roleRow.role)) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 403,
@@ -47,8 +47,12 @@ serve(async (req: Request) => {
     const { sessionId, sessionIds } = await req.json();
     if (!sessionId && !sessionIds) throw new Error("sessionId or sessionIds required");
 
-    // Bulk Mode
+    // Bulk Mode: como mucho 100 sesiones de Stripe por llamada (la web las manda por partes)
     if (sessionIds && Array.isArray(sessionIds)) {
+      if (sessionIds.length > 100) throw new Error("Como mucho 100 pagos por consulta.");
+      if (sessionIds.some((id: unknown) => typeof id !== 'string' || !id.startsWith('cs_'))) {
+        throw new Error("Identificador de pago no válido.");
+      }
       const results: Record<string, any> = {};
       // Chunk concurrent fetch to avoid hitting immediate Stripe rate limits (Stripe allows 100 req/s, we chunk by 20 to be safe)
       const chunkSize = 20;
@@ -70,6 +74,7 @@ serve(async (req: Request) => {
     }
 
     // Single Mode (Legacy)
+    if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) throw new Error("Identificador de pago no válido.");
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     return new Response(JSON.stringify({

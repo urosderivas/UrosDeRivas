@@ -14,7 +14,7 @@
 .not-found h1 {
   font-size: 5rem;
   font-weight: 950;
-  color: var(--accent-gold);
+  color: var(--accent-text);
   line-height: 1;
 }
 
@@ -24,7 +24,7 @@
   padding: 0.9rem 2rem;
   border-radius: 50px;
   background: var(--accent-gold);
-  color: #000;
+  color: var(--on-accent);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 1px;

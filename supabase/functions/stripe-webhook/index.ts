@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
 
-// Recibe los avisos de Stripe y actualiza pedidos e inscripciones sin esperar
+// Recibe los avisos de Stripe y actualiza pedidos, inscripciones y citas sin esperar
 // a que un admin pulse "sincronizar". Stripe la llama directamente, así que
 // no lleva JWT de Supabase: la seguridad es la firma del webhook (whsec_...).
 
@@ -71,8 +71,9 @@ serve(async (req: Request) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
-  // Solo se tocan filas pendientes, para no pisar lo que haya cambiado un admin
-  const [ordersResult, registrationsResult] = await Promise.all([
+  // Solo se tocan filas pendientes, para no pisar lo que haya cambiado un admin.
+  // Una cita pagada sigue reservada; una sin pagar se cancela y su hueco queda libre.
+  const [ordersResult, registrationsResult, appointmentsResult] = await Promise.all([
     supabaseAdminClient.from('orders')
       .update({ status: orderStatus })
       .eq('stripe_session_id', session.id)
@@ -81,9 +82,13 @@ serve(async (req: Request) => {
       .update({ status: registrationStatus })
       .eq('stripe_session_id', session.id)
       .eq('status', 'pending'),
+    supabaseAdminClient.from('appointments')
+      .update(outcome === 'paid' ? { payment: 'paid' } : { payment: 'failed', status: 'cancelled' })
+      .eq('stripe_session_id', session.id)
+      .eq('payment', 'pending'),
   ]);
 
-  const dbError = ordersResult.error || registrationsResult.error;
+  const dbError = ordersResult.error || registrationsResult.error || appointmentsResult.error;
   if (dbError) {
     // Un 500 hace que Stripe reintente el aviso más tarde
     console.error("DB update failed:", dbError.message);

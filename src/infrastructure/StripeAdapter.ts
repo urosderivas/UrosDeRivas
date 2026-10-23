@@ -45,6 +45,7 @@ export class StripeAdapter implements PaymentPort {
     return data.url;
   }
 
+  /** Inscripción a un campus, torneo o viaje: el servidor valida los datos y calcula el importe. */
   async createCampusCheckoutSession(campusRegistration: any, userEmail: string): Promise<string> {
     const returnUrl = window.location.href.split('?')[0]; 
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
@@ -62,28 +63,22 @@ export class StripeAdapter implements PaymentPort {
       throw new Error(errMsg);
     }
 
+    // Evento gratis: el servidor ya ha confirmado la inscripción, no hay pago
+    if (data?.free) return `${returnUrl}?success=true&session_id=free`;
+
     if (!data?.url) throw new Error("Url de Stripe inválida.");
     rememberSession(data.sessionId);
     return data.url;
   }
 
-  /** Reserva para pagar en mano: el servidor valida la inscripción y calcula el importe. */
-  async reserveCampusPayLocal(campusRegistration: any): Promise<number> {
+  /** Precio final con un cupón (torneos y viajes), o un error en español si no vale. */
+  async checkCoupon(eventId: string, code: string): Promise<number> {
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-      body: {
-        checkoutType: 'campus',
-        campusRegistration: { ...campusRegistration, payLocal: true }
-      }
+      body: { checkCoupon: { eventId, code } }
     });
-
-    if (error) {
-      console.error("Error invoking Stripe Edge Function:", error);
-      const errMsg = await functionErrorMessage(error, "Error al reservar la inscripción.");
-      throw new Error(errMsg);
-    }
-
-    if (!data?.reserved) throw new Error("No se pudo confirmar la reserva.");
-    return Number(data.amount) || 0;
+    if (error) throw new Error(await functionErrorMessage(error, 'No se pudo comprobar el cupón.'));
+    if (typeof data?.price !== 'number') throw new Error('No se pudo comprobar el cupón.');
+    return data.price;
   }
 
   async createCheckoutSessionFromCart(cart: any[], userEmail: string): Promise<string> {
@@ -109,6 +104,18 @@ export class StripeAdapter implements PaymentPort {
       return `${returnUrl}?success=true&session_id=free`;
     }
 
+    if (!data?.url) throw new Error("Url de Stripe inválida.");
+    rememberSession(data.sessionId);
+    return data.url;
+  }
+
+  /** Cita de pago: aparta el hueco y devuelve la página de pago de Stripe. */
+  async createAppointmentCheckout(appointment: { providerId: string; startsAt: string; patientName: string; notes: string }): Promise<string> {
+    const returnUrl = window.location.href.split('?')[0];
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { checkoutType: 'appointment', appointment: { ...appointment, notes: appointment.notes || null }, returnUrl }
+    });
+    if (error) throw new Error(await functionErrorMessage(error, "No se pudo iniciar el pago de la cita."));
     if (!data?.url) throw new Error("Url de Stripe inválida.");
     rememberSession(data.sessionId);
     return data.url;

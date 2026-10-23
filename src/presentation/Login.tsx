@@ -134,7 +134,7 @@ export function Login() {
         <p>
           {{
             login: 'Inicia sesión para acceder a todas las funcionalidades del club.',
-            register: 'Regístrate con tu email para inscribirte en campus, comprar en la tienda y más.',
+            register: 'Regístrate con tu email para inscribirte en campus y torneos, comprar en la tienda y más.',
             forgot: 'Escribe el email de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.',
             reset: 'Elige la contraseña nueva para tu cuenta.',
           }[mode]}

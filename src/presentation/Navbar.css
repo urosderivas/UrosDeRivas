@@ -4,7 +4,7 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-k)));
 }
 
 .nav-container {
@@ -26,10 +26,25 @@
   color: var(--text-primary);
   text-transform: uppercase;
   text-decoration: none; /* Explicitly remove underline */
+  white-space: nowrap;
 }
 
 .nav-logo {
-  height: 40px;
+  height: 46px;
+}
+
+/* Pantallas medianas: que quepa todo en una línea */
+@media (max-width: 1440px) and (min-width: 1025px) {
+  .nav-container { max-width: none; padding: 0.75rem 1.25rem; }
+  .nav-brand { font-size: 1.2rem; gap: 0.6rem; }
+  .nav-links { gap: 1.1rem; font-size: 0.85rem; }
+  .auth-box { gap: 0.6rem; }
+}
+
+/* Tablets en horizontal: solo el escudo, sin el nombre */
+@media (max-width: 1150px) and (min-width: 1025px) {
+  .nav-brand span { display: none; }
+  .nav-links { gap: 0.9rem; font-size: 0.8rem; }
 }
 
 .nav-links {
@@ -40,6 +55,7 @@
 }
 
 .nav-links a, .nav-links a:visited {
+  white-space: nowrap;
   transition: color 0.3s ease;
   position: relative;
   text-decoration: none;
@@ -73,7 +89,7 @@
 
 .user-badge {
   background: var(--accent-gold);
-  color: #000;
+  color: var(--on-accent);
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.8rem;
@@ -123,7 +139,7 @@
   cursor: pointer;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .nav-links {
     display: none;
     flex-direction: column;
@@ -141,4 +157,68 @@
   .mobile-toggle {
     display: block;
   }
+}
+
+/* Iconos de la cabecera, siempre visibles: tema claro / oscuro y carrito */
+.nav-icons {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-left: 1.75rem;
+}
+
+@media (max-width: 1440px) and (min-width: 1025px) {
+  .nav-icons { margin-left: 1rem; }
+}
+
+@media (max-width: 1024px) {
+  .nav-icons { margin-left: auto; margin-right: 1.25rem; }
+}
+
+/* Móviles: nombre más pequeño para que quepan los dos iconos */
+@media (max-width: 480px) {
+  .nav-brand { font-size: 1.15rem; gap: 0.6rem; }
+  .nav-icons { gap: 1rem; margin-left: 0.75rem; margin-right: 1rem; }
+}
+
+.nav-theme {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.nav-theme:hover { color: var(--accent-text); }
+
+/* Carrito siempre visible en la cabecera */
+.nav-cart {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+  transition: color 0.3s ease;
+}
+
+.nav-cart:hover { color: var(--accent-text); }
+
+
+.nav-cart-badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent-gold);
+  color: var(--on-accent);
+  font-size: 0.7rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
