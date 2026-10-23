@@ -11,16 +11,20 @@ export interface InvoiceData {
   clientEmail: string;
   orders: Order[];
   date?: Date;
-  paymentStatus: 'paid_stripe' | 'free' | 'paid' | 'pending';
+  paymentStatus: 'paid_stripe' | 'paid_transfer' | 'free' | 'paid' | 'pending';
 }
 
 /**
- * Estado de pago de un grupo de pedidos. Los pagados por Stripe pasan a
- * "processing" (pendiente de entrega) en cuanto llega el webhook, así que
- * cuentan ya como pagados. Los gratuitos no tienen pago; los pedidos antiguos
- * sin pago online solo cuentan como pagados si un admin los completó.
+ * Estado de pago de un grupo de pedidos. Los pagados por transferencia (concepto
+ * UROS-...) o con tarjeta (cs_..., los antiguos) pasan a "processing" (pendiente de
+ * entrega) cuando se confirma el pago, así que cuentan ya como pagados; una
+ * inscripción pagada pasa a "completed". Los gratuitos no tienen pago; los pedidos
+ * antiguos sin pago online solo cuentan como pagados si un admin los completó.
  */
 export function invoicePaymentStatus(groupKey: string, orders: Order[]): InvoiceData['paymentStatus'] {
+  if (groupKey.startsWith('UROS-')) {
+    return orders.every(o => o.status === 'processing' || o.status === 'completed') ? 'paid_transfer' : 'pending';
+  }
   if (groupKey.startsWith('cs_')) {
     return orders.every(o => o.status === 'processing' || o.status === 'completed') ? 'paid_stripe' : 'pending';
   }
@@ -54,8 +58,9 @@ export class InvoiceGenerator {
     const doc = new jsPDF();
     const { orderGroupId, clientName, clientEmail, orders, paymentStatus } = data;
     const issueDate = data.date || new Date();
-    // Las sesiones de Stripe empiezan todas por "cs_test_"/"cs_live_": el final es lo que las distingue
-    const shortId = orderGroupId.slice(-8).toUpperCase();
+    // El concepto de la transferencia sale entero; de las sesiones de Stripe antiguas
+    // ("cs_test_"/"cs_live_" + muchos caracteres) basta el final
+    const shortId = orderGroupId.startsWith('UROS-') ? orderGroupId : orderGroupId.slice(-8).toUpperCase();
 
     // 1. Escudo del club sobre un recuadro gris claro
     const logoUrl = clubLogoUrl;
@@ -162,6 +167,9 @@ export class InvoiceGenerator {
     let statusLabel = 'Total a pagar:';
     if (paymentStatus === 'paid_stripe') {
       statusLabel = 'PAGADO (Stripe):';
+      doc.setTextColor(34, 139, 34); // green
+    } else if (paymentStatus === 'paid_transfer') {
+      statusLabel = 'PAGADO (transf.):';
       doc.setTextColor(34, 139, 34); // green
     } else if (paymentStatus === 'free') {
       statusLabel = 'GRATUITO:';

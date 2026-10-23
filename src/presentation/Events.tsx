@@ -3,20 +3,21 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from './store';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
-import { StripeAdapter } from '../infrastructure/StripeAdapter';
+import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { EventModal } from './EventModal';
 import { Event, CustomField, EventType, OwnRegistration } from '../domain/entities';
-import { choosesDays, eventOptions, eventPrice, eventTable, isFreeEvent, startingPrice, PriceTable } from '../domain/pricing';
+import { choosesDays, eventOptions, eventTable, isFreeEvent, registrationPrice, registrationTiers, startingPrice, PriceTable } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
 import { CouponsModal } from './components/CouponsModal';
 import { EVENT_PAGES, eventPath } from '../utils/eventLinks';
 import { MessageModal } from './components/MessageModal';
+import { TransferModal } from './components/TransferDetails';
 import { ConfirmModal } from './components/ConfirmModal';
 import { fallbackImageUrl, resolveImageUrl } from '../utils/media';
 import './Events.css';
 
 const adapter = new SupabaseAdapter();
-const stripeAdapter = new StripeAdapter();
+const payments = new PaymentAdapter();
 const MAX_ATTENDEES = 20;
 
 /** Imagen del campus con el logo del club debajo, que se ve si la imagen falta o no carga. */
@@ -81,11 +82,12 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
   const showMessage = (title: string, message: string) => setMessageAlert({ open: true, title, message });
   const [userRegistrations, setUserRegistrations] = useState<OwnRegistration[]>([]);
   const [couponsEvent, setCouponsEvent] = useState<Event | null>(null);
+  const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
 
-  // Registration form state
-  const [regSelectedDays, setRegSelectedDays] = useState<string[]>([]);
+  // Registration form state: nombre y días de cada asistente
   const [regNumAttendees, setRegNumAttendees] = useState(1);
   const [regAttendeeNames, setRegAttendeeNames] = useState<string[]>(['']);
+  const [regAttendeeDays, setRegAttendeeDays] = useState<string[][]>([[]]);
   const [regCustomData, setRegCustomData] = useState<Record<string, string>>({});
   const [regSubmitting, setRegSubmitting] = useState(false);
   // Torneos y viajes: opción de precio elegida y cupón
@@ -116,22 +118,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadEvents();
-
-    // Check Stripe success / cancel redirects
-    const params = new URLSearchParams(location.search);
-    if (params.get('session_id') === 'free') {
-      showMessage('Inscripción confirmada', '¡Listo! Tu inscripción está confirmada.');
-    } else if (params.get('success')) {
-      showMessage('Pago Completado', '¡Inscripción pagada con éxito! Has recibido tu reserva segura.');
-    } else if (params.get('canceled')) {
-      stripeAdapter.cancelPendingCheckout().finally(() => {
-        loadEvents();
-        showMessage('Pago Cancelado', 'El pago ha sido cancelado o abandonado.');
-      });
-    }
-  }, [user, location.search]);
+  useEffect(() => { loadEvents(); }, [user]);
 
   // Enlace directo a un evento (p. ej. desde una noticia): /events?campus=<id> o /torneos?evento=<id>
   const searchParams = new URLSearchParams(location.search);
@@ -170,9 +157,9 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     if (expandedId === ev.id) { setExpandedId(null); return; }
     setExpandedId(ev.id);
     // Reset registration form
-    setRegSelectedDays([]);
     setRegNumAttendees(1);
     setRegAttendeeNames(['']);
+    setRegAttendeeDays([[]]);
     setRegCustomData({});
     setRegPriceOption(null);
     setRegCoupon(''); setCouponPrice(null); setCouponMessage('');
@@ -182,7 +169,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     if (!regCoupon.trim()) return;
     setCouponChecking(true); setCouponMessage('');
     try {
-      setCouponPrice(await stripeAdapter.checkCoupon(ev.id, regCoupon));
+      setCouponPrice(await payments.checkCoupon(ev.id, regCoupon));
     } catch (e: any) {
       setCouponPrice(null);
       setCouponMessage(e.message);
@@ -190,24 +177,43 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     setCouponChecking(false);
   };
 
-  const toggleDay = (day: string) => {
-    setRegSelectedDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort());
+  const toggleDay = (attendee: number, day: string) => {
+    setRegAttendeeDays(prev => prev.map((days, i) => i !== attendee ? days
+      : days.includes(day) ? days.filter(d => d !== day) : [...days, day].sort()));
+  };
+
+  const setAllDays = (attendee: number, days: string[]) => {
+    setRegAttendeeDays(prev => prev.map((d, i) => i === attendee ? [...days] : d));
+  };
+
+  // Al añadir un asistente se le ponen los días del primero, que suele ser lo normal entre hermanos
+  const changeAttendees = (n: number) => {
+    setRegNumAttendees(n);
+    setRegAttendeeNames(prev => Array.from({ length: n }, (_, i) => prev[i] || ''));
+    setRegAttendeeDays(prev => Array.from({ length: n }, (_, i) => prev[i] || [...(prev[0] || [])]));
+  };
+
+  /** Ver otra vez cómo pagar una inscripción pendiente de transferencia. */
+  const showTransfer = async (reference: string, amount: number) => {
+    try {
+      const settings = await payments.getSettings();
+      setTransfer({ transfer: { ...settings, reference, amount }, emailSent: false });
+    } catch (e: any) { showMessage('Error', e.message); }
   };
 
   const handleRegister = async (ev: Event) => {
     if (!user) { showMessage('Atención', 'Debes iniciar sesión para inscribirte.'); return; }
     const options = eventOptions(ev);
-    // Si el evento se paga completo no se eligen días: se va a todos
-    const days = choosesDays(ev) ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
-    if (days.length === 0) { showMessage('Faltan datos', 'Selecciona al menos un día.'); return; }
-
-    // Validate attendee names
-    const names = regAttendeeNames.filter(n => n.trim());
     const numAttendees = options ? 1 : regNumAttendees;
-    if (names.length < numAttendees) {
-      showMessage('Faltan datos', options ? 'Escribe el nombre del jugador.' : `Introduce el nombre de los ${regNumAttendees} asistentes.`);
+    const names = regAttendeeNames.slice(0, numAttendees).map(n => n.trim());
+    if (names.some(n => !n)) {
+      showMessage('Faltan datos', options ? 'Escribe el nombre del jugador.' : `Introduce el nombre de los ${numAttendees} asistentes.`);
       return;
     }
+    // Si el evento se paga completo no se eligen días: se va a todos
+    const attendeeDays = names.map((_, i) => choosesDays(ev) ? (regAttendeeDays[i] || []).filter(d => ev.dates.includes(d)) : ev.dates);
+    const missing = attendeeDays.findIndex(days => days.length === 0);
+    if (missing >= 0) { showMessage('Faltan datos', `Elige al menos un día para ${names[missing]}.`); return; }
     if (options && options.length > 1 && regPriceOption === null) {
       showMessage('Faltan datos', 'Elige una de las opciones de precio.');
       return;
@@ -226,16 +232,18 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     setRegSubmitting(true);
     try {
       // El servidor vuelve a validar todo y calcula el importe; si es gratis confirma sin pago
-      const url = await stripeAdapter.createCampusCheckoutSession({
+      const result = await payments.registerForEvent({
         eventId: ev.id,
-        selectedDays: days,
+        attendeeDays,
         numAttendees,
-        attendeeNames: names.slice(0, numAttendees),
+        attendeeNames: names,
         customData: regCustomData,
         ...(options ? { priceOption: regPriceOption ?? 0, coupon: regCoupon.trim() || undefined } : {}),
-      }, user.email || '');
-      window.location.href = url;
-      return;
+      });
+      setExpandedId(null);
+      if (result.free) showMessage('Inscripción confirmada', '¡Listo! Tu inscripción está confirmada.');
+      else setTransfer(result);
+      loadEvents();
     } catch (e: any) {
       showMessage('Error', e.message);
     }
@@ -292,7 +300,12 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const table = eventTable(ev);
               const pickDays = choosesDays(ev);
               const fromPrice = startingPrice(ev);
-              const regDays = pickDays ? regSelectedDays.filter(d => ev.dates.includes(d)) : ev.dates;
+              // Días de cada asistente (con evento completo, todos); el precio sale cuando todos tienen alguno
+              const regDays = Array.from({ length: regNumAttendees }, (_, i) =>
+                pickDays ? (regAttendeeDays[i] || []).filter(d => ev.dates.includes(d)) : ev.dates);
+              const daysReady = regDays.every(days => days.length > 0);
+              const tiers = daysReady ? registrationTiers(ev, regDays.map(d => d.length)) : [];
+              const myPending = myRegs.find(r => r.status === 'pending' && r.stripe_session_id?.startsWith('UROS-'));
               const dateRange = ev.dates.length > 0
                 ? `${formatDateRanges(ev.dates, { weekday: false })} ${ev.dates[ev.dates.length - 1].slice(0, 4)}`
                 : new Date(ev.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -302,8 +315,8 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
 
               const renderBadge = () => {
                 if (regStatus === 'completed') return <div className="source-badge" style={{ background: '#10b981' }} title="Tu participación está asegurada">✅ Inscrito</div>;
-                if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }} title="Los administradores están revisando tu inscripción">⏳ Pendiente</div>;
-                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="El pago no se completó. Puedes volver a inscribirte.">❌ Cancelado</div>;
+                if (regStatus === 'pending') return <div className="source-badge" style={{ background: '#f59e0b', color: '#000' }} title="Esperando a que el club reciba la transferencia">⏳ Pendiente de pago</div>;
+                if (regStatus === 'cancelled') return <div className="source-badge" style={{ background: '#ef4444' }} title="Esta inscripción se canceló. Puedes volver a inscribirte.">❌ Cancelado</div>;
                 return null;
               };
 
@@ -363,7 +376,11 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                         {isRegistered ? (
                           <div className="campus-registered-box">
                             {regStatus === 'completed' && <p>✅ Tu inscripción está <b>Completada</b>.</p>}
-                            {regStatus === 'pending' && <p>⏳ Tu inscripción está <b>Pendiente</b> de pago. Si no terminaste el pago, se cancelará sola y podrás volver a inscribirte.</p>}
+                            {regStatus === 'pending' && (
+                              <p>⏳ Tu inscripción está <b>pendiente</b> hasta que el club reciba la transferencia.
+                                {myPending && <> <button type="button" className="btn-inline-link" onClick={() => showTransfer(myPending.stripe_session_id!, myPending.amount)}>Ver cómo pagar</button></>}
+                              </p>
+                            )}
                           </div>
                         ) : !user ? (
                           <div className="campus-login-box">
@@ -380,14 +397,17 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                           <div className="campus-registration-form">
                             <h4 className="form-header">📋 {myPlayers.length > 0 ? 'Inscribir a otro jugador' : 'Inscripción'}</h4>
                             {!options && regStatus === 'cancelled' && (
-                              <p className="form-retry-note">Tu inscripción anterior no se completó porque el pago se canceló. Puedes volver a inscribirte.</p>
+                              <p className="form-retry-note">Tu inscripción anterior se canceló. Puedes volver a inscribirte.</p>
                             )}
                             {myPlayers.length > 0 && (
                               <div className="campus-registered-box">
                                 {myPlayers.map(r => (
                                   <p key={r.id}>
                                     {r.status === 'completed' ? '✅' : '⏳'} <b>{r.attendee_names.join(', ')}</b>
-                                    {r.status === 'completed' ? ' ya está inscrito.' : ' está pendiente de pago (si no lo terminaste, se cancelará solo).'}
+                                    {r.status === 'completed' ? ' ya está inscrito.' : ' está pendiente de la transferencia.'}
+                                    {r.status === 'pending' && r.stripe_session_id?.startsWith('UROS-') && (
+                                      <> <button type="button" className="btn-inline-link" onClick={() => showTransfer(r.stripe_session_id!, r.amount)}>Ver cómo pagar</button></>
+                                    )}
                                   </p>
                                 ))}
                               </div>
@@ -419,27 +439,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                               </div>
                             )}
 
-                            {/* Day picker (no hace falta si se paga el evento completo) */}
-                            {pickDays ? (
-                            <div className="form-section">
-                              <label className="form-label">Selecciona los días:</label>
-                              <div className="days-picker-grid">
-                                {ev.dates.map(d => {
-                                  const selected = regSelectedDays.includes(d);
-                                  return (
-                                    <button key={d} type="button" onClick={() => toggleDay(d)}
-                                      className={`day-chip ${selected ? 'active' : ''}`}>
-                                      {new Date(d + 'T00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <button type="button" onClick={() => setRegSelectedDays(regSelectedDays.length === ev.dates.length ? [] : [...ev.dates])}
-                                className="btn-toggle-all">
-                                {regSelectedDays.length === ev.dates.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                              </button>
-                            </div>
-                            ) : (
+                            {!pickDays && (
                               <div className="form-section">
                                 <label className="form-label">Fechas:</label>
                                 <p className="full-event-dates">{formatDateRanges(ev.dates)}</p>
@@ -451,24 +451,47 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                             <div className="form-section">
                               <label className="form-label">Nº de asistentes:</label>
                               <div className="attendee-counter">
-                                <button type="button" onClick={() => { const n = Math.max(1, regNumAttendees - 1); setRegNumAttendees(n); setRegAttendeeNames(prev => prev.slice(0, n)); }}
+                                <button type="button" onClick={() => changeAttendees(Math.max(1, regNumAttendees - 1))}
                                   className="btn-counter">−</button>
                                 <span className="counter-value">{regNumAttendees}</span>
-                                <button type="button" onClick={() => { if (regNumAttendees >= maxAttendees) return; const n = regNumAttendees + 1; setRegNumAttendees(n); setRegAttendeeNames(prev => [...prev, '']); }}
+                                <button type="button" onClick={() => { if (regNumAttendees < maxAttendees) changeAttendees(regNumAttendees + 1); }}
                                   className="btn-counter">+</button>
                               </div>
                             </div>
                             )}
 
-                            {/* Attendee names */}
-                            <div className="form-section">
-                              <label className="form-label">{options ? 'Nombre del jugador/a:' : 'Nombre(s):'}</label>
-                              {Array.from({ length: options ? 1 : regNumAttendees }).map((_, i) => (
-                                <input key={i} value={regAttendeeNames[i] || ''} placeholder={options ? 'Nombre y apellidos' : `Asistente ${i + 1}`} maxLength={100}
+                            {/* Nombre de cada asistente y, si se eligen días, los suyos */}
+                            {options ? (
+                              <div className="form-section">
+                                <label className="form-label">Nombre del jugador/a:</label>
+                                <input value={regAttendeeNames[0] || ''} placeholder="Nombre y apellidos" maxLength={100}
+                                  onChange={e => setRegAttendeeNames([e.target.value])} className="form-text-input" />
+                              </div>
+                            ) : Array.from({ length: regNumAttendees }).map((_, i) => (
+                              <div key={i} className={`form-section ${pickDays ? 'attendee-block' : ''}`}>
+                                <label className="form-label">{regNumAttendees > 1 ? `Asistente ${i + 1}:` : 'Nombre:'}</label>
+                                <input value={regAttendeeNames[i] || ''} placeholder="Nombre y apellidos" maxLength={100}
                                   onChange={e => { const u = [...regAttendeeNames]; u[i] = e.target.value; setRegAttendeeNames(u); }}
                                   className="form-text-input" />
-                              ))}
-                            </div>
+                                {pickDays && (
+                                  <>
+                                    <span className="field-label-sub">Días a los que va:</span>
+                                    <div className="days-picker-grid">
+                                      {ev.dates.map(d => (
+                                        <button key={d} type="button" onClick={() => toggleDay(i, d)}
+                                          className={`day-chip ${regDays[i].includes(d) ? 'active' : ''}`}>
+                                          {new Date(d + 'T00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <button type="button" onClick={() => setAllDays(i, regDays[i].length === ev.dates.length ? [] : ev.dates)}
+                                      className="btn-toggle-all">
+                                      {regDays[i].length === ev.dates.length ? 'Quitar todos' : 'Todos los días'}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            ))}
 
                             {/* Custom fields */}
                             {ev.custom_fields && ev.custom_fields.length > 0 && (
@@ -526,23 +549,32 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                               ) : (
                                 <p className="price-hint">Elige una opción para ver el precio.</p>
                               )
-                            ) : regDays.length > 0 ? (
+                            ) : daysReady ? (
                               <div className="price-breakdown-box">
-                                <div className="price-row">
-                                  <span>
-                                    {regNumAttendees} {regNumAttendees === 1 ? 'asistente' : 'asistentes'}
-                                    {' · '}
-                                    {pickDays ? `${regDays.length} ${regDays.length === 1 ? 'día' : 'días'}` : 'evento completo'}
-                                  </span>
-                                </div>
+                                {!isFree && tiers.length > 1 ? tiers.map((t, i) => (
+                                  <div key={i} className="price-row">
+                                    <span>
+                                      {t.attendees} {t.attendees === 1 ? 'asistente' : 'asistentes'} · {i > 0 ? `${t.days} ${t.days === 1 ? 'día' : 'días'} más` : `${t.days} ${t.days === 1 ? 'día' : 'días'}`}
+                                    </span>
+                                    <span>{euros(t.price)}</span>
+                                  </div>
+                                )) : (
+                                  <div className="price-row">
+                                    <span>
+                                      {regNumAttendees} {regNumAttendees === 1 ? 'asistente' : 'asistentes'}
+                                      {' · '}
+                                      {pickDays ? `${regDays[0].length} ${regDays[0].length === 1 ? 'día' : 'días'}` : 'evento completo'}
+                                    </span>
+                                  </div>
+                                )}
                                 <div className="price-row final-price-row">
                                   <span>Total</span>
-                                  <span>{isFree ? 'Gratis' : euros(eventPrice(ev, regNumAttendees, regDays.length))}</span>
+                                  <span>{isFree ? 'Gratis' : euros(registrationPrice(ev, regDays.map(d => d.length)))}</span>
                                 </div>
                               </div>
                             ) : (
                               <p className="price-hint">
-                                {isFree ? 'Elige los días a los que vas a ir.' : 'Elige los días para ver el precio.'}
+                                {regNumAttendees > 1 ? 'Elige los días de cada asistente para ver el precio.' : isFree ? 'Elige los días a los que vas a ir.' : 'Elige los días para ver el precio.'}
                               </p>
                             )}
 
@@ -550,10 +582,13 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                             <div className="form-actions-stack">
                               {/* Con un cupón escrito sin aplicar, el servidor lo comprueba igual al pagar */}
                               <button onClick={() => handleRegister(ev)}
-                                disabled={regSubmitting || regDays.length === 0 || (!!options && chosenOption === null)}
+                                disabled={regSubmitting || !daysReady || (!!options && chosenOption === null)}
                                 className={isFree || torneoPrice === 0 ? 'btn-pay-local' : 'btn-pay-online'}>
-                                {regSubmitting ? 'Procesando...' : isFree || torneoPrice === 0 ? '✅ Inscribirse (Gratis)' : '💳 Pagar con tarjeta'}
+                                {regSubmitting ? 'Procesando...' : isFree || torneoPrice === 0 ? '✅ Inscribirse (Gratis)' : 'Inscribirse y pagar por transferencia'}
                               </button>
+                              {!isFree && torneoPrice !== 0 && (
+                                <p className="price-hint">Al inscribirte te damos los datos de la cuenta del club (también por email). Tu plaza queda guardada hasta que llegue la transferencia.</p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -570,6 +605,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
       {couponsEvent && <CouponsModal event={couponsEvent} onClose={() => setCouponsEvent(null)} />}
       {modalOpen && <EventModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveEvent}
         initial={editEvent} defaultType={kind} otherEvents={events.filter(e => e.id !== editEvent?.id)} />}
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="inscripción" />
       <MessageModal isOpen={messageAlert.open} onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} title={messageAlert.title} message={messageAlert.message} />
       <ConfirmModal isOpen={confirmPrompt.open} title="Confirmar Acción" message={confirmPrompt.message}
         onConfirm={() => { if (confirmPrompt.action) confirmPrompt.action(); setConfirmPrompt(prev => ({ ...prev, open: false, action: null })); }}

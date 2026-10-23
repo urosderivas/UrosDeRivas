@@ -164,7 +164,6 @@ function ProviderSettings({ draft, id, canDelete, owners, onSaved, onDeleted }: 
     if (!form.name.trim()) return 'Pon el nombre que verán los usuarios.';
     if (!form.service.trim()) return 'Pon el servicio (por ejemplo Fisioterapia).';
     if (!Number.isFinite(form.price) || form.price < 0 || form.price > 1000) return 'El precio tiene que estar entre 0 y 1000 €.';
-    if (form.price > 0 && form.price < 0.5) return 'Con tarjeta se cobra como mínimo 0,50 €.';
     for (const [day, ranges] of Object.entries(form.weekly_hours)) {
       const problem = rangesProblem(DAY_NAMES[Number(day) - 1], ranges);
       if (problem) return problem;
@@ -245,7 +244,7 @@ function ProviderSettings({ draft, id, canDelete, owners, onSaved, onDeleted }: 
         <label className="appt-admin-field">Precio por cita (€)
           <input type="number" min={0} max={1000} step="0.01" value={form.price}
             onChange={e => set('price', e.target.value === '' ? 0 : Number(e.target.value))} />
-          <span className="appt-admin-muted">{form.price > 0 ? 'Se paga con tarjeta al reservar.' : '0 = gratis, sin pago.'}</span>
+          <span className="appt-admin-muted">{form.price > 0 ? 'Se paga por transferencia: la cita queda pendiente hasta que la marques como pagada.' : '0 = gratis, sin pago.'}</span>
         </label>
         <label className="appt-admin-field">El usuario puede cancelar hasta
           <select value={form.cancel_hours} onChange={e => set('cancel_hours', Number(e.target.value))}>
@@ -487,14 +486,20 @@ function Agenda({ provider }: { provider: AppointmentProvider }) {
                     <div className="appt-agenda-who">
                       <b>{a.patient_name}</b>
                       <span>{a.user_email || 'Apuntada por el club'}</span>
-                      {a.payment === 'paid' && <span className="appt-paid">Pagada {Number(a.amount).toFixed(2).replace('.', ',')} €{a.status === 'cancelled' ? ' · devolver el pago en Stripe' : ''}</span>}
+                      {a.payment === 'paid' && <span className="appt-paid">Pagada {Number(a.amount).toFixed(2).replace('.', ',')} €{a.status === 'cancelled' ? ' · hay que devolver el pago' : ''}</span>}
+                      {awaitingPayment(a) && <span className="appt-admin-muted">Transferencia de {Number(a.amount).toFixed(2).replace('.', ',')} € · concepto {a.stripe_session_id}</span>}
                       {a.notes && <span className="appt-agenda-notes">{a.notes}</span>}
                     </div>
                     <div className="appt-agenda-actions">
-                      {awaitingPayment(a) ? <span className="appt-admin-muted">Pagando…</span>
+                      {awaitingPayment(a) ? <span style={{ color: 'var(--warning-text)' }}>Pendiente de pago</span>
                         : paymentLapsed(a) ? <span style={{ color: STATUS.cancelled.color }}>Sin pagar</span>
                         : <span style={{ color: STATUS[a.status].color }}>{STATUS[a.status].label}</span>}
-                      {awaitingPayment(a) || paymentLapsed(a) ? null : a.status === 'booked' ? (
+                      {awaitingPayment(a) ? (
+                        <>
+                          <button onClick={() => act(() => adapter.setPayment(a.id, true))}>Pagada</button>
+                          <button className="danger" onClick={() => window.confirm(`¿Cancelar la cita de ${a.patient_name}? El hueco queda libre.`) && act(() => adapter.cancel(a.id))}>Cancelar</button>
+                        </>
+                      ) : paymentLapsed(a) ? null : a.status === 'booked' ? (
                         <>
                           <button onClick={() => act(() => adapter.setStatus(a.id, 'done'))}>Hecha</button>
                           <button onClick={() => act(() => adapter.setStatus(a.id, 'no_show'))}>No vino</button>

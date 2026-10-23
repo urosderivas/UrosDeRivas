@@ -1,0 +1,73 @@
+.transfer-intro {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 1rem;
+}
+
+.transfer-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(var(--tint), 0.03);
+}
+
+.transfer-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.transfer-label {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+
+.transfer-value {
+  color: var(--text-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.transfer-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.transfer-copy:hover { border-color: var(--accent-gold); }
+
+.transfer-note {
+  margin: 0.25rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.btn-transfer-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  margin-right: 8px;
+  background: var(--accent-gold);
+  border: none;
+  color: var(--on-accent);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}

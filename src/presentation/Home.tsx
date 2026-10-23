@@ -72,7 +72,10 @@ export function Home() {
     };
   };
 
-  // Portada fija del club y, detrás, las noticias más recientes que tienen foto
+  // Los admins también reciben las ocultas (para editarlas); el resto no las ve
+  const publicNews = news.filter(post => post.active);
+
+  // Portada fija del club y, detrás, las 4 noticias visibles más recientes
   const slides: HeroSlide[] = [
     {
       key: 'club',
@@ -85,9 +88,11 @@ export function Home() {
         { label: 'Tienda oficial', to: '/market' },
       ],
     },
-    ...news.filter(post => post.imageUrl).slice(0, 3).map(post => ({
+    ...publicNews.slice(0, 4).map(post => ({
       key: post.id,
-      image: resolveImageUrl(post.imageUrl!),
+      image: post.imageUrl ? resolveImageUrl(post.imageUrl) : undefined,
+      // Sin foto, la diapositiva lleva el escudo como la portada del club
+      logo: post.imageUrl ? undefined : clubLogoUrl,
       kicker: new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
       title: post.title,
       text: slideText(post.body),
@@ -150,7 +155,7 @@ export function Home() {
         {!newsLoading && news.length === 0 && <p className="content-empty">Pronto publicaremos novedades del club.</p>}
         <NewsCarousel count={news.length}>
           {news.map(post => (
-            <article key={post.id} className="news-card animate-fade-in">
+            <article key={post.id} className={`news-card animate-fade-in ${post.active ? '' : 'news-hidden'}`}>
               <AdminGuard>
                 <div className="content-card-actions">
                   <button className="edit" title="Editar" onClick={() => { setEditPost(post); setModalOpen(true); }}><Pencil size={15} /></button>
@@ -159,6 +164,7 @@ export function Home() {
               </AdminGuard>
               {post.imageUrl && <img className="news-image" src={resolveImageUrl(post.imageUrl)} alt="" loading="lazy" onError={e => e.currentTarget.style.display = 'none'} />}
               <div className="news-content">
+                {!post.active && <span className="news-hidden-badge" title="Los usuarios no la ven. Edítala y marca «Visible para los usuarios» para mostrarla.">OCULTA</span>}
                 <time className="news-date">{new Date(post.publishedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</time>
                 <h4 className="news-title">{post.title}</h4>
                 <RichText text={post.body} className="news-body" />

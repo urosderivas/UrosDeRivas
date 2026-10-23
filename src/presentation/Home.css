@@ -491,3 +491,18 @@
   .news-track > :first-child, .news-track > :last-child { margin: 0; }
   .news-track > .news-card { flex: none; }
 }
+
+/* Noticia oculta: solo la ven los admins */
+.news-card.news-hidden { border-style: dashed; }
+.news-card.news-hidden .news-image,
+.news-card.news-hidden .news-content > :not(.news-hidden-badge) { opacity: 0.55; }
+.news-hidden-badge {
+  align-self: flex-start;
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}

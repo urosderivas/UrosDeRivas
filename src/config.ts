@@ -28,6 +28,6 @@ export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCod
 
 /** Avisos fijos de la barra superior. Se suman a los campus con inscripciones abiertas. */
 export const PROMO_MESSAGES: { text: string; to?: string }[] = [
-  { text: 'Tienda oficial: pago seguro con tarjeta', to: '/market' },
+  { text: 'Tienda oficial: equipaciones y merchandising del club', to: '/market' },
   { text: 'Equipaciones y merchandising oficial en la tienda', to: '/market' },
 ];
