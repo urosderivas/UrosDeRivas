@@ -49,7 +49,7 @@ Con una cuenta de administrador, sin tocar código:
     1 día + casilla 1 asist. 2 días).
 - **Patrocinadores**: añadir, editar, ocultar, ordenar y borrar.
 - **Panel de estadísticas** (menú ESTADÍSTICAS):
-  - **Datos de pago**: IBAN, titular y una nota que salen al comprar y en el email.
+  - **Datos de pago**: IBAN, titular, plazo para pagar (3 días por defecto) y una nota que salen al comprar y en el email. Lo que no se pague en plazo se cancela a mano.
   - Pedidos de la tienda: estado (pendiente de pago, pagado y por entregar,
     entregado, cancelado), botón "Marcar pagado" y justificante en PDF.
   - Inscripciones de cada evento, con su estado, "Marcar pagada" y justificante.
@@ -125,9 +125,7 @@ npx supabase db push
 
 # Buzón desde el que salen los emails (se pone una vez; nunca va en el código).
 # También se puede poner en Supabase → Edge Functions → Secrets.
-npx supabase secrets set SMTP_USER=no-reply@urosderivas.com SMTP_PASS=...
-# Opcional: a dónde van las respuestas a esos emails
-npx supabase secrets set MAIL_REPLY_TO=administracion@urosderivas.com
+npx supabase secrets set SMTP_USER=administracion@urosderivas.com SMTP_PASS=...
 
 npx supabase functions deploy create-checkout-session --no-verify-jwt
 ```

@@ -32,16 +32,19 @@ function newReference(): string {
 
 const isTransferReference = (ref: unknown): ref is string => typeof ref === 'string' && ref.startsWith('UROS-');
 
-interface PaymentSettings { iban: string; holder: string; note: string }
+interface PaymentSettings { iban: string; holder: string; note: string; deadlineDays: number }
 
 /** Datos de la cuenta del club; sin IBAN no se puede vender nada de pago. */
 async function paymentSettings(admin: any): Promise<PaymentSettings> {
-  const { data, error } = await admin.from('payment_settings').select('iban, holder, note').maybeSingle();
+  const { data, error } = await admin.from('payment_settings').select('iban, holder, note, deadline_days').maybeSingle();
   if (error) throw new Error("No se pudieron leer los datos de pago del club.");
   if (!data?.iban?.trim()) {
     throw new Error("El club todavía no ha puesto su número de cuenta para las transferencias. Inténtalo más tarde.");
   }
-  return { iban: data.iban.trim(), holder: (data.holder || '').trim(), note: (data.note || '').trim() };
+  return {
+    iban: data.iban.trim(), holder: (data.holder || '').trim(), note: (data.note || '').trim(),
+    deadlineDays: data.deadline_days || 3,
+  };
 }
 
 /**

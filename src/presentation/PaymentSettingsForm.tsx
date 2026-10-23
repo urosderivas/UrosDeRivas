@@ -7,7 +7,7 @@ const payments = new PaymentAdapter();
 
 /** Datos de la cuenta del club que ven quienes compran o se inscriben (y que llegan en el email). */
 export function PaymentSettingsForm() {
-  const [form, setForm] = useState<PaymentSettings>({ iban: '', holder: '', note: '' });
+  const [form, setForm] = useState<PaymentSettings>({ iban: '', holder: '', note: '', deadlineDays: 3 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -17,7 +17,7 @@ export function PaymentSettingsForm() {
     payments.getSettings().then(setForm).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, []);
 
-  const set = (key: keyof PaymentSettings, value: string) => {
+  const set = <K extends keyof PaymentSettings>(key: K, value: PaymentSettings[K]) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setMessage('');
   };
@@ -28,9 +28,10 @@ export function PaymentSettingsForm() {
     const iban = form.iban.replace(/\s+/g, ' ').trim().toUpperCase();
     if (!/^[A-Z]{2}\d{2}[A-Z0-9 ]{10,40}$/.test(iban)) { setError('Revisa el IBAN: empieza por ES y dos números, p. ej. ES12 3456 7890 1234 5678 9012.'); return; }
     if (!form.holder.trim()) { setError('Pon el titular de la cuenta.'); return; }
+    if (!Number.isInteger(form.deadlineDays) || form.deadlineDays < 1 || form.deadlineDays > 30) { setError('El plazo tiene que ser de 1 a 30 días.'); return; }
     setSaving(true);
     try {
-      const clean = { iban, holder: form.holder.trim(), note: form.note.trim() };
+      const clean = { iban, holder: form.holder.trim(), note: form.note.trim(), deadlineDays: form.deadlineDays };
       await payments.saveSettings(clean);
       setForm(clean);
       setMessage('Guardado. Desde ahora se enseñan estos datos al comprar y al inscribirse.');
@@ -59,6 +60,12 @@ export function PaymentSettingsForm() {
         <div className="form-group">
           <label>Titular</label>
           <input value={form.holder} maxLength={120} onChange={e => set('holder', e.target.value)} placeholder="Club Deportivo Elemental Uros de Rivas" />
+        </div>
+        <div className="form-group">
+          <label>Plazo para pagar <span className="label-hint">(días)</span></label>
+          <input type="number" min={1} max={30} value={form.deadlineDays} style={{ maxWidth: '120px' }}
+            onChange={e => set('deadlineDays', Number(e.target.value))} />
+          <span className="label-hint">Se avisa en la web y en el email. Pasado el plazo, lo que no se haya pagado lo cancelas tú desde el panel.</span>
         </div>
         <div className="form-group">
           <label>Nota <span className="label-hint">(opcional)</span></label>

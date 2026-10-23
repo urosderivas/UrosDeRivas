@@ -1,11 +1,11 @@
 // Envío de emails desde un buzón del club (Arsys) por SMTP con SSL (puerto 465:
 // Supabase no deja salir por el 25 ni el 587). Se configura con secretos de las
 // funciones, que pone el club desde el panel de Supabase:
-//   SMTP_USER  buzón completo, p. ej. no-reply@urosderivas.com
+//   SMTP_USER  buzón completo: administracion@urosderivas.com
 //   SMTP_PASS  su contraseña
 //   SMTP_HOST  opcional (por defecto smtp.serviciodecorreo.es, el de Arsys)
 //   SMTP_PORT  opcional (por defecto 465)
-//   MAIL_REPLY_TO  opcional: a dónde van las respuestas (p. ej. administracion@urosderivas.com)
+//   MAIL_REPLY_TO  opcional: a dónde van las respuestas si no es el mismo buzón
 // Sin SMTP_USER o SMTP_PASS no se envía nada: la web enseña los mismos datos.
 import nodemailer from "npm:nodemailer@6.9.16";
 
@@ -64,6 +64,8 @@ export interface TransferDetails {
   iban: string;
   holder: string;
   note: string;
+  /** Días para hacer la transferencia */
+  deadlineDays: number;
 }
 
 export const formatEuros = (v: number) =>
@@ -84,7 +86,7 @@ export function transferMail(to: string, d: TransferDetails): Mail {
     '',
     ...rows.map(([k, v]) => `${k}: ${v}`),
     '',
-    'Pon el concepto tal cual: así el club sabe a qué corresponde tu pago.',
+    `Tienes ${d.deadlineDays} días para hacer la transferencia. Pon el concepto tal cual: así el club sabe a qué corresponde tu pago.`,
     ...(d.note ? ['', d.note] : []),
     '',
     'Lo que has reservado:',
@@ -101,7 +103,7 @@ export function transferMail(to: string, d: TransferDetails): Mail {
 <table style="border-collapse:collapse;margin:12px 0">
 ${rows.map(([k, v]) => `<tr><td style="padding:6px 14px 6px 0;color:#555">${k}</td><td style="padding:6px 0;font-weight:bold">${escapeHtml(v)}</td></tr>`).join('\n')}
 </table>
-<p>Pon el concepto tal cual: así el club sabe a qué corresponde tu pago.</p>
+<p>Tienes <b>${d.deadlineDays} días</b> para hacer la transferencia. Pon el concepto tal cual: así el club sabe a qué corresponde tu pago.</p>
 ${d.note ? `<p>${escapeHtml(d.note)}</p>` : ''}
 <p style="margin-bottom:4px">Lo que has reservado:</p>
 <ul style="margin-top:0">${d.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>

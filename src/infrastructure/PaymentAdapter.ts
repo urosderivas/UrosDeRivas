@@ -6,6 +6,8 @@ export interface PaymentSettings {
   holder: string;
   /** Texto extra que sale en la web y en el email */
   note: string;
+  /** Días para hacer la transferencia */
+  deadlineDays: number;
 }
 
 /** Lo que hay que transferir para completar una compra, inscripción o cita. */
@@ -71,14 +73,14 @@ export class PaymentAdapter {
   }
 
   async getSettings(): Promise<PaymentSettings> {
-    const { data, error } = await supabase.from('payment_settings').select('iban, holder, note').maybeSingle();
+    const { data, error } = await supabase.from('payment_settings').select('iban, holder, note, deadline_days').maybeSingle();
     if (error) throw error;
-    return { iban: data?.iban || '', holder: data?.holder || '', note: data?.note || '' };
+    return { iban: data?.iban || '', holder: data?.holder || '', note: data?.note || '', deadlineDays: data?.deadline_days || 3 };
   }
 
-  async saveSettings(settings: PaymentSettings): Promise<void> {
+  async saveSettings({ deadlineDays, ...settings }: PaymentSettings): Promise<void> {
     const { error } = await supabase.from('payment_settings')
-      .update({ ...settings, updated_at: new Date().toISOString() })
+      .update({ ...settings, deadline_days: deadlineDays, updated_at: new Date().toISOString() })
       .eq('id', true);
     if (error) throw error;
   }

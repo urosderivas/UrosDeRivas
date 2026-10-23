@@ -6,6 +6,8 @@ create table if not exists public.payment_settings (
   holder text not null default '' check (length(holder) <= 120),
   -- Texto extra para el email y la web (p. ej. "Envía el justificante a ...")
   note text not null default '' check (length(note) <= 500),
+  -- Días que tiene quien compra para hacer la transferencia (se le dice en la web y en el email)
+  deadline_days integer not null default 3 check (deadline_days between 1 and 30),
   updated_at timestamptz not null default timezone('utc', now())
 );
 
@@ -21,4 +23,4 @@ create policy "Admins can update payment settings" on public.payment_settings
 
 revoke all on public.payment_settings from anon, authenticated;
 grant select on public.payment_settings to anon, authenticated;
-grant update (iban, holder, note, updated_at) on public.payment_settings to authenticated;
+grant update (iban, holder, note, deadline_days, updated_at) on public.payment_settings to authenticated;

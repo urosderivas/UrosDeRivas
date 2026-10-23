@@ -223,6 +223,10 @@
   color: var(--text-secondary);
 }
 
+@media (max-width: 600px) {
+  .day-chip { padding: 10px 12px; font-size: 0.85rem; }
+}
+
 .day-chip:hover {
   border-color: var(--accent-gold);
   color: var(--text-primary);
@@ -342,16 +346,17 @@
 }
 
 .btn-pay-online {
-  background: #635bff;
-  color: #fff;
+  background: var(--accent-gold);
+  color: var(--on-accent);
   border: none;
-  box-shadow: 0 10px 20px rgba(99, 91, 255, 0.3);
+  font-weight: 800;
+  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.25);
 }
 
 .btn-pay-online:hover {
   transform: translateY(-5px);
-  box-shadow: 0 15px 30px rgba(99, 91, 255, 0.5);
-  filter: brightness(1.2);
+  box-shadow: 0 15px 30px rgba(var(--accent-rgb), 0.4);
+  filter: brightness(1.1);
 }
 
 .btn-pay-local {

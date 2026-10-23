@@ -59,7 +59,8 @@ export function TransferModal({ result, onClose, what }: ModalProps) {
       {result && (
         <>
           <p className="transfer-intro">
-            Haz una transferencia con estos datos. Pon el concepto tal cual, así el club sabe a qué corresponde tu pago.
+            Haz una transferencia con estos datos en los próximos <strong>{result.transfer.deadlineDays || 3} días</strong>.
+            Pon el concepto tal cual, así el club sabe a qué corresponde tu pago.
           </p>
           <TransferDetails info={result.transfer} />
           <p className="transfer-intro">
