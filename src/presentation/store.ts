@@ -20,24 +20,6 @@ function saveCart(cart: CartItem[]) {
   try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { /* sin almacenamiento */ }
 }
 
-// Al pagar el carrito en Stripe se marca, para vaciarlo solo si el pago se completa
-// (un "Comprar ahora" de un producto suelto no toca el carrito).
-const CART_CHECKOUT_KEY = 'cart_checkout';
-
-export function markCartCheckout() {
-  try { sessionStorage.setItem(CART_CHECKOUT_KEY, '1'); } catch { /* sin almacenamiento */ }
-}
-
-export function takeCartCheckout(): boolean {
-  try {
-    const marked = sessionStorage.getItem(CART_CHECKOUT_KEY) === '1';
-    sessionStorage.removeItem(CART_CHECKOUT_KEY);
-    return marked;
-  } catch {
-    return false;
-  }
-}
-
 interface AppState {
   user: User | null;
   items: MarketItem[];

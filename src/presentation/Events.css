@@ -620,3 +620,24 @@
   font-size: 0.9rem;
   margin: 8px 0 0;
 }
+
+/* Cada asistente con sus días */
+.attendee-block {
+  padding: 1rem;
+  border: 1px solid rgba(var(--tint), 0.1);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.btn-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-text);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -7,10 +7,6 @@
 
 .appt-muted { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
 .appt-error { color: var(--danger-text); margin: 0.75rem 0; }
-.appt-notice {
-  margin: 0.75rem 0; padding: 0.75rem 1rem; border-radius: 10px;
-  background: rgba(var(--accent-rgb), 0.08); border: 1px solid rgba(var(--accent-rgb), 0.35); color: var(--text-primary);
-}
 .appt-info-price { font-size: 1.3rem; font-weight: 800; color: var(--accent-text); }
 .appt-info-price span { font-size: 0.85rem; font-weight: 400; color: var(--text-secondary); }
 
@@ -144,6 +140,8 @@
 .appt-mine-row.status-done { border-left-color: #10b981; }
 .appt-mine-row.status-no_show { border-left-color: #e53935; }
 .appt-cancel { background: none; border: 1px solid #e53935; color: #e53935; border-radius: 20px; padding: 0.35rem 0.9rem; cursor: pointer; white-space: nowrap; }
+.appt-pending { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.appt-link { background: none; border: none; padding: 0; color: var(--accent-text); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .appt-mine details { margin-top: 1rem; }
 .appt-mine summary { cursor: pointer; color: var(--text-secondary); margin-bottom: 0.75rem; }
 

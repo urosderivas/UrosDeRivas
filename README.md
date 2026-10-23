@@ -9,25 +9,32 @@ dominio del club).
 
 ## Qué tiene la web
 
-- **Inicio**: portada con las últimas noticias con foto, accesos rápidos, una fila
-  de productos de la tienda y las noticias del club.
+- **Inicio**: portada con las 4 últimas noticias, accesos rápidos, una fila de
+  productos de la tienda y las noticias del club.
 - **Campus** y **Torneos y viajes**: cada evento tiene fechas, cartel, aforo y una
-  tabla de precios. Las familias se inscriben con nombre de cada asistente y pagan
-  con tarjeta; si el evento es gratis, la inscripción se confirma sin pago.
+  tabla de precios. Las familias se inscriben con el nombre y los días de cada
+  asistente y pagan por transferencia; si el evento es gratis, la inscripción se
+  confirma sin pago.
 - **Tienda**: productos con tallas u opciones y campos de texto (dorsal, nombre…),
-  carrito y pago con tarjeta (la web no admite pagos en mano).
+  carrito y pago por transferencia.
+- **Citas** de fisioterapia y recuperación, gratis o de pago (por transferencia).
+- **Pago por transferencia**: al comprar, inscribirse o reservar una cita de pago,
+  la web enseña el IBAN del club, el importe y un concepto único (`UROS-XXXXXX`) y
+  manda lo mismo por email. Queda "pendiente de pago" (guardando la plaza o la hora)
+  hasta que el club lo marca como pagado en el panel.
 - **Patrocinadores**: página propia y una cinta con sus logos encima del pie en el
   resto de páginas.
 - **Cuenta de usuario**: registro, inicio de sesión (también con Google),
-  recuperar contraseña y "Mis pedidos" con el justificante de cada pago.
+  recuperar contraseña y "Mis pedidos" con el justificante de cada pago y, en lo
+  pendiente, los datos para hacer la transferencia.
 - **Textos legales**: aviso legal, privacidad y cookies, con los datos del club.
 
 ## Lo que gestiona el club desde la web
 
 Con una cuenta de administrador, sin tocar código:
 
-- **Noticias** (en Inicio): crear, editar y borrar. Pueden llevar imagen, enlaces
-  en el texto (`[texto](https://...)`) y enlazar a un campus, torneo o viaje.
+- **Noticias** (en Inicio): crear, editar, ocultar y borrar. Pueden llevar imagen,
+  enlaces en el texto (`[texto](https://...)`) y enlazar a un campus, torneo o viaje.
 - **Campus, torneos y viajes** (en su pestaña): crear, editar, ocultar y borrar.
   - Las fechas se añaden por rango ("del 22 al 30") o de una en una.
   - **Tabla de precios**: una fila por número de asistentes y una columna por
@@ -36,11 +43,17 @@ Con una cuenta de administrador, sin tocar código:
     por evento completo (sin elegir días). Se rellena rápido con "X € por asistente
     y día" o copiando la tabla de otro evento, y se puede comprobar cualquier
     combinación antes de guardar.
+  - Cada asistente elige sus días. Todos pagan la casilla de los días del que
+    menos va, y cada uno que va más días paga sus días de más como 1 asistente
+    (4 asistentes de 4, 4, 5 y 6 días = casilla 4 asist. 4 días + casilla 1 asist.
+    1 día + casilla 1 asist. 2 días).
 - **Patrocinadores**: añadir, editar, ocultar, ordenar y borrar.
 - **Panel de estadísticas** (menú ESTADÍSTICAS):
-  - Pedidos de la tienda: estado (pendiente, procesando = pagado, completado =
-    entregado, cancelado), justificante en PDF y comprobación con Stripe.
-  - Inscripciones de cada evento, con su estado y justificante.
+  - **Datos de pago**: IBAN, titular y una nota que salen al comprar y en el email.
+  - Pedidos de la tienda: estado (pendiente de pago, pagado y por entregar,
+    entregado, cancelado), botón "Marcar pagado" y justificante en PDF.
+  - Inscripciones de cada evento, con su estado, "Marcar pagada" y justificante.
+  - Citas: cada calendario marca sus citas como pagadas cuando llega la transferencia.
   - Productos de la tienda: crear, editar y borrar.
   - Escáner del QR de los justificantes, exportación a Excel, lista de usuarios
     (ver su rol y borrar cuentas) y registro de actividad.
@@ -64,19 +77,20 @@ pega el enlace de una imagen ya publicada.
 | Parte | Servicio | Coste |
 |---|---|---|
 | Web | GitHub Pages, se publica sola desde GitHub Actions | Gratis |
-| Base de datos, usuarios, imágenes y funciones de pago | Supabase (plan gratuito) | Gratis |
-| Pagos con tarjeta | Stripe | Solo la comisión de cada pago |
+| Base de datos, usuarios, imágenes y funciones | Supabase (plan gratuito) | Gratis |
+| Emails con los datos de la transferencia | Un buzón del club en Arsys | Incluido en el hosting |
 
 - El código de la web es React + TypeScript + Vite (`src/`).
 - El esquema de la base de datos está en `supabase/migrations/`, con seguridad por
   filas (RLS): cada usuario solo ve sus pedidos e inscripciones, y solo admins y
   entrenadores gestionan contenido.
-- Los pagos pasan por tres funciones de Supabase (`supabase/functions/`):
-  - `create-checkout-session`: valida el pedido o la inscripción, **calcula el
-    importe en el servidor** (nunca se fía del navegador) y abre el pago en Stripe.
-  - `stripe-webhook`: Stripe avisa de cada pago completado, caducado o fallido y el
-    pedido o la inscripción cambian de estado solos.
-  - `verify-payment`: comprobación manual desde el panel.
+- Compras, inscripciones y citas de pago pasan por la función de Supabase
+  `create-checkout-session` (`supabase/functions/`): valida el pedido o la
+  inscripción, **calcula el importe en el servidor** (nunca se fía del navegador),
+  lo guarda pendiente con su concepto (`UROS-...`, en la columna `stripe_session_id`,
+  que antes guardaba la sesión de Stripe) y manda el email (`_shared/mail.ts`).
+  Hasta octubre de 2026 se pagaba con tarjeta (Stripe); los registros de entonces
+  tienen una sesión `cs_...`.
 - El precio de los eventos se calcula con `supabase/functions/_shared/pricing.ts`,
   que usan tanto la web (para enseñar el precio) como la función de pago (para
   cobrarlo), así que siempre coinciden.
@@ -109,25 +123,20 @@ Cualquier cambio en la base de datos se hace con una migración nueva
 npx supabase link --project-ref <id-del-proyecto>
 npx supabase db push
 
-# Secretos de las funciones (se ponen una vez; nunca van en el código)
-npx supabase secrets set STRIPE_SECRET_KEY=sk_...
-npx supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-# Webs a las que Stripe puede volver tras el pago, separadas por comas
-npx supabase secrets set ALLOWED_ORIGINS=https://urosderivas.github.io,http://localhost:5173
+# Buzón desde el que salen los emails (se pone una vez; nunca va en el código).
+# También se puede poner en Supabase → Edge Functions → Secrets.
+npx supabase secrets set SMTP_USER=no-reply@urosderivas.com SMTP_PASS=...
+# Opcional: a dónde van las respuestas a esos emails
+npx supabase secrets set MAIL_REPLY_TO=administracion@urosderivas.com
 
 npx supabase functions deploy create-checkout-session --no-verify-jwt
-npx supabase functions deploy verify-payment --no-verify-jwt
-npx supabase functions deploy stripe-webhook --no-verify-jwt
 ```
 
-Las funciones se despliegan sin verificación JWT de Supabase porque comprueban el
-usuario ellas mismas (y el webhook, la firma de Stripe).
-
-**Webhook de Stripe**: en Stripe → Developers → Webhooks, endpoint
-`https://<id-del-proyecto>.supabase.co/functions/v1/stripe-webhook` con los eventos
-`checkout.session.completed`, `checkout.session.expired`,
-`checkout.session.async_payment_succeeded` y `checkout.session.async_payment_failed`.
-Su *signing secret* es el `STRIPE_WEBHOOK_SECRET`.
+La función se despliega sin verificación JWT de Supabase porque comprueba el
+usuario ella misma. Sin `SMTP_USER` y `SMTP_PASS` funciona igual, pero no manda
+emails (la web enseña los mismos datos). El servidor de correo es el de Arsys
+(`smtp.serviciodecorreo.es`, puerto 465); se puede cambiar con `SMTP_HOST` y
+`SMTP_PORT` (Supabase no deja usar los puertos 25 ni 587).
 
 El proyecto de producción se creó antes de versionar el esquema:
 `20261017000000_baseline.sql` es una copia de lo que ya tenía y está marcada como

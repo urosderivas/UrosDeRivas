@@ -27,10 +27,6 @@ export interface SystemLogPort {
   createLog(actionType: string, metadata?: any): Promise<void>;
 }
 
-export interface PaymentPort {
-  createCheckoutSession(itemId: string, userEmail: string): Promise<string>;
-}
-
 export interface OrderPort {
   getOrders(userId?: string): Promise<any[]>;
   updateOrderStatus(id: string, status: string): Promise<any>;
