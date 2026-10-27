@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, Clock, CalendarDays } from 'lucide-react';
 import { useStore } from './store';
 import { Appointment, AppointmentProvider } from '../domain/entities';
 import { AppointmentsAdapter } from '../infrastructure/AppointmentsAdapter';
-import { StripeAdapter } from '../infrastructure/StripeAdapter';
+import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
+import { TransferModal } from './components/TransferDetails';
 import { addDays, formatDayLong, formatMonth, isoWeekday, madridDay, madridTime, madridToday } from '../utils/madrid';
 import './Appointments.css';
 
 const adapter = new AppointmentsAdapter();
-const stripe = new StripeAdapter();
+const payments = new PaymentAdapter();
 const euros = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(2)} €`;
 
-/** Apartada para pagar y el pago aún puede llegar (hasta hold_until). */
+/** Apartada esperando la transferencia (o, con tarjeta, el pago aún podía llegar hasta hold_until). */
 export const awaitingPayment = (a: Appointment) =>
   a.status === 'booked' && a.payment === 'pending' && !!a.hold_until && new Date(a.hold_until).getTime() > Date.now();
-/** Apartada para pagar, pero el pago no se completó a tiempo. */
+/** Apartada para pagar con tarjeta, pero el pago no se completó a tiempo (citas antiguas). */
 export const paymentLapsed = (a: Appointment) =>
   a.payment === 'failed' || (a.payment === 'pending' && !awaitingPayment(a));
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -40,9 +41,6 @@ export function Appointments() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<AppointmentProvider | null>(null);
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
-  const [notice, setNotice] = useState('');
-  const location = useLocation();
-  const navigate = useNavigate();
 
   const loadMine = async () => {
     if (!user) { setMyAppointments([]); return; }
@@ -58,22 +56,6 @@ export function Appointments() {
 
   useEffect(() => { loadMine(); }, [user?.id]);
 
-  // Vuelta de Stripe: pagada (el aviso de Stripe la confirma en unos segundos) o cancelada
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('success')) {
-      setNotice('✅ Pago hecho: tu cita está reservada. La tienes abajo en "Mis citas".');
-      const timers = [2000, 6000].map(ms => setTimeout(loadMine, ms));
-      navigate(location.pathname, { replace: true });
-      return () => timers.forEach(clearTimeout);
-    }
-    if (params.get('canceled')) {
-      setNotice('Has cancelado el pago. La hora queda libre y no se ha reservado nada.');
-      stripe.cancelPendingCheckout().finally(loadMine);
-      navigate(location.pathname, { replace: true });
-    }
-  }, [location.search, user?.id]);
-
   return (
     <div className="appointments-page">
       <div className="events-header">
@@ -81,7 +63,6 @@ export function Appointments() {
       </div>
 
       {error && <p className="appt-error">{error}</p>}
-      {notice && <p className="appt-notice">{notice}</p>}
 
       {selected ? (
         <Booking provider={selected} onBack={() => setSelected(null)} onBooked={loadMine} />
@@ -122,6 +103,7 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [booked, setBooked] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
 
   const loadSlots = async () => {
     setLoadingSlots(true);
@@ -165,11 +147,12 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
     setSaving(true); setError('');
     try {
       if (provider.price > 0) {
-        // Se aparta la hora y se paga en Stripe; al volver, la cita sale en "Mis citas"
-        window.location.href = await stripe.createAppointmentCheckout({ providerId: provider.id, startsAt: slot, patientName, notes });
-        return;
+        // Se aparta la hora hasta que el club reciba la transferencia
+        const result = await payments.bookPaidAppointment({ providerId: provider.id, startsAt: slot, patientName, notes });
+        if (!result.free) setTransfer(result);
+      } else {
+        await adapter.book(provider.id, slot, patientName, notes);
       }
-      await adapter.book(provider.id, slot, patientName, notes);
       setBooked(slot);
       onBooked();
     } catch (err: any) {
@@ -186,8 +169,13 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
         <h2>✅ Cita reservada</h2>
         <p><b>{provider.service}</b> con {provider.name}</p>
         <p className="appt-done-when">{formatDayLong(madridDay(booked))} a las {madridTime(booked)}</p>
-        <p className="appt-muted">La verás abajo en "Mis citas". Puedes cancelarla hasta {provider.cancel_hours} horas antes.</p>
+        <p className="appt-muted">
+          {provider.price > 0
+            ? 'Queda pendiente hasta que el club reciba la transferencia. La verás abajo en "Mis citas", con los datos para pagar.'
+            : `La verás abajo en "Mis citas". Puedes cancelarla hasta ${provider.cancel_hours} horas antes.`}
+        </p>
         <button className="appt-btn" onClick={onBack}>Volver</button>
+        <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" />
       </div>
     );
   }
@@ -199,7 +187,7 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
         <span className="appt-provider-service">{provider.service}</span>
         <h2>{provider.name}</h2>
         <p className="appt-provider-duration"><Clock size={15} /> {provider.duration_minutes} min</p>
-        {provider.price > 0 && <p className="appt-info-price">{euros(provider.price)} <span>· se paga al reservar</span></p>}
+        {provider.price > 0 && <p className="appt-info-price">{euros(provider.price)} <span>· por transferencia</span></p>}
         {provider.description && <p className="appt-info-desc">{provider.description}</p>}
       </aside>
 
@@ -245,9 +233,9 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
                 <textarea value={notes} maxLength={500} rows={3} onChange={e => setNotes(e.target.value)} placeholder="Motivo de la cita" />
               </label>
               <button type="submit" className="appt-btn" disabled={saving}>
-                {saving ? (provider.price > 0 ? 'Abriendo el pago…' : 'Reservando…') : provider.price > 0 ? `Pagar ${euros(provider.price)} y reservar` : 'Reservar cita'}
+                {saving ? 'Reservando…' : provider.price > 0 ? `Reservar cita (${euros(provider.price)})` : 'Reservar cita'}
               </button>
-              {provider.price > 0 && <p className="appt-muted">Te guardamos la hora mientras pagas con tarjeta (30 minutos como mucho).</p>}
+              {provider.price > 0 && <p className="appt-muted">Se paga por transferencia: te damos los datos al reservar y te guardamos la hora hasta que llegue.</p>}
             </form>
           ) : (
             <p className="appt-login">Para reservar, <Link to="/login?next=/citas">inicia sesión o crea una cuenta</Link>.</p>
@@ -262,7 +250,17 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
 function MyAppointments({ appointments, onChange }: { appointments: Appointment[]; onChange: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
   const now = Date.now();
+
+  // Datos de la cuenta del club, para volver a ver cómo pagar una cita pendiente
+  const showTransfer = async (a: Appointment) => {
+    setError('');
+    try {
+      const settings = await payments.getSettings();
+      setTransfer({ transfer: { ...settings, reference: a.stripe_session_id || '', amount: Number(a.amount) || 0 }, emailSent: false });
+    } catch (e: any) { setError(e.message); }
+  };
   const upcoming = appointments.filter(a => a.status === 'booked' && !paymentLapsed(a) && new Date(a.starts_at).getTime() > now).reverse();
   const past = appointments.filter(a => !upcoming.includes(a)).slice(0, 10);
 
@@ -282,7 +280,12 @@ function MyAppointments({ appointments, onChange }: { appointments: Appointment[
           <span>{a.provider ? `${a.provider.service} · ${a.provider.name}` : ''} · {a.patient_name}</span>
         </div>
         {!canCancel ? <span className="appt-status">{paymentLapsed(a) ? 'Sin pagar' : STATUS_LABELS[a.status]}</span>
-          : awaitingPayment(a) ? <span className="appt-status">Pago pendiente</span>
+          : awaitingPayment(a) ? (
+            <span className="appt-pending">
+              <button className="appt-link" onClick={() => showTransfer(a)}>Pendiente de transferencia · ver datos</button>
+              <button className="appt-cancel" disabled={busy === a.id} onClick={() => handleCancel(a)}>Cancelar</button>
+            </span>
+          )
           : a.payment === 'paid' ? <span className="appt-muted">Pagada ({euros(Number(a.amount))}). Para cancelarla, habla con el club.</span>
           : lateToCancel
             ? <span className="appt-muted" title="Fuera de plazo para cancelar desde la web">Habla con el club para cancelar</span>
@@ -295,6 +298,7 @@ function MyAppointments({ appointments, onChange }: { appointments: Appointment[
     <section className="appt-mine">
       <h2>Mis citas</h2>
       {error && <p className="appt-error">{error}</p>}
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" />
       {upcoming.length > 0 ? <ul>{upcoming.map(a => row(a, true))}</ul> : <p className="appt-muted">No tienes citas pendientes.</p>}
       {past.length > 0 && (
         <details>

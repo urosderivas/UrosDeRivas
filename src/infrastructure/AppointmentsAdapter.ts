@@ -59,7 +59,7 @@ export class AppointmentsAdapter {
     return data as string;
   }
 
-  /** Cita gratis reservada desde la página Citas (las de pago van por StripeAdapter). */
+  /** Cita gratis reservada desde la página Citas (las de pago van por PaymentAdapter). */
   async book(providerId: string, startsAt: string, patientName: string, notes: string): Promise<string> {
     const { data, error } = await supabase.rpc('book_appointment', {
       p_provider_id: providerId, p_starts_at: startsAt, p_patient_name: patientName, p_notes: notes || null,
@@ -93,6 +93,12 @@ export class AppointmentsAdapter {
 
   async cancel(appointmentId: string): Promise<void> {
     const { error } = await supabase.rpc('cancel_appointment', { p_appointment_id: appointmentId });
+    if (error) throw friendly(error);
+  }
+
+  /** El fisio o un admin marcan si ha llegado la transferencia de la cita. */
+  async setPayment(id: string, paid: boolean): Promise<void> {
+    const { error } = await supabase.rpc('set_appointment_payment', { p_appointment_id: id, p_paid: paid });
     if (error) throw friendly(error);
   }
 

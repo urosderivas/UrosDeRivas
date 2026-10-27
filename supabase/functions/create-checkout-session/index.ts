@@ -1,48 +1,63 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
-import { eventOptions, eventPrice, eventTable, isTournament, roundCents } from "../_shared/pricing.ts";
+import { eventOptions, eventTable, isTournament, registrationPrice, roundCents } from "../_shared/pricing.ts";
+import { formatEuros, sendMail, transferMail } from "../_shared/mail.ts";
+
+// Crea los pedidos de la tienda, las inscripciones a campus, torneos y viajes y las citas
+// de pago. Se paga por transferencia: todo queda pendiente con un concepto único
+// (p. ej. UROS-4F7K2Q, guardado en stripe_session_id, que antes era la sesión de Stripe),
+// se devuelven los datos de la cuenta del club y se mandan también por email.
+// El club lo marca como pagado desde el panel cuando le llega la transferencia.
+// Lo gratis queda confirmado al momento.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-let stripe: Stripe;
-
-// Webs a las que Stripe puede redirigir tras el pago. Se configuran con el
-// secreto ALLOWED_ORIGINS (orígenes separados por comas); estos son los de por defecto.
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://migueltorresperez.github.io',
-  'https://urosderivas.github.io',
-  'http://localhost:5173',
-];
+const json = (body: unknown) =>
+  new Response(JSON.stringify(body), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
 const MAX_ATTENDEES = 20;
 const MAX_ITEM_QUANTITY = 99;
-// Un pago sin terminar caduca a los 30 minutos (el mínimo de Stripe) y deja libre
-// su plaza; sin esto Stripe lo mantiene abierto 24 horas.
-const CHECKOUT_LIFETIME_SECONDS = 30 * 60;
-const checkoutExpiresAt = () => Math.floor(Date.now() / 1000) + CHECKOUT_LIFETIME_SECONDS;
 
-function getAllowedOrigins(): string[] {
-  const configured = Deno.env.get('ALLOWED_ORIGINS');
-  if (!configured) return DEFAULT_ALLOWED_ORIGINS;
-  return configured.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+// Sin letras ni números que se confundan (O/0, I/1)
+const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** Concepto de la transferencia: UROS- y 6 caracteres al azar. */
+function newReference(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return 'UROS-' + Array.from(bytes, b => REFERENCE_ALPHABET[b % REFERENCE_ALPHABET.length]).join('');
 }
 
-function validateReturnUrl(returnUrl: unknown): string {
-  if (typeof returnUrl !== 'string') throw new Error("Missing returnUrl");
-  let url: URL;
-  try {
-    url = new URL(returnUrl);
-  } catch {
-    throw new Error("Invalid returnUrl");
+const isTransferReference = (ref: unknown): ref is string => typeof ref === 'string' && ref.startsWith('UROS-');
+
+interface PaymentSettings { iban: string; holder: string; note: string; deadlineDays: number }
+
+/** Datos de la cuenta del club; sin IBAN no se puede vender nada de pago. */
+async function paymentSettings(admin: any): Promise<PaymentSettings> {
+  const { data, error } = await admin.from('payment_settings').select('iban, holder, note, deadline_days').maybeSingle();
+  if (error) throw new Error("No se pudieron leer los datos de pago del club.");
+  if (!data?.iban?.trim()) {
+    throw new Error("El club todavía no ha puesto su número de cuenta para las transferencias. Inténtalo más tarde.");
   }
-  if (!getAllowedOrigins().includes(url.origin)) {
-    throw new Error(`returnUrl origin not allowed: ${url.origin}`);
-  }
-  return `${url.origin}${url.pathname}`;
+  return {
+    iban: data.iban.trim(), holder: (data.holder || '').trim(), note: (data.note || '').trim(),
+    deadlineDays: data.deadline_days || 3,
+  };
+}
+
+/**
+ * Respuesta de una compra o reserva por transferencia: los datos para pagar, que la
+ * web enseña, y el aviso de si se ha mandado el email con ellos.
+ */
+async function transferResponse(
+  email: string | undefined, reference: string, amount: number, items: string[], settings: PaymentSettings,
+): Promise<Response> {
+  const emailSent = email
+    ? await sendMail(transferMail(email, { items, amount, reference, ...settings }))
+    : false;
+  return json({ transfer: { reference, amount, ...settings }, emailSent });
 }
 
 function isPositiveInt(value: unknown, max: number): value is number {
@@ -136,12 +151,10 @@ interface Coupon {
 }
 
 /**
- * Cupón del evento listo para usar, o un error. Un cupón apunta al último pago en el que
- * se usó: está gastado si ese pago se completó, y ocupado mientras siga abierto.
- * `owner` es quien se inscribe: si el pago abierto es de su misma inscripción (mismo
- * usuario y jugador), no cuenta como ocupado, porque al reintentar se cierra antes de
- * abrir el nuevo. Con `attendeeKey` null (solo consultar el precio) vale cualquier
- * inscripción del mismo usuario.
+ * Cupón del evento listo para usar, o un error. Un cupón apunta a la última inscripción
+ * en la que se usó (por su concepto): está gastado si esa inscripción está pagada, y
+ * reservado mientras espere su transferencia. `owner` es quien se inscribe; con
+ * `attendeeKey` null (solo consultar el precio) vale cualquier inscripción del mismo usuario.
  */
 async function findUsableCoupon(
   admin: any, eventId: string, code: string, owner: { userId: string; attendeeKey: string | null },
@@ -155,34 +168,30 @@ async function findUsableCoupon(
   if (error) throw new Error("No se pudo comprobar el cupón.");
   if (!coupon) throw new Error("Este cupón no existe o no es de este evento.");
 
-  const sessionId: string | null = coupon.stripe_session_id;
-  if (sessionId) {
+  const ref: string | null = coupon.stripe_session_id;
+  if (ref) {
     const { data: reg, error: regError } = await admin
       .from('event_registrations')
       .select('status, user_id, attendee_key')
-      .eq('stripe_session_id', sessionId)
+      .eq('stripe_session_id', ref)
       .maybeSingle();
     if (regError) throw new Error("No se pudo comprobar el cupón.");
     if (reg?.status === 'completed') throw new Error("Este cupón ya se ha usado.");
-    const ownRetry = reg?.status === 'pending' && reg.user_id === owner.userId &&
-      (owner.attendeeKey === null || reg.attendee_key === owner.attendeeKey);
-    if (!ownRetry && sessionId.startsWith('cs_')) {
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      if (session.status === 'complete') throw new Error("Este cupón ya se ha usado.");
-      if (session.status === 'open') {
-        throw new Error("Este cupón se está usando en otro pago ahora mismo. Si es tuyo, termina o cancela ese pago, o espera media hora.");
-      }
+    // Los pagos con tarjeta antiguos que quedaron a medias ya caducaron: no cuentan
+    const own = reg?.user_id === owner.userId && (owner.attendeeKey === null || reg.attendee_key === owner.attendeeKey);
+    if (reg?.status === 'pending' && isTransferReference(ref) && !own) {
+      throw new Error("Este cupón ya está reservado en otra inscripción. Si crees que es un error, habla con el club.");
     }
   }
-  return { id: coupon.id, code: coupon.code, price: Number(coupon.price), stripe_session_id: sessionId };
+  return { id: coupon.id, code: coupon.code, price: Number(coupon.price), stripe_session_id: ref };
 }
 
 /**
- * Asigna el cupón a un pago nuevo solo si nadie lo ha cogido desde que se comprobó
- * (sigue apuntando al mismo pago de antes). false si otro pago se ha adelantado.
+ * Asigna el cupón a una inscripción nueva solo si nadie lo ha cogido desde que se comprobó
+ * (sigue apuntando a la misma de antes). false si otra se ha adelantado.
  */
-async function claimCoupon(admin: any, coupon: Coupon, sessionId: string, userId: string): Promise<boolean> {
-  let query = admin.from('event_coupons').update({ stripe_session_id: sessionId, user_id: userId }).eq('id', coupon.id);
+async function claimCoupon(admin: any, coupon: Coupon, reference: string, userId: string): Promise<boolean> {
+  let query = admin.from('event_coupons').update({ stripe_session_id: reference, user_id: userId }).eq('id', coupon.id);
   query = coupon.stripe_session_id ? query.eq('stripe_session_id', coupon.stripe_session_id) : query.is('stripe_session_id', null);
   const { data, error } = await query.select('id');
   return !error && Array.isArray(data) && data.length === 1;
@@ -193,39 +202,11 @@ function registrationError(error: { code?: string; message: string }): Error {
   return new Error(error.code === 'P0001' ? error.message : "DB insert failed: " + error.message);
 }
 
-async function cancelCheckout(sessionId: unknown, userId: string, supabaseAdminClient: any): Promise<Response> {
-  if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) throw new Error("Invalid session id");
-
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-  if (session.metadata?.userId !== userId) throw new Error("Forbidden");
-  if (session.status === 'open') await stripe.checkout.sessions.expire(sessionId);
-  if (session.status === 'complete') {
-    return new Response(JSON.stringify({ cancelled: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-  }
-
-  // Lo mismo que hará el webhook con checkout.session.expired; solo filas pendientes
-  const [ordersResult, registrationsResult, appointmentsResult] = await Promise.all([
-    supabaseAdminClient.from('orders').update({ status: 'cancelled' })
-      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
-    supabaseAdminClient.from('event_registrations').update({ status: 'cancelled' })
-      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('status', 'pending'),
-    supabaseAdminClient.from('appointments').update({ status: 'cancelled', payment: 'failed' })
-      .eq('stripe_session_id', sessionId).eq('user_id', userId).eq('payment', 'pending'),
-  ]);
-  const dbError = ordersResult.error || registrationsResult.error || appointmentsResult.error;
-  if (dbError) throw new Error("DB update failed: " + dbError.message);
-
-  return new Response(JSON.stringify({ cancelled: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-}
-
 const madridWhen = new Intl.DateTimeFormat('es-ES', {
   timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
 });
 
-/**
- * Cita de fisio o recuperación de pago: se aparta el hueco (insert_user_appointment, que
- * comprueba que siga libre) y se abre el pago. El webhook la confirma o la cancela.
- */
+/** Cita de pago: se aparta el hueco (insert_user_appointment, que comprueba que siga libre) hasta que llegue la transferencia. */
 async function appointmentCheckout(body: any, user: { id: string; email?: string }, admin: any): Promise<Response> {
   const appt = body.appointment;
   if (
@@ -234,24 +215,7 @@ async function appointmentCheckout(body: any, user: { id: string; email?: string
   ) {
     throw new Error("Datos de la cita no válidos.");
   }
-  const safeReturnUrl = validateReturnUrl(body.returnUrl);
-
-  // Un pago de cita a medias (otra pestaña, o volvió atrás sin cancelar) se cierra antes de
-  // abrir otro, y su hueco queda libre; si ya se pagó, no se abre uno nuevo.
-  const { data: open, error: openError } = await admin.from('appointments')
-    .select('id, stripe_session_id')
-    .eq('user_id', user.id).eq('payment', 'pending').eq('status', 'booked');
-  if (openError) throw new Error("No se pudo comprobar tus citas.");
-  for (const row of open || []) {
-    if (typeof row.stripe_session_id === 'string' && row.stripe_session_id.startsWith('cs_')) {
-      const previous = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
-      if (previous.status === 'complete') {
-        throw new Error("Tu pago anterior de una cita ya se ha completado. En unos segundos aparecerá en \"Mis citas\".");
-      }
-      if (previous.status === 'open') await stripe.checkout.sessions.expire(row.stripe_session_id);
-    }
-    await admin.from('appointments').update({ status: 'cancelled', payment: 'failed' }).eq('id', row.id).eq('payment', 'pending');
-  }
+  const settings = await paymentSettings(admin);
 
   const { data: appointmentId, error: holdError } = await admin.rpc('insert_user_appointment', {
     p_user_id: user.id, p_provider_id: appt.providerId, p_starts_at: appt.startsAt,
@@ -259,47 +223,19 @@ async function appointmentCheckout(body: any, user: { id: string; email?: string
   });
   if (holdError || !appointmentId) throw new Error(holdError?.message || "No se pudo reservar la cita.");
 
-  const release = () => admin.from('appointments').update({ status: 'cancelled', payment: 'failed' })
-    .eq('id', appointmentId).eq('payment', 'pending');
-  try {
-    const { data: row, error: rowError } = await admin.from('appointments')
-      .select('amount, starts_at, patient_name, provider:appointment_providers(name, service)')
-      .eq('id', appointmentId).single();
-    if (rowError || !row) throw new Error("No se pudo preparar el pago de la cita.");
-    const amount = roundCents(Number(row.amount));
-    if (!Number.isFinite(amount) || amount < 0.5) throw new Error("El importe mínimo para pagar con tarjeta es 0,50 €.");
-
-    const session = await stripe.checkout.sessions.create({
-      customer_email: user.email || undefined,
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: `Cita: ${row.provider.service} con ${row.provider.name}`,
-            description: `${madridWhen.format(new Date(row.starts_at))} | ${row.patient_name}`,
-          },
-          unit_amount: Math.round(amount * 100),
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      expires_at: checkoutExpiresAt(),
-      success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${safeReturnUrl}?canceled=true`,
-      metadata: { userId: user.id, appointmentId, type: 'appointment' },
-    });
-
-    const { error: linkError } = await admin.from('appointments').update({ stripe_session_id: session.id }).eq('id', appointmentId);
-    if (linkError) {
-      await stripe.checkout.sessions.expire(session.id);
-      throw new Error("No se pudo preparar el pago de la cita.");
-    }
-    return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-  } catch (err) {
-    await release();
-    throw err;
+  const reference = newReference();
+  const { data: row, error: rowError } = await admin.from('appointments')
+    .update({ stripe_session_id: reference })
+    .eq('id', appointmentId)
+    .select('amount, starts_at, patient_name, provider:appointment_providers(name, service)')
+    .single();
+  if (rowError || !row) {
+    await admin.from('appointments').update({ status: 'cancelled', payment: 'failed' }).eq('id', appointmentId).eq('payment', 'pending');
+    throw new Error("No se pudo preparar la cita.");
   }
+  const amount = roundCents(Number(row.amount));
+  const item = `Cita: ${row.provider.service} con ${row.provider.name}, ${madridWhen.format(new Date(row.starts_at))} (${row.patient_name})`;
+  return await transferResponse(user.email, reference, amount, [item], settings);
 }
 
 serve(async (req: Request) => {
@@ -308,16 +244,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured.");
-    
-    if (!stripe) {
-      stripe = new Stripe(stripeKey, {
-        apiVersion: "2022-11-15",
-        httpClient: Stripe.createFetchHttpClient(),
-      });
-    }
-
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -332,21 +258,15 @@ serve(async (req: Request) => {
 
     const body = await req.json();
 
-    // El usuario ha vuelto de Stripe con "cancelar": se cierra la sesión de pago
-    // y sus pedidos o inscripciones pendientes pasan a cancelados al momento.
-    if (body.cancelSessionId !== undefined) {
-      return await cancelCheckout(body.cancelSessionId, user.id, supabaseAdminClient);
-    }
-
     if (body.checkoutType === 'appointment') {
       return await appointmentCheckout(body, user, supabaseAdminClient);
     }
 
-    const { checkoutType, cartItems, returnUrl, campusRegistration } = body;
+    const { checkoutType, cartItems, campusRegistration } = body;
     // El email es siempre el de la cuenta, no uno que mande el navegador
     const userEmail = user.email;
 
-    // Precio de un cupón antes de pagar, para enseñarlo en el formulario
+    // Precio de un cupón antes de inscribirse, para enseñarlo en el formulario
     if (body.checkCoupon !== undefined) {
       const eventId = body.checkCoupon?.eventId;
       const code = couponCode(body.checkCoupon?.code);
@@ -355,17 +275,12 @@ serve(async (req: Request) => {
       if (!ev || ev.active === false) throw new Error("Este evento ya no admite inscripciones.");
       if (!isTournament(ev)) throw new Error("Los cupones solo valen para torneos y viajes.");
       const coupon = await findUsableCoupon(supabaseAdminClient, eventId, code, { userId: user.id, attendeeKey: null });
-      return new Response(JSON.stringify({ price: coupon.price }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      return json({ price: coupon.price });
     }
 
     // Inscripción a un campus, torneo o viaje (checkoutType 'campus' para todos los eventos)
     if (checkoutType === 'campus') {
       if (!campusRegistration) throw new Error("Missing campus registration data");
-      // Ya no hay reservas para pagar en mano: todo se paga con tarjeta
-      if (campusRegistration.payLocal === true) {
-        throw new Error("El pago en mano ya no está disponible. Inscríbete pagando con tarjeta.");
-      }
-      const safeReturnUrl = validateReturnUrl(returnUrl);
 
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
@@ -373,7 +288,7 @@ serve(async (req: Request) => {
         .select('title, type, active, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
-        
+
       if (eventError || !dbEvent) {
         throw new Error(`Failed to securely fetch event constraints: ${eventError?.message}`);
       }
@@ -403,26 +318,37 @@ serve(async (req: Request) => {
         throw new Error(`Cada nombre puede tener como mucho ${MAX_NAME_LENGTH} caracteres.`);
       }
 
-      const selectedDays = campusRegistration.selectedDays;
-      const eventDays = new Set<string>(dbEvent.dates || []);
-      if (
-        !Array.isArray(selectedDays) ||
-        selectedDays.length === 0 ||
-        new Set(selectedDays).size !== selectedDays.length ||
-        selectedDays.some((d: unknown) => typeof d !== 'string' || !eventDays.has(d))
-      ) {
-        throw new Error(`Los días elegidos no coinciden con los del ${eventNoun}.`);
-      }
-      // Con precio por evento completo no se eligen días: se va a todos
       const table = eventTable(dbEvent);
       const options = eventOptions(dbEvent);
       // Una tabla o unas opciones rotas nunca deben acabar cobrando con el sistema anterior (o gratis)
       if (tournament ? !options : (dbEvent.price_table != null && !table)) {
         throw new Error("El precio de este evento no está bien configurado.");
       }
-      if ((tournament || (table && !table.byDays)) && selectedDays.length !== eventDays.size) {
-        throw new Error(`Este ${eventNoun} se paga completo: hay que inscribirse a todos sus días.`);
-      }
+
+      // Días de cada asistente. Con precio por evento completo (y en torneos) se va a todos.
+      const eventDates: string[] = [...(dbEvent.dates || [])].sort();
+      const eventDays = new Set<string>(eventDates);
+      const wholeEvent = tournament || (table !== null && !table.byDays);
+      // Una web abierta antes de este cambio manda selectedDays: los mismos días para todos
+      const rawDays = Array.isArray(campusRegistration.attendeeDays)
+        ? campusRegistration.attendeeDays
+        : Array.from({ length: numAttendees }, () => campusRegistration.selectedDays);
+      if (rawDays.length !== numAttendees) throw new Error("Faltan los días de algún asistente.");
+      const attendeeDays: string[][] = rawDays.map((days: unknown, i: number) => {
+        const who = attendeeNames[i].trim();
+        if (
+          !Array.isArray(days) || days.length === 0 ||
+          new Set(days).size !== days.length ||
+          days.some((d: unknown) => typeof d !== 'string' || !eventDays.has(d))
+        ) {
+          throw new Error(`Los días elegidos para ${who} no coinciden con los del ${eventNoun}.`);
+        }
+        if (wholeEvent && days.length !== eventDays.size) {
+          throw new Error(`Este ${eventNoun} se paga completo: hay que inscribirse a todos sus días.`);
+        }
+        return [...days as string[]].sort();
+      });
+      const selectedDays = eventDates.filter(d => attendeeDays.some(days => days.includes(d)));
 
       // Opción de precio elegida (p. ej. con o sin autobús); con una sola no hace falta elegir
       let option: { label: string; price: number } | null = null;
@@ -442,7 +368,8 @@ serve(async (req: Request) => {
       const code = couponCode(campusRegistration.coupon);
       if (code && !tournament) throw new Error("Los cupones solo valen para torneos y viajes.");
 
-      // Una inscripción ya pagada no se puede volver a abrir desde aquí
+      // Una inscripción pagada, o esperando su transferencia, no se rehace desde aquí:
+      // si ya se hubiera transferido con el concepto anterior, el club no la encontraría.
       const { data: existing } = await supabaseAdminClient
         .from('event_registrations')
         .select('status, stripe_session_id')
@@ -455,45 +382,19 @@ serve(async (req: Request) => {
           ? `${attendeeNames[0].trim()} ya está inscrito en este ${eventNoun}.`
           : `Ya tienes una inscripción pagada en este ${eventNoun}.`);
       }
+      if (existing?.status === 'pending' && isTransferReference(existing.stripe_session_id)) {
+        throw new Error(`${tournament ? `${attendeeNames[0].trim()} ya tiene` : 'Ya tienes'} una inscripción en este ${eventNoun} esperando la transferencia (concepto ${existing.stripe_session_id}). Si quieres cambiarla, habla con el club.`);
+      }
 
-      // El cupón se comprueba antes de tocar nada; se asigna al pago nuevo más abajo
+      // El cupón se comprueba antes de tocar nada; se asigna a la inscripción más abajo
       const coupon = code
         ? await findUsableCoupon(supabaseAdminClient, campusRegistration.eventId, code, { userId: user.id, attendeeKey: key })
         : null;
 
-      // Si había un pago a medias (otra pestaña, o volvió atrás sin cancelar), se cierra
-      // antes de abrir otro: si no, al pagar el antiguo no habría inscripción que confirmar.
-      const previousSession = existing?.status === 'pending' ? existing.stripe_session_id : null;
-      if (typeof previousSession === 'string' && previousSession.startsWith('cs_')) {
-        const previous = await stripe.checkout.sessions.retrieve(previousSession);
-        if (previous.status === 'complete') {
-          throw new Error(`Tu pago anterior para este ${eventNoun} ya se ha completado. En unos minutos aparecerá como inscrito.`);
-        }
-        if (previous.status === 'open') await stripe.checkout.sessions.expire(previousSession);
-      }
-
-      // Aforo: cuentan las inscripciones no canceladas, menos la que se está rehaciendo
-      if (dbEvent.max_capacity) {
-        const { data: others, error: capacityError } = await supabaseAdminClient
-          .from('event_registrations')
-          .select('num_attendees, status, user_id, attendee_key')
-          .eq('event_id', campusRegistration.eventId);
-        if (capacityError) throw new Error(`No se pudo comprobar el aforo: ${capacityError.message}`);
-        const taken = (others || [])
-          .filter((r: any) => r.status !== 'cancelled' && !(r.user_id === user.id && r.attendee_key === key))
-          .reduce((sum: number, r: any) => sum + (Number(r.num_attendees) || 0), 0);
-        const left = Number(dbEvent.max_capacity) - taken;
-        if (numAttendees > left) {
-          if (left <= 0) throw new Error(`Este ${eventNoun} está completo.`);
-          throw new Error(left === 1 ? `Solo queda 1 plaza en este ${eventNoun}.` : `Solo quedan ${left} plazas en este ${eventNoun}.`);
-        }
-      }
-
       // 3. Precio calculado aquí, nunca el que manda el navegador: el del cupón, el de la
       // opción del torneo o el de la tabla del campus (_shared/pricing.ts)
-      const numDays = selectedDays.length;
       const safeTotalAmount = roundCents(
-        coupon ? coupon.price : option ? option.price : eventPrice(dbEvent, numAttendees, numDays),
+        coupon ? coupon.price : option ? option.price : registrationPrice(dbEvent, attendeeDays.map(d => d.length)),
       );
       if (!Number.isFinite(safeTotalAmount) || safeTotalAmount < 0) throw new Error("El precio de este evento no está bien configurado.");
 
@@ -501,85 +402,38 @@ serve(async (req: Request) => {
       if (option?.label) customData['Opción de precio'] = option.label;
       if (coupon) customData['Cupón'] = coupon.code;
 
-      const registration = {
+      const free = safeTotalAmount === 0;
+      const settings = free ? null : await paymentSettings(supabaseAdminClient);
+      const reference = free ? `free_${crypto.randomUUID().substring(0, 8)}` : newReference();
+
+      const couponTaken = () => new Error("Este cupón se acaba de usar en otra inscripción. Si crees que es un error, habla con el club.");
+      if (coupon && !(await claimCoupon(supabaseAdminClient, coupon, reference, user.id))) throw couponTaken();
+
+      // El aforo lo comprueba la base de datos al guardar (cuentan también las pendientes de pago)
+      const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
         event_id: campusRegistration.eventId,
         user_id: user.id,
         attendee_key: key,
         selected_days: selectedDays,
+        attendee_days: attendeeDays,
         num_attendees: numAttendees,
         attendee_names: attendeeNames.map((n: string) => n.trim()),
         amount: safeTotalAmount, // [SECURE] Override with backend calculation
-        status: 'pending',
-        custom_data: customData
-      };
-      const couponTaken = () => new Error("Este cupón se acaba de usar en otro pago. Si crees que es un error, habla con el club.");
-
-      // Gratis (evento gratis o cupón de 0 €): no hay nada que cobrar, la inscripción queda confirmada
-      if (safeTotalAmount === 0) {
-        const freeSessionId = `free_${crypto.randomUUID().substring(0, 8)}`;
-        if (coupon && !(await claimCoupon(supabaseAdminClient, coupon, freeSessionId, user.id))) throw couponTaken();
-        const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
-          ...registration,
-          status: 'completed',
-          stripe_session_id: freeSessionId
-        }, { onConflict: 'event_id,user_id,attendee_key' });
-
-        if (insertError) throw registrationError(insertError);
-
-        return new Response(JSON.stringify({ url: null, free: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-      }
-
-      // Stripe no cobra menos de 0,50 €
-      if (safeTotalAmount < 0.5) throw new Error("El importe mínimo para pagar con tarjeta es 0,50 €.");
-      const finalPrice = Math.round(safeTotalAmount * 100);
-
-      const detail = tournament
-        ? [attendeeNames[0].trim(), option?.label, coupon ? `cupón ${coupon.code}` : ''].filter(Boolean).join(' | ')
-        : table && !table.byDays
-          ? `${numAttendees} asist. | evento completo`
-          : `${numAttendees} asist. | ${numDays} ${numDays === 1 ? 'día' : 'días'}`;
-      const line_items = [{
-        price_data: {
-          currency: 'eur',
-          product_data: { name: `Inscripción: ${dbEvent.title}`, description: detail },
-          unit_amount: finalPrice,
-        },
-        quantity: 1,
-      }];
-
-      const session = await stripe.checkout.sessions.create({
-        customer_email: userEmail || undefined,
-        payment_method_types: ['card'],
-        line_items,
-        mode: 'payment',
-        expires_at: checkoutExpiresAt(),
-        success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${safeReturnUrl}?canceled=true`,
-        metadata: { userId: user.id, eventId: campusRegistration.eventId, type: 'campus' }
-      });
-
-      // Si otro pago se ha llevado el cupón mientras tanto, este no se puede usar
-      if (coupon && !(await claimCoupon(supabaseAdminClient, coupon, session.id, user.id))) {
-        await stripe.checkout.sessions.expire(session.id);
-        throw couponTaken();
-      }
-
-      // Upsert registration as pending
-      const { error: insertError } = await supabaseAdminClient.from('event_registrations').upsert({
-        ...registration,
-        stripe_session_id: session.id
+        // Gratis (evento gratis o cupón de 0 €): no hay nada que pagar, queda confirmada
+        status: free ? 'completed' : 'pending',
+        stripe_session_id: reference,
+        custom_data: customData,
       }, { onConflict: 'event_id,user_id,attendee_key' });
+      if (insertError) throw registrationError(insertError);
 
-      if (insertError) {
-        // Sin inscripción no se puede cobrar (p. ej. otra familia ha cogido la última plaza)
-        await stripe.checkout.sessions.expire(session.id).catch(() => {});
-        throw registrationError(insertError);
-      }
+      if (free) return json({ free: true });
 
-      return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      const who = tournament
+        ? [attendeeNames[0].trim(), option?.label].filter(Boolean).join(', ')
+        : attendeeNames.map((n: string, i: number) => wholeEvent ? n.trim() : `${n.trim()} (${attendeeDays[i].length} ${attendeeDays[i].length === 1 ? 'día' : 'días'})`).join(', ');
+      return await transferResponse(userEmail, reference, safeTotalAmount, [`Inscripción a ${dbEvent.title}: ${who}`], settings!);
     }
 
-    const safeReturnUrl = validateReturnUrl(returnUrl);
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
       throw new Error("Cart is empty");
     }
@@ -604,10 +458,9 @@ serve(async (req: Request) => {
 
     const dbItemsMap = new Map<string, DbItem>(dbItems.map((i: DbItem) => [i.id, i]));
 
-    const line_items: any[] = [];
     const orderInserts: any[] = [];
+    const lines: string[] = [];
 
-    // Validation & Stripe object construction
     for (const cartItem of cartItems as CartItemPayload[]) {
       const dbItem = dbItemsMap.get(cartItem.itemId);
       if (!dbItem) throw new Error(`Item ${cartItem.itemId} not found in database.`);
@@ -618,26 +471,10 @@ serve(async (req: Request) => {
         throw new Error(`La cantidad debe ser un entero entre 1 y ${MAX_ITEM_QUANTITY}.`);
       }
 
-      const rawPrice = dbItem.price || 0;
-      const finalPrice = Math.max(Math.round(rawPrice * 100), 1);
-      
+      const price = Math.max(Number(dbItem.price) || 0, 0);
       const textOptionsStr = validateOptions(dbItem, cartItem.options);
-
-      // Only create Stripe line item for items with real prices
-      if (rawPrice > 0) {
-        line_items.push({
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: dbItem.name,
-              description: textOptionsStr || undefined,
-              images: (dbItem.image_url && dbItem.image_url.startsWith('http')) ? [dbItem.image_url] : undefined,
-            },
-            unit_amount: finalPrice, 
-          },
-          quantity: cartItem.quantity,
-        });
-      }
+      const amount = roundCents(price * cartItem.quantity);
+      lines.push(`${cartItem.quantity} x ${dbItem.name}${textOptionsStr ? ` (${textOptionsStr})` : ''}: ${formatEuros(amount)}`);
 
       // DB order row — only columns that exist in the orders table schema
       orderInserts.push({
@@ -647,44 +484,19 @@ serve(async (req: Request) => {
         item_id: dbItem.id,
         size: textOptionsStr || null,
         quantity: cartItem.quantity,
-        amount: rawPrice * cartItem.quantity,
+        amount,
         status: 'pending'
       });
     }
 
-    // If ALL items are free, record orders directly without Stripe
-    if (line_items.length === 0) {
-      const freeSessionId = `free_${crypto.randomUUID().substring(0, 8)}`;
-      for (const order of orderInserts) {
-        order.stripe_session_id = freeSessionId;
-      }
-      const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
-      if (insertError) {
-        throw new Error("Error saving free order: " + insertError.message);
-      }
-      return new Response(JSON.stringify({ url: null, freeOrder: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      customer_email: userEmail || undefined,
-      payment_method_types: ['card'],
-      line_items: line_items,
-      mode: 'payment',
-      expires_at: checkoutExpiresAt(),
-      success_url: `${safeReturnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${safeReturnUrl}?canceled=true`,
-      metadata: {
-        userId: user.id,
-        cartSummary: `Cart: ${cartItems.length} items`
-      }
-    });
-
-    // Attach stripe session ID to all orders
+    const total = roundCents(orderInserts.reduce((sum, o) => sum + o.amount, 0));
+    // Todo gratis: no hay nada que pagar; el pedido queda listo para entregar
+    const free = total === 0;
+    const settings = free ? null : await paymentSettings(supabaseAdminClient);
+    const reference = free ? `free_${crypto.randomUUID().substring(0, 8)}` : newReference();
     for (const order of orderInserts) {
-      order.stripe_session_id = session.id;
+      order.stripe_session_id = reference;
+      if (free) order.status = 'processing';
     }
 
     const { error: insertError } = await supabaseAdminClient.from('orders').insert(orderInserts);
@@ -692,10 +504,8 @@ serve(async (req: Request) => {
       throw new Error("DB insert failed: " + insertError.message);
     }
 
-    return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+    if (free) return json({ free: true });
+    return await transferResponse(userEmail, reference, total, lines, settings!);
   } catch (error: any) {
     console.error("Edge Function Exception:", error);
     // Return a 400 status with JSON so the frontend `invoke` parser can read the exact error message

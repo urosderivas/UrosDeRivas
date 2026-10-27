@@ -301,14 +301,14 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (error) throw error;
     return data.map((n: any) => ({
       id: n.id, title: n.title, body: n.body || '', imageUrl: n.image_url || undefined,
-      eventId: n.event_id || undefined, publishedAt: n.published_at,
+      eventId: n.event_id || undefined, publishedAt: n.published_at, active: n.active !== false,
     }));
   }
 
   async saveNews(post: Omit<NewsPost, 'id'>, id?: string): Promise<void> {
     const payload: any = {
       title: post.title, body: post.body, image_url: post.imageUrl || null,
-      event_id: post.eventId || null, published_at: post.publishedAt,
+      event_id: post.eventId || null, published_at: post.publishedAt, active: post.active,
     };
     if (!id) payload.created_by = (await this.getUser())?.id;
     const { error } = id
@@ -350,6 +350,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
         ...d,
         id: d.registration_id,
         selected_days: r.selected_days || [],
+        attendee_days: r.attendee_days || null,
         num_attendees: r.num_attendees || 1,
         attendee_names: r.attendee_names || [],
         amount: r.amount || 0,
@@ -371,11 +372,14 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
 
   async getUserRegistrations(userId: string): Promise<OwnRegistration[]> {
     const { data, error } = await supabase.from('event_registrations')
-      .select('id, event_id, status, attendee_names, created_at')
+      .select('id, event_id, status, attendee_names, amount, stripe_session_id, created_at')
       .eq('user_id', userId)
       .order('created_at');
     if (error) return [];
-    return (data || []).map((r: any) => ({ id: r.id, event_id: r.event_id, status: r.status, attendee_names: r.attendee_names || [] }));
+    return (data || []).map((r: any) => ({
+      id: r.id, event_id: r.event_id, status: r.status, attendee_names: r.attendee_names || [],
+      amount: Number(r.amount) || 0, stripe_session_id: r.stripe_session_id || null,
+    }));
   }
 
   async getUserFullRegistrations(userId: string): Promise<any[]> {
@@ -452,27 +456,6 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async verifyPayment(sessionId: string): Promise<boolean> {
     const { data } = await supabase.from('orders').select('status').eq('stripe_session_id', sessionId).single();
     return data?.status === 'completed';
-  }
-
-  async checkStripePayment(sessionId: string): Promise<{ payment_status: string; status: string }> {
-    const { data, error } = await supabase.functions.invoke('verify-payment', {
-      body: { sessionId }
-    });
-    if (error) throw error;
-    return data;
-  }
-
-  /** Estado en Stripe de varias sesiones, de 100 en 100 (la función no acepta más de una vez). */
-  async checkStripePaymentsBatch(sessionIds: string[]): Promise<Record<string, { payment_status: string; status: string }>> {
-    const results: Record<string, { payment_status: string; status: string }> = {};
-    for (let i = 0; i < sessionIds.length; i += 100) {
-      const { data, error } = await supabase.functions.invoke('verify-payment', {
-        body: { sessionIds: sessionIds.slice(i, i + 100) }
-      });
-      if (error) throw error;
-      Object.assign(results, data);
-    }
-    return results;
   }
 
   // ============================================

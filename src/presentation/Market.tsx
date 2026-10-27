@@ -3,7 +3,8 @@ import { useStore } from './store';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
-import { StripeAdapter } from '../infrastructure/StripeAdapter';
+import { CheckoutResult, PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
+import { TransferModal } from './components/TransferDetails';
 import { MarketItemModal } from './MarketItemModal';
 import { MyOrdersModal } from './MyOrdersModal';
 import { MessageModal } from './components/MessageModal';
@@ -12,15 +13,14 @@ import { MarketItem } from '../domain/entities';
 import { ShoppingCart } from 'lucide-react';
 import { CartSidebar } from './components/CartSidebar';
 import { ProductModal } from './ProductModal';
-import { takeCartCheckout } from './store';
 import { ProductCard } from './components/ProductCard';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
-const stripeAdapter = new StripeAdapter();
+const payments = new PaymentAdapter();
 
 export function Market() {
-  const { user, items, loading, fetchItems, cart, addToCart, clearCart } = useStore();
+  const { user, items, loading, fetchItems, cart, addToCart } = useStore();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -34,6 +34,7 @@ export function Market() {
   const [editItem, setEditItem] = useState<MarketItem | null>(null);
 
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
   const [confirmPrompt, setConfirmPrompt] = useState<{ open: boolean, action: (() => void) | null, message: string }>({ open: false, action: null, message: '' });
 
@@ -58,23 +59,18 @@ export function Market() {
   useEffect(() => {
     fetchItems();
     const params = new URLSearchParams(location.search);
-    if (params.get('success')) {
-      if (takeCartCheckout()) clearCart();
-      showMessage('Pago Completado', '¡Pago completado con éxito! El club se pondrá en contacto contigo para la entrega. Puedes seguir el estado en "Mis pedidos".');
-    }
-    if (params.get('carrito')) setCartOpen(true);
-    if (params.get('canceled')) {
-      takeCartCheckout();
-      stripeAdapter.cancelPendingCheckout().finally(() =>
-        showMessage('Pago Cancelado', 'El pago ha sido cancelado. Puedes volver a intentarlo cuando quieras.')
-      );
-    }
-    // Avisos ya atendidos: se limpian del enlace para que otro clic en el carrito
-    // vuelva a abrirlo y recargar no repita el mensaje
-    if (params.get('success') || params.get('carrito') || params.get('canceled')) {
+    if (params.get('carrito')) {
+      setCartOpen(true);
+      // Ya atendido: se quita del enlace para que otro clic en el carrito vuelva a abrirlo
       navigate('/market', { replace: true });
     }
-  }, [fetchItems, clearCart, location.search, navigate]);
+  }, [fetchItems, location.search, navigate]);
+
+  // Pedido hecho: gratis, o con los datos para la transferencia
+  const handleOrdered = (result: CheckoutResult) => {
+    if (result.free) showMessage('Pedido hecho', 'Tu pedido está confirmado. El club se pondrá en contacto contigo para la entrega. Puedes seguirlo en "Mis pedidos".');
+    else setTransfer(result);
+  };
 
   const handleSaveItem = async (itemData: Omit<MarketItem, 'id'>) => {
     if (editItem) {
@@ -116,18 +112,19 @@ export function Market() {
     if (!user) return;
     setCheckoutLoading(item.id);
     try {
-      const url = await stripeAdapter.createCheckoutSessionFromCart([{
+      const result = await payments.checkoutCart([{
         cartItemId: `${item.id}-quick`,
         product: item,
         quantity: 1,
         selectedVariables: config
-      }], user.email);
-      window.location.href = url;
+      }]);
+      setSelectedItem(null);
+      handleOrdered(result);
     } catch (e: any) {
       setSelectedItem(null);
-      showMessage('Error procesando pago', e.message);
-      setCheckoutLoading(null);
+      showMessage('No se pudo hacer el pedido', e.message);
     }
+    setCheckoutLoading(null);
   };
 
   const SkeletonGrid = () => (
@@ -199,7 +196,8 @@ export function Market() {
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
       />
-      <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} />
+      <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} onOrdered={handleOrdered} />
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="pedido" />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
       <MessageModal

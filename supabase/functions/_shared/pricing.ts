@@ -142,6 +142,28 @@ export function eventPrice(ev: PricedEvent, numAttendees: number, numDays: numbe
   return table ? tablePrice(table, numAttendees, numDays) : legacyPrice(ev, numAttendees, numDays);
 }
 
+/**
+ * Precio de una inscripción en la que cada asistente elige sus días (un número de días
+ * por asistente): todos pagan la casilla de la tabla para los días del que menos va, y
+ * cada uno que va más días paga aparte sus días de más como 1 asistente.
+ * Ej.: 4 asistentes de 4, 4, 5 y 6 días → (4 asist., 4 días) + (1 asist., 1 día) + (1 asist., 2 días).
+ * Si todos van los mismos días, sale igual que eventPrice.
+ */
+export function registrationPrice(ev: PricedEvent, daysPerAttendee: number[]): number {
+  return roundCents(registrationTiers(ev, daysPerAttendee).reduce((sum, t) => sum + t.price, 0));
+}
+
+/** Partes de registrationPrice, para enseñar el desglose: la común y la de cada asistente que va más días. */
+export function registrationTiers(ev: PricedEvent, daysPerAttendee: number[]): { attendees: number; days: number; price: number }[] {
+  if (daysPerAttendee.length === 0) return [];
+  const base = Math.min(...daysPerAttendee);
+  return [
+    { attendees: daysPerAttendee.length, days: base, price: eventPrice(ev, daysPerAttendee.length, base) },
+    ...daysPerAttendee.filter(d => d > base).sort((x, y) => x - y)
+      .map(d => ({ attendees: 1, days: d - base, price: eventPrice(ev, 1, d - base) })),
+  ];
+}
+
 /** Precio más bajo posible (1 asistente, 1 día o evento completo), para el "Desde X €". */
 export function startingPrice(ev: PricedEvent): number {
   const options = eventOptions(ev);

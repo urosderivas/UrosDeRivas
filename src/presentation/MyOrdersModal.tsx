@@ -3,17 +3,31 @@ import { useStore } from './store';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
 import { Modal } from './components/Modal';
-import { ShoppingBag, FileText } from 'lucide-react';
+import { ShoppingBag, FileText, Landmark } from 'lucide-react';
 import type { InvoiceData } from '../application/services/InvoiceGenerator';
+import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
+import { TransferModal } from './components/TransferDetails';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
+const payments = new PaymentAdapter();
 
 export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   const { user } = useStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
+
+  // Datos de la cuenta del club, para volver a ver cómo pagar lo pendiente
+  const showTransfer = async (reference: string, amount: number) => {
+    try {
+      const settings = await payments.getSettings();
+      setTransfer({ transfer: { ...settings, reference, amount }, emailSent: false });
+    } catch (e) {
+      console.error('No se pudieron cargar los datos de pago', e);
+    }
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -42,7 +56,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
     fetchOrders();
   }, [user]);
 
-  // Group orders by stripe_session_id
+  // Agrupados por concepto de la transferencia (o sesión de Stripe en los antiguos)
   const grouped = orders.reduce((acc, order) => {
     const key = order.stripe_session_id || order.id;
     if (!acc[key]) acc[key] = [];
@@ -80,12 +94,12 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, groupId: string) => {
     switch (status) {
       case 'completed': return 'COMPLETADO';
       case 'cancelled': return 'CANCELADO';
-      case 'processing': return 'PROCESANDO';
-      default: return 'PENDIENTE';
+      case 'processing': return 'PAGADO';
+      default: return groupId.startsWith('UROS-') ? 'PENDIENTE DE TRANSFERENCIA' : 'PENDIENTE';
     }
   };
 
@@ -98,7 +112,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
       maxWidth="650px"
     >
       <p className="text-secondary" style={{ marginTop: '-10px', marginBottom: '1.5rem' }}>
-        Sigue el estado de tus compras de la Tienda Oficial.
+        Sigue el estado de tus compras e inscripciones.
       </p>
       
       {loading ? (
@@ -132,7 +146,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
                     background: `${getStatusColor(worstStatus)}22`, color: getStatusColor(worstStatus),
                     textTransform: 'uppercase', letterSpacing: '0.04em'
                   }}>
-                    {getStatusLabel(worstStatus)}
+                    {getStatusLabel(worstStatus, groupId)}
                   </span>
                 </div>
 
@@ -154,9 +168,14 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
 
                 {/* Footer: total + invoice button */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(var(--tint), 0.08)', paddingTop: '8px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--primary-color)' }}>
+ <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--primary-color)' }}>
                     Total: €{groupTotal.toFixed(2)}
                   </span>
+                  {worstStatus === 'pending' && groupId.startsWith('UROS-') && (
+                    <button onClick={() => showTransfer(groupId, groupTotal)} className="btn-transfer-info">
+                      <Landmark size={14} /> Cómo pagar
+                    </button>
+                  )}
                   <button 
                     onClick={() => handleGenerateInvoice(groupOrders, groupId)}
                     disabled={generatingPdf === groupId}
@@ -176,6 +195,7 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
           })}
         </ul>
       )}
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="reserva" />
     </Modal>
   );
 }

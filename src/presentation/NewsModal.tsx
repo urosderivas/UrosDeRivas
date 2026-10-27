@@ -20,6 +20,7 @@ export function NewsModal({ isOpen, onClose, onSave, initial, events }: Props) {
   const [imageUrl, setImageUrl] = useState('');
   const [eventId, setEventId] = useState('');
   const [date, setDate] = useState('');
+  const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,6 +30,7 @@ export function NewsModal({ isOpen, onClose, onSave, initial, events }: Props) {
     setImageUrl(initial?.imageUrl || '');
     setEventId(initial?.eventId || '');
     setDate(toDateInput(initial?.publishedAt || new Date().toISOString()));
+    setActive(initial?.active !== false);
     setError('');
   }, [initial, isOpen]);
 
@@ -43,7 +45,7 @@ export function NewsModal({ isOpen, onClose, onSave, initial, events }: Props) {
         : new Date(`${date}T12:00:00`).toISOString();
       await onSave({
         title: title.trim(), body: body.trim(), imageUrl: imageUrl.trim() || undefined,
-        eventId: eventId || undefined, publishedAt,
+        eventId: eventId || undefined, publishedAt, active,
       });
       onClose();
     } catch (err: any) {
@@ -86,6 +88,10 @@ export function NewsModal({ isOpen, onClose, onSave, initial, events }: Props) {
             <input type="date" value={date} onChange={e => setDate(e.target.value)} required />
           </div>
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
+          Visible para los usuarios
+        </label>
         {error && <p className="modal-error">{error}</p>}
         <div className="modal-actions">
           <button type="button" onClick={onClose} className="btn-modal-cancel">Cancelar</button>

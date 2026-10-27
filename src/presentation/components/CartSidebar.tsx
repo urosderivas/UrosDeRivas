@@ -1,19 +1,21 @@
-import { useStore, markCartCheckout } from '../store';
+import { useStore } from '../store';
 import { X, Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 import './CartSidebar.css';
-import { StripeAdapter } from '../../infrastructure/StripeAdapter';
+import { CheckoutResult, PaymentAdapter } from '../../infrastructure/PaymentAdapter';
 import { useState } from 'react';
 
 interface CartSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   showMessage?: (title: string, message: string) => void;
+  /** Pedido hecho: la página enseña cómo pagarlo */
+  onOrdered: (result: CheckoutResult) => void;
 }
 
-const stripeAdapter = new StripeAdapter();
+const payments = new PaymentAdapter();
 
-export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) {
-  const { cart, removeFromCart, updateCartQuantity, user } = useStore();
+export function CartSidebar({ isOpen, onClose, showMessage, onOrdered }: CartSidebarProps) {
+  const { cart, removeFromCart, updateCartQuantity, clearCart, user } = useStore();
   const [loading, setLoading] = useState(false);
 
   const total = cart.reduce((acc, current) => acc + current.product.price * current.quantity, 0);
@@ -24,16 +26,17 @@ export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) 
   };
 
   const handleCheckout = async () => {
-    if(!user) return notify("Atención", "Inicia sesión para pagar.");
+    if(!user) return notify("Atención", "Inicia sesión para hacer el pedido.");
     setLoading(true);
     try {
-      const url = await stripeAdapter.createCheckoutSessionFromCart(cart, user.email);
-      markCartCheckout();
-      window.location.href = url;
+      const result = await payments.checkoutCart(cart);
+      clearCart();
+      onClose();
+      onOrdered(result);
     } catch(e: any) {
-      notify("Error procesando pago", e.message);
-      setLoading(false);
+      notify("No se pudo hacer el pedido", e.message);
     }
+    setLoading(false);
   };
 
   return (
@@ -90,7 +93,7 @@ export function CartSidebar({ isOpen, onClose, showMessage }: CartSidebarProps) 
               <span>€{total.toFixed(2)}</span>
             </div>
             <button className="checkout-btn" onClick={handleCheckout} disabled={loading}>
-              {loading ? 'Procesando...' : 'Pagar con tarjeta'}
+              {loading ? 'Procesando...' : 'Hacer pedido'}
             </button>
           </div>
         )}

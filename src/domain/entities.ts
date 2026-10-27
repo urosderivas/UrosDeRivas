@@ -68,6 +68,8 @@ export interface CampusRegistration {
   user_id: string;
   user_email?: string;
   selected_days: string[];
+  /** Días de cada asistente, en el orden de attendee_names (null en las antiguas: todos iguales) */
+  attendee_days?: string[][] | null;
   num_attendees: number;
   attendee_names: string[];
   amount: number;
@@ -83,6 +85,9 @@ export interface OwnRegistration {
   event_id: string;
   status: 'pending' | 'completed' | 'cancelled';
   attendee_names: string[];
+  amount: number;
+  /** Concepto de la transferencia (UROS-...), o la sesión de Stripe en las antiguas */
+  stripe_session_id: string | null;
 }
 
 /** Cupón de un torneo o viaje: un solo uso, fija el precio final. */
@@ -140,6 +145,8 @@ export interface NewsPost {
   /** Campus, torneo o viaje relacionado (opcional) */
   eventId?: string;
   publishedAt: string;
+  /** false = oculta: solo la ven los admins */
+  active: boolean;
 }
 
 /** Horario semanal de un calendario: "1" = lunes ... "7" = domingo, tramos ["09:00", "13:00"] en hora de Madrid. */
@@ -171,11 +178,13 @@ export interface Appointment {
   user_id: string | null;
   user_email: string | null;
   patient_name: string;
-  /** Pago con tarjeta: null = sin pago online (gratis o apuntada por el club) */
+  /** Pago: null = sin pago (gratis o apuntada por el club); pending = esperando la transferencia */
   payment?: 'pending' | 'paid' | 'failed' | null;
   amount?: number | null;
-  /** Hasta cuándo se guarda el hueco mientras se paga */
+  /** Hasta cuándo se guarda el hueco mientras se paga (sin límite con transferencia) */
   hold_until?: string | null;
+  /** Concepto de la transferencia (UROS-...), o la sesión de Stripe en las citas antiguas */
+  stripe_session_id?: string | null;
   notes: string | null;
   starts_at: string;
   ends_at: string;
