@@ -16,7 +16,7 @@ import './AdminPanel.css';
 import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import { PaymentSettingsForm } from './PaymentSettingsForm';
 import * as XLSX from 'xlsx';
-import { CLUPIK, FEATURES } from '../config';
+import { FEATURES } from '../config';
 
 // El escáner (html5-qrcode) solo se descarga al abrirlo
 const QrScannerModal = lazy(() => import('./components/QrScannerModal').then(m => ({ default: m.QrScannerModal })));
@@ -109,76 +109,6 @@ export function AdminPanel() {
       console.error(e);
     }
     setLoading(false);
-  };
-
-  const handleMigrateClupikData = async () => {
-    if (!window.confirm("¿Importar todo el catálogo de Clupik a la base local?\n\nEsto añadirá variables automáticas (Jugador, Equipo) y detendrá la conexión externa en tiempo real.")) return;
-    try {
-      setLoading(true);
-      const res = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/products/public/home?limit=100`);
-      if (!res.ok) throw new Error("API Clupik inaccesible");
-      const data = await res.json();
-      const clupikItems = data.value || data.data || data || [];
-
-      let syncedCount = 0;
-      for (const cItem of clupikItems) {
-        let detailData = cItem;
-        try {
-          const detailRes = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/product/${cItem.id}`);
-          if (detailRes.ok) {
-            const rawDetail = await detailRes.json();
-            detailData = rawDetail.data || rawDetail;
-          }
-        } catch (e) { }
-
-        const rawId = cItem.id.toString().replace('clupik_', '');
-        const price = detailData.minPrice ? detailData.minPrice / 100 : (detailData.price ? detailData.price / 100 : 0);
-        const imageUrl = `https://api.clupik.com/clubs/${CLUPIK.clubId}/shop/image/${rawId}?format=large`;
-        const name = detailData.title || cItem.title;
-        const desc = detailData.description || '';
-
-        const customFields = [];
-        let sizes: string[] = [];
-
-        if (detailData.productGroupAttributes) {
-          const attr = detailData.productGroupAttributes.find((a: any) => a.name === "Tallas" || a.name?.Tallas);
-          if (attr && Array.isArray(attr.values)) {
-            sizes = attr.values;
-            customFields.push({ name: 'Talla', type: 'categorical', options: attr.values, required: true });
-          }
-        }
-
-        const nameMatcher = name.toLowerCase();
-        if (nameMatcher.includes('cubre') || nameMatcher.includes('chándal') || nameMatcher.includes('chaqueta')) {
-          customFields.push({ name: 'Jugador/a con el que tiene relación', type: 'text', required: true });
-          customFields.push({ name: 'Equipo al que pertenece', type: 'text', required: true });
-        } else if (nameMatcher.includes('camiseta')) {
-          customFields.push({ name: 'Número a imprimir (Opcional)', type: 'text', required: false });
-          customFields.push({ name: 'Jugador/a', type: 'text', required: true });
-        }
-
-        const exists = items.some(i => i.name === name);
-        if (!exists) {
-          await adapter.createItem({
-            name,
-            price,
-            imageUrl,
-            description: desc,
-            sizes: sizes,
-            custom_fields: customFields
-          } as any);
-          syncedCount++;
-        }
-      }
-      showMessage("Migración Clupik", `Se han importado ${syncedCount} artículos a la base de datos interna con campos personalizados habilitados.`);
-      const freshData = await adapter.getItems();
-      setItems(freshData);
-    } catch (e: any) {
-      console.error(e);
-      showMessage("Error", "No se pudo sincronizar Clupik: " + e.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   // El rol llega después del primer render: se abre la primera pestaña del rol
@@ -631,35 +561,6 @@ export function AdminPanel() {
     }
   };
 
-  const handleImportClupikEvents = async () => {
-    try {
-      const res = await fetch(`https://api.clupik.com/clubs/${CLUPIK.clubId}/publications?expand=user&languageId=${CLUPIK.languageId}&languageCode=es&limit=15`);
-      if (!res.ok) throw new Error('No se pudo conectar con Clupik');
-      const data = await res.json();
-      const pubs = Array.isArray(data) ? data : [];
-      let importedCount = 0;
-      for (const p of pubs) {
-        const title = p.card?.title || p.slug || 'Campus importado';
-        const rawText = p.card?.text || '';
-        const imgMatch = rawText.match(/<img[^>]+src=["']?([^"'>]+)["']/i);
-        const imageUrl = imgMatch ? imgMatch[1] : undefined;
-        const description = p.preview || '';
-        const pubDate = p.date ? new Date(p.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-        // Only import if title contains 'campus' (case insensitive)
-        if (!title.toLowerCase().includes('campus')) continue;
-        await adapter.createEvent({
-          title, date: pubDate, dates: [], location: `Club ${CLUPIK.clubName}`,
-          imageUrl, description, schedule: '', type: 'campus',
-          price_per_day: 0, price_tiers: [], attendee_discounts: [],
-          custom_fields: [], active: false,
-        });
-        importedCount++;
-      }
-      showMessage('Importación Clupik', `Se han importado ${importedCount} campus. Revisa y configura precios y fechas.`);
-      fetchData();
-    } catch (e: any) { showMessage('Error', e.message); }
-  };
-
   // Mostrar u ocultar un campus a los usuarios sin abrir el formulario de edición
   const handleToggleEventActive = async (ev: Event) => {
     try {
@@ -734,9 +635,6 @@ export function AdminPanel() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn-primary" onClick={() => setQrScannerOpen(true)} disabled={qrVerifying} style={{ background: '#7c3aed', borderColor: '#6d28d9', color: '#fff' }}>
             {qrVerifying ? '⏳ Verificando...' : '📷 Escanear QR'}
-          </button>
-          <button className="btn-primary" onClick={handleImportClupikEvents} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff' }}>
-            📥 Importar Eventos Clupik
           </button>
           <button className="btn-primary" onClick={exportEventsExcel} disabled={loadingAttendees === 'export'} style={{ background: '#217346', borderColor: '#1e6b41', color: '#fff' }}>
             {loadingAttendees === 'export' ? 'Generando...' : '📊 Exportar Excel'}
@@ -920,9 +818,6 @@ export function AdminPanel() {
     <div className="admin-table-container">
       <div className="table-toolbar">
         <button className="btn-primary" onClick={() => { setEditItem(null); setModalOpen(true); }}>+ Nuevo Producto</button>
-        <button className="btn-primary" onClick={handleMigrateClupikData} style={{ background: '#0e70ab', borderColor: '#0b5a8b', color: '#fff', marginLeft: 'auto' }}>
-          📥 Importar Catálogo Clupik
-        </button>
       </div>
       <table className="admin-table">
         <thead>
