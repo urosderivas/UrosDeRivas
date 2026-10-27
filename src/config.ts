@@ -28,8 +28,8 @@ export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCod
 
 /** Secciones que se pueden ocultar sin borrarlas. Para volver a enseñar una, se pone true y se publica. */
 export const FEATURES = {
-  /** Citas de fisioterapia (página /citas, menú y pestaña del panel). Oculto hasta que el club lo quiera usar. */
-  appointments: false,
+  /** Citas de fisioterapia (página /citas, menú y pestaña del panel). Ponlo a false para ocultarlas sin borrar nada. */
+  appointments: true,
 };
 
 /** Avisos fijos de la barra superior. Se suman a los campus con inscripciones abiertas. */
