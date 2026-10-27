@@ -16,7 +16,7 @@ import './AdminPanel.css';
 import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import { PaymentSettingsForm } from './PaymentSettingsForm';
 import * as XLSX from 'xlsx';
-import { CLUPIK } from '../config';
+import { CLUPIK, FEATURES } from '../config';
 
 // El escáner (html5-qrcode) solo se descarga al abrirlo
 const QrScannerModal = lazy(() => import('./components/QrScannerModal').then(m => ({ default: m.QrScannerModal })));
@@ -47,7 +47,8 @@ const ROLE_TABS: Record<Role, Tab[]> = {
 export function AdminPanel() {
   const { user } = useStore();
   const isAdmin = user?.role === 'admin';
-  const tabs = ROLE_TABS[user?.role || 'user'];
+  // Con las citas ocultas (config.ts) tampoco sale su pestaña
+  const tabs = ROLE_TABS[user?.role || 'user'].filter(tab => tab !== 'citas' || FEATURES.appointments);
   const [activeTab, setActiveTab] = useState<Tab>(tabs[0] || 'stats');
   const canSee = (tab: Tab) => tabs.includes(tab);
 
@@ -587,7 +588,8 @@ export function AdminPanel() {
                       <span className="status-badge completed" title="Tu rol solo lo puede cambiar otro administrador">{ROLE_LABELS[sysUser.role as Role] || sysUser.role}</span>
                     ) : (
                       <select className="status-dropdown" value={sysUser.role || 'user'} onChange={e => handleChangeRole(sysUser, e.target.value as Role)}>
-                        {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                        {ROLES.filter(r => r !== 'fisio' || FEATURES.appointments || sysUser.role === 'fisio')
+                          .map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </select>
                     )}
                   </td>

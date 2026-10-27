@@ -26,6 +26,12 @@ export const CLUPIK = {
 
 export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCode} - ${CLUB.address.city}, ${CLUB.address.province}`;
 
+/** Secciones que se pueden ocultar sin borrarlas. Para volver a enseñar una, se pone true y se publica. */
+export const FEATURES = {
+  /** Citas de fisioterapia (página /citas, menú y pestaña del panel). Oculto hasta que el club lo quiera usar. */
+  appointments: false,
+};
+
 /** Avisos fijos de la barra superior. Se suman a los campus con inscripciones abiertas. */
 export const PROMO_MESSAGES: { text: string; to?: string }[] = [
   { text: 'Tienda oficial: equipaciones y merchandising del club', to: '/market' },
