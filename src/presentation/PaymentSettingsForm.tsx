@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PaymentAdapter, PaymentSettings } from '../infrastructure/PaymentAdapter';
 import { TransferDetails } from './components/TransferDetails';
+import { FEATURES } from '../config';
 import './components/Modal.css';
 
 const payments = new PaymentAdapter();
@@ -47,9 +48,9 @@ export function PaymentSettingsForm() {
     <div className="admin-table-container" style={{ maxWidth: '640px' }}>
       <h3 style={{ marginBottom: '0.5rem' }}>Datos para las transferencias</h3>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-        Todo se paga por transferencia. Al comprar, inscribirse o reservar una cita de pago se enseñan estos datos
-        y se mandan por email, con un concepto único (UROS-...). Cuando llegue el dinero al banco, búscalo por el
-        concepto y márcalo como pagado en Pedidos, Eventos o Citas.
+        Todo se paga por transferencia. Al comprar o inscribirse{FEATURES.appointments ? ' (o reservar una cita de pago)' : ''} se
+        enseñan estos datos y se mandan por email, con un concepto único (UROS-...). Cuando llegue el dinero al banco,
+        búscalo por el concepto y márcalo como pagado en Pedidos{FEATURES.appointments ? ', Eventos o Citas' : ' o Eventos'}.
       </p>
       {!form.iban && <p className="modal-error" style={{ marginBottom: '1rem' }}>Mientras no haya IBAN no se puede comprar ni inscribirse en nada de pago.</p>}
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

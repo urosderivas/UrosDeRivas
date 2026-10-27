@@ -17,6 +17,7 @@ import { CookieBanner } from './presentation/CookieBanner';
 import { NotFound } from './presentation/NotFound';
 import { consumeExpiredEmailLink, consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
 import { takeLoginNext } from './utils/loginRedirect';
+import { FEATURES } from './config';
 
 // El panel (con el PDF, el Excel y el escáner QR) solo lo descargan los admins
 const AdminPanel = lazy(() => import('./presentation/AdminPanel').then(m => ({ default: m.AdminPanel })));
@@ -84,7 +85,9 @@ function App() {
             <Route path="/events" element={<Events key="campus" kind="campus" />} />
             <Route path="/torneos" element={<Events key="torneo" kind="torneo" />} />
             <Route path="/sponsors" element={<Sponsors />} />
-            <Route path="/citas" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><Appointments /></Suspense>} />
+            <Route path="/citas" element={FEATURES.appointments
+              ? <Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><Appointments /></Suspense>
+              : <Navigate to="/" replace />} />
             <Route path="/admin" element={<Suspense fallback={<p style={{ textAlign: 'center', padding: '3rem' }}>Cargando…</p>}><AdminPanel /></Suspense>} />
             <Route path="/login" element={<Login />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />

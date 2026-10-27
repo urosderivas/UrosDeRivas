@@ -7,6 +7,7 @@ import './Navbar.css';
 import { clubLogoUrl } from '../utils/media';
 import { isStaff, ROLE_LABELS } from '../domain/roles';
 import { ThemeToggle } from './components/ThemeToggle';
+import { FEATURES } from '../config';
 
 export function Navbar() {
   const { user, signOut, cart } = useStore();
@@ -28,7 +29,7 @@ export function Navbar() {
           <Link to="/events" onClick={() => setIsOpen(false)}>CAMPUS</Link>
           <Link to="/torneos" onClick={() => setIsOpen(false)}>TORNEOS Y VIAJES</Link>
           <Link to="/market" onClick={() => setIsOpen(false)}>TIENDA</Link>
-          <Link to="/citas" onClick={() => setIsOpen(false)}>CITAS</Link>
+          {FEATURES.appointments && <Link to="/citas" onClick={() => setIsOpen(false)}>CITAS</Link>}
           <Link to="/sponsors" onClick={() => setIsOpen(false)}>PATROCINADORES</Link>
           {isStaff(user?.role) && (
             <Link to="/admin" onClick={() => setIsOpen(false)}>ADMIN</Link>
