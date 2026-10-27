@@ -13,9 +13,12 @@ const adapter = new AppointmentsAdapter();
 const payments = new PaymentAdapter();
 const euros = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(2)} €`;
 
+/** Las citas por transferencia se guardan sin límite: la base de datos devuelve "infinity", que Date no entiende. */
+const heldUntilLater = (holdUntil: string) =>
+  holdUntil === 'infinity' || new Date(holdUntil).getTime() > Date.now();
 /** Apartada esperando la transferencia (o, con tarjeta, el pago aún podía llegar hasta hold_until). */
 export const awaitingPayment = (a: Appointment) =>
-  a.status === 'booked' && a.payment === 'pending' && !!a.hold_until && new Date(a.hold_until).getTime() > Date.now();
+  a.status === 'booked' && a.payment === 'pending' && !!a.hold_until && heldUntilLater(a.hold_until);
 /** Apartada para pagar con tarjeta, pero el pago no se completó a tiempo (citas antiguas). */
 export const paymentLapsed = (a: Appointment) =>
   a.payment === 'failed' || (a.payment === 'pending' && !awaitingPayment(a));
