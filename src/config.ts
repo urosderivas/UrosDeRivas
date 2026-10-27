@@ -16,14 +16,6 @@ export const CLUB = {
   contactEmail: 'administracion@urosderivas.com',
 };
 
-export const CLUPIK = {
-  /** ID del club en Clupik (importadores de la tienda y de campus del panel de admin). */
-  clubId: '67',
-  /** Nombre del club tal como aparece en Clupik (lugar de los campus importados). */
-  clubName: 'Uros de Rivas',
-  languageId: '709',
-};
-
 export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCode} - ${CLUB.address.city}, ${CLUB.address.province}`;
 
 /** Secciones que se pueden ocultar sin borrarlas. Para volver a enseñar una, se pone true y se publica. */
