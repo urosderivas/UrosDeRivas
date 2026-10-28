@@ -322,9 +322,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
             const idx = customFields.indexOf(cf);
             return (
               <div key={`opts-${idx}`} style={{ marginBottom: '8px', paddingLeft: '12px' }}>
-                <input placeholder="Opciones separadas por coma" value={(cf.options || []).join(', ')}
-                  onChange={e => updateCustomField(idx, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                  style={{ width: '100%', fontSize: '0.85rem' }} />
+                <OptionsInput options={cf.options || []} onChange={options => updateCustomField(idx, { options })} />
               </div>
             );
           })}
@@ -357,5 +355,24 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * Opciones de un campo separadas por comas. Guarda el texto tal cual se escribe: si se
+ * rehiciera a partir de la lista, la coma recién escrita desaparecería al momento.
+ */
+function OptionsInput({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
+  const parse = (t: string) => t.split(',').map(s => s.trim()).filter(Boolean);
+  const [text, setText] = useState(options.join(', '));
+  // Si las opciones cambian por otro lado (p. ej. al borrar otro campo), se vuelve a escribir el texto
+  if (parse(text).join('\n') !== options.join('\n')) setText(options.join(', '));
+  return (
+    <input placeholder="Opciones separadas por coma" value={text}
+      onChange={e => {
+        setText(e.target.value);
+        onChange(parse(e.target.value));
+      }}
+      style={{ width: '100%', fontSize: '0.85rem' }} />
   );
 }
