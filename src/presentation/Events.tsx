@@ -69,7 +69,7 @@ function PriceTableView({ table, numDates }: { table: PriceTable; numDates: numb
 
 export function Events({ kind = 'campus' }: { kind?: EventType }) {
   const page = EVENT_PAGES[kind];
-  const { user } = useStore();
+  const { user, ensureContact } = useStore();
   const canManage = user?.role === 'admin' || user?.role === 'coach';
   const [events, setEvents] = useState<Event[]>([]);
   const [occupancy, setOccupancy] = useState<Record<string, number>>({});
@@ -229,6 +229,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
       }
     }
 
+    if (!(await ensureContact())) return;
     setRegSubmitting(true);
     try {
       // El servidor vuelve a validar todo y calcula el importe; si es gratis confirma sin pago

@@ -7,6 +7,13 @@ export interface User {
   role: Role;
 }
 
+/** Datos de contacto que pone cada usuario en "Mi cuenta" (el email es el de la cuenta). */
+export interface UserProfile {
+  first_name: string;
+  last_name: string;
+  phone: string;
+}
+
 export interface CustomField {
   name: string;
   type: 'text' | 'categorical';

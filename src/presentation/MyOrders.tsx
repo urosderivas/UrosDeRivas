@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { Order } from '../domain/entities';
-import { Modal } from './components/Modal';
-import { ShoppingBag, FileText, Landmark } from 'lucide-react';
+import { FileText, Landmark } from 'lucide-react';
 import type { InvoiceData } from '../application/services/InvoiceGenerator';
 import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { TransferModal } from './components/TransferDetails';
@@ -12,7 +11,8 @@ import './Market.css';
 const adapter = new SupabaseAdapter();
 const payments = new PaymentAdapter();
 
-export function MyOrdersModal({ onClose }: { onClose: () => void }) {
+/** Lista de compras, inscripciones y su estado (pestaña "Mis pedidos" de Mi cuenta). */
+export function MyOrdersList() {
   const { user } = useStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,23 +104,17 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal
-      isOpen={true}
-      onClose={onClose}
-      title="Mis Pedidos"
-      icon={<ShoppingBag size={22} />}
-      maxWidth="650px"
-    >
-      <p className="text-secondary" style={{ marginTop: '-10px', marginBottom: '1.5rem' }}>
+    <div>
+      <p className="text-secondary" style={{ marginTop: 0, marginBottom: '1.25rem' }}>
         Sigue el estado de tus compras e inscripciones.
       </p>
-      
+
       {loading ? (
         <p>Cargando pedidos...</p>
       ) : Object.keys(grouped).length === 0 ? (
         <p>Aún no has realizado ninguna compra.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '55vh', overflowY: 'auto', paddingRight: '8px' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {Object.entries(grouped).map(([groupId, groupOrders]) => {
             const first = groupOrders[0];
             const groupTotal = groupOrders.reduce((sum, o) => sum + o.amount, 0);
@@ -196,6 +190,6 @@ export function MyOrdersModal({ onClose }: { onClose: () => void }) {
         </ul>
       )}
       <TransferModal result={transfer} onClose={() => setTransfer(null)} what="reserva" />
-    </Modal>
+    </div>
   );
 }

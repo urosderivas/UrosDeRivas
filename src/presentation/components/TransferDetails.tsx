@@ -65,7 +65,7 @@ export function TransferModal({ result, onClose, what }: ModalProps) {
           <TransferDetails info={result.transfer} />
           <p className="transfer-intro">
             {result.emailSent ? 'También te lo hemos enviado por email. ' : ''}
-            Tu {what} queda pendiente hasta que el club reciba la transferencia. Puedes volver a ver estos datos en «Mis pedidos».
+            Tu {what} queda pendiente hasta que el club reciba la transferencia. Puedes volver a ver estos datos en «Mi cuenta», en «Mis pedidos».
           </p>
           <div className="modal-actions" style={{ borderTop: 'none', paddingTop: 0, justifyContent: 'center' }}>
             <button type="button" onClick={onClose} className="btn-modal-save" style={{ flex: '1' }}>ENTENDIDO</button>

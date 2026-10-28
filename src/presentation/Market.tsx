@@ -6,7 +6,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { CheckoutResult, PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { TransferModal } from './components/TransferDetails';
 import { MarketItemModal } from './MarketItemModal';
-import { MyOrdersModal } from './MyOrdersModal';
+import { AccountModal } from './AccountModal';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MarketItem } from '../domain/entities';
@@ -20,7 +20,7 @@ const adapter = new SupabaseAdapter();
 const payments = new PaymentAdapter();
 
 export function Market() {
-  const { user, items, loading, fetchItems, cart, addToCart } = useStore();
+  const { user, items, loading, fetchItems, cart, addToCart, ensureContact } = useStore();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -68,7 +68,7 @@ export function Market() {
 
   // Pedido hecho: gratis, o con los datos para la transferencia
   const handleOrdered = (result: CheckoutResult) => {
-    if (result.free) showMessage('Pedido hecho', 'Tu pedido está confirmado. El club se pondrá en contacto contigo para la entrega. Puedes seguirlo en "Mis pedidos".');
+    if (result.free) showMessage('Pedido hecho', 'Tu pedido está confirmado. El club se pondrá en contacto contigo para la entrega. Puedes seguirlo en "Mi cuenta", en "Mis pedidos".');
     else setTransfer(result);
   };
 
@@ -109,7 +109,7 @@ export function Market() {
   };
 
   const handleBuyNow = async (item: MarketItem, config: Record<string, string>) => {
-    if (!user) return;
+    if (!user || !(await ensureContact())) return;
     setCheckoutLoading(item.id);
     try {
       const result = await payments.checkoutCart([{
@@ -199,7 +199,7 @@ export function Market() {
       <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} onOrdered={handleOrdered} />
       <TransferModal result={transfer} onClose={() => setTransfer(null)} what="pedido" />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
-      {ordersModalOpen && <MyOrdersModal onClose={() => setOrdersModalOpen(false)} />}
+      {ordersModalOpen && <AccountModal initialTab="pedidos" onClose={() => setOrdersModalOpen(false)} />}
       <MessageModal
         isOpen={messageAlert.open}
         onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))}

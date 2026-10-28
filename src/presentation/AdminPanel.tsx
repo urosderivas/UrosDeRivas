@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment, lazy, Suspense } from 'react';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
-import { Order, MarketItem, SystemLog, Event } from '../domain/entities';
+import { Order, MarketItem, SystemLog, Event, UserProfile } from '../domain/entities';
 import { isFreeEvent, startingPrice } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
 import { attendeeDaysText, registrationDetail } from '../utils/registrations';
@@ -11,7 +11,9 @@ import { useStore } from './store';
 import { MarketItemModal } from './MarketItemModal';
 import { MessageModal } from './components/MessageModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Trash2, RefreshCw, Pencil, XCircle, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { UserInfoModal } from './components/UserInfoModal';
+import { fullName } from '../utils/profile';
 import './AdminPanel.css';
 import { InvoiceGenerator, invoicePaymentStatus } from '../application/services/InvoiceGenerator';
 import { PaymentSettingsForm } from './PaymentSettingsForm';
@@ -56,6 +58,9 @@ export function AdminPanel() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<MarketItem[]>([]);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  /** Nombre y teléfono de cada cuenta (Mi cuenta), por id de usuario */
+  const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
+  const [infoUser, setInfoUser] = useState<any | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [attendees, setAttendees] = useState<Record<string, any[]>>({});
   const [messageAlert, setMessageAlert] = useState<{ open: boolean, title: string, message: string }>({ open: false, title: '', message: '' });
@@ -82,8 +87,9 @@ export function AdminPanel() {
       if (!canSee(activeTab)) {
         // Sin permiso para esta pestaña: no se pide nada
       } else if (activeTab === 'users') {
-        const data = await adapter.getSystemUsers();
+        const [data, profs] = await Promise.all([adapter.getSystemUsers(), adapter.getProfiles()]);
         setSystemUsers(data);
+        setProfiles(profs);
       } else if (activeTab === 'stats') {
         const data = await adapter.getLogs();
         setLogs(data);
@@ -94,6 +100,7 @@ export function AdminPanel() {
       } else if (activeTab === 'orders') {
         const data = await adapter.getOrders();
         setOrders(data);
+        setProfiles(await adapter.getProfiles(data.map(o => o.user_id)));
       } else if (activeTab === 'market') {
         const data = await adapter.getItems();
         setItems(data);
@@ -335,8 +342,9 @@ export function AdminPanel() {
       return {
         'Concepto': o.stripe_session_id || o.id,
         'Fecha': new Date(o.created_at).toLocaleString('es-ES'),
-        'Comprador': o.buyer_name,
+        'Comprador': fullName(profiles[o.user_id]) || o.buyer_name,
         'Email': o.buyer_email,
+        'Teléfono': profiles[o.user_id]?.phone || '',
         'Producto': o.item_name,
         'Especificaciones': o.size || '-',
         'Cantidad': qty,
@@ -466,6 +474,9 @@ export function AdminPanel() {
     const ws = XLSX.utils.json_to_sheet(systemUsers.map(u => ({
       'ID': u.id,
       'Email': u.email,
+      'Nombre': profiles[u.id]?.first_name || '',
+      'Apellidos': profiles[u.id]?.last_name || '',
+      'Teléfono': profiles[u.id]?.phone || '',
       'Rol': ROLE_LABELS[u.role as Role] || u.role,
       'Fecha Registro': new Date(u.created_at).toLocaleString('es-ES')
     })));
@@ -512,7 +523,10 @@ export function AdminPanel() {
             systemUsers.length === 0 ? <tr><td colSpan={4} className="table-empty">Sin usuarios registrados o sin permisos suficientes.</td></tr> :
               systemUsers.map(sysUser => (
                 <tr key={sysUser.id}>
-                  <td>{sysUser.email}</td>
+                  <td>
+                    {sysUser.email}
+                    {fullName(profiles[sysUser.id]) && <><br /><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{fullName(profiles[sysUser.id])}</span></>}
+                  </td>
                   <td>
                     {sysUser.id === user?.id ? (
                       <span className="status-badge completed" title="Tu rol solo lo puede cambiar otro administrador">{ROLE_LABELS[sysUser.role as Role] || sysUser.role}</span>
@@ -525,6 +539,7 @@ export function AdminPanel() {
                   </td>
                   <td>{new Date(sysUser.created_at).toLocaleDateString()}</td>
                   <td>
+                    <button className="btn-icon info" title="Ver sus datos" aria-label="Ver sus datos" onClick={() => setInfoUser(sysUser)}><Info size={16} /></button>
                     <button className="btn-icon delete" title="Eliminar cuenta" onClick={() => handleDeleteUser(sysUser.id)}><XCircle size={16} /></button>
                   </td>
                 </tr>
@@ -591,6 +606,7 @@ export function AdminPanel() {
       }
     }
     setAttendees(updatedAttendees);
+    const contacts = await adapter.getProfiles(Object.values(updatedAttendees).flat().map((a: any) => a.user_id));
     setLoadingAttendees(null);
 
     const wb = XLSX.utils.book_new();
@@ -610,7 +626,9 @@ export function AdminPanel() {
         const sheet = XLSX.utils.json_to_sheet(atts.map((a: any) => {
           return {
             'Concepto': a.stripe_session_id || 'Manual',
-            'Email': a.user_email,
+            'Email': a.user_email || '(cuenta borrada)',
+            'Contacto': fullName(contacts[a.user_id]),
+            'Teléfono': contacts[a.user_id]?.phone || '',
             'Días': attendeeDaysText(a),
             'Asistentes': a.num_attendees || 1,
             'Nombres': (a.attendee_names || []).join(', '),
@@ -891,6 +909,7 @@ export function AdminPanel() {
         </div>
       </div>
 
+      <UserInfoModal user={infoUser} profile={infoUser ? profiles[infoUser.id] : undefined} onClose={() => setInfoUser(null)} />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       <MessageModal
         isOpen={messageAlert.open}

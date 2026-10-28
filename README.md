@@ -24,9 +24,12 @@ dominio del club).
   hasta que el club lo marca como pagado en el panel.
 - **Patrocinadores**: página propia y una cinta con sus logos encima del pie en el
   resto de páginas.
-- **Cuenta de usuario**: registro, inicio de sesión (también con Google),
-  recuperar contraseña y "Mis pedidos" con el justificante de cada pago y, en lo
-  pendiente, los datos para hacer la transferencia.
+- **Cuenta de usuario**: registro, inicio de sesión (también con Google) y
+  recuperar contraseña. En **Mi cuenta** (icono de persona arriba) cada uno pone su
+  nombre, apellidos y teléfono, ve "Mis pedidos" con el justificante de cada pago y,
+  en lo pendiente, los datos para hacer la transferencia, y puede borrar su cuenta
+  (si no tiene nada en curso). Antes de la primera compra, inscripción o cita se le
+  piden el nombre y el teléfono si faltan.
 - **Textos legales**: aviso legal, privacidad y cookies, con los datos del club.
 
 ## Lo que gestiona el club desde la web
@@ -55,8 +58,10 @@ Con una cuenta de administrador, sin tocar código:
   - Inscripciones de cada evento, con su estado, "Marcar pagada" y justificante.
   - Citas: cada calendario marca sus citas como pagadas cuando llega la transferencia.
   - Productos de la tienda: crear, editar y borrar.
-  - Escáner del QR de los justificantes, exportación a Excel, lista de usuarios
-    (ver su rol y borrar cuentas) y registro de actividad.
+  - Escáner del QR de los justificantes, exportación a Excel (con el nombre y el
+    teléfono de cada cuenta), lista de usuarios (sus datos con el icono ⓘ, su rol y
+    borrar cuentas) y registro de actividad. Al borrar una cuenta se guardan sus
+    pedidos e inscripciones, ya sin la cuenta.
 
 Las imágenes se suben al almacenamiento de Supabase (carpeta pública `media`) o se
 pega el enlace de una imagen ya publicada.

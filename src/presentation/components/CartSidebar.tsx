@@ -15,7 +15,7 @@ interface CartSidebarProps {
 const payments = new PaymentAdapter();
 
 export function CartSidebar({ isOpen, onClose, showMessage, onOrdered }: CartSidebarProps) {
-  const { cart, removeFromCart, updateCartQuantity, clearCart, user } = useStore();
+  const { cart, removeFromCart, updateCartQuantity, clearCart, user, ensureContact } = useStore();
   const [loading, setLoading] = useState(false);
 
   const total = cart.reduce((acc, current) => acc + current.product.price * current.quantity, 0);
@@ -27,6 +27,7 @@ export function CartSidebar({ isOpen, onClose, showMessage, onOrdered }: CartSid
 
   const handleCheckout = async () => {
     if(!user) return notify("Atención", "Inicia sesión para hacer el pedido.");
+    if (!(await ensureContact())) return;
     setLoading(true);
     try {
       const result = await payments.checkoutCart(cart);
