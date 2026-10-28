@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CalendarDays, Plus, X, Trash2 } from 'lucide-react';
 import { Event, CustomField, EventType } from '../domain/entities';
-import { MAX_PRICE_OPTIONS, MAX_TABLE_DAYS, eventOptions, eventTable, legacyPrice, parsePriceOptions, roundCents } from '../domain/pricing';
+import { MAX_PRICE_OPTIONS, MAX_TABLE_DAYS, eventOptions, eventTable, legacyPrice, parsePriceOptions } from '../domain/pricing';
 import { Modal } from './components/Modal';
 import { PriceTableEditor, PriceTableDraft, draftToTable } from './components/PriceTableEditor';
 import { ImageField } from './components/ImageField';
@@ -24,21 +24,20 @@ const EVENT_TYPE_LABELS: Record<EventType, string> = { campus: 'Campus', torneo:
 
 /** Tabla inicial: la del evento, o la equivalente al sistema anterior de descuentos. */
 function initialDraft(ev: Event | null | undefined, defaultType: EventType): { draft: PriceTableDraft; converted: boolean } {
-  if (!ev) return { draft: { byDays: defaultType === 'campus', rows: [[]], extra: '' }, converted: false };
+  if (!ev) return { draft: { byDays: defaultType === 'campus', rows: [[]] }, converted: false };
   const table = eventTable(ev);
-  if (table) return { draft: { byDays: table.byDays, rows: table.prices, extra: table.extraAttendee }, converted: false };
+  if (table) return { draft: { byDays: table.byDays, rows: table.prices }, converted: false };
   if (ev.price_table) {
     // Tabla guardada que ya no cuadra (p. ej. con otras fechas): se recupera lo que hay
     const t = ev.price_table as any;
-    return { draft: { byDays: t.byDays !== false, rows: Array.isArray(t.prices) ? t.prices : [[]], extra: t.extraAttendee ?? '' }, converted: false };
+    return { draft: { byDays: t.byDays !== false, rows: Array.isArray(t.prices) ? t.prices : [[]] }, converted: false };
   }
   const numDays = (ev.dates || []).length;
   const maxDiscountRow = Math.max(1, ...(ev.attendee_discounts || []).map(d => d.minAttendees));
   const numRows = Math.min(4, Math.max(2, maxDiscountRow));
   const rows = Array.from({ length: numRows }, (_, a) => Array.from({ length: numDays }, (_, d) => legacyPrice(ev, a + 1, d + 1)));
-  const extra = roundCents(legacyPrice(ev, numRows + 1, 1) - legacyPrice(ev, numRows, 1));
   return {
-    draft: { byDays: true, rows, extra: Number.isFinite(extra) ? Math.max(0, extra) : '' },
+    draft: { byDays: true, rows },
     converted: numDays > 0,
   };
 }
@@ -54,7 +53,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
   const [schedule, setSchedule] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
-  const [priceDraft, setPriceDraft] = useState<PriceTableDraft>({ byDays: true, rows: [[]], extra: '' });
+  const [priceDraft, setPriceDraft] = useState<PriceTableDraft>({ byDays: true, rows: [[]] });
   const [pricesConverted, setPricesConverted] = useState(false);
   const [priceOptions, setPriceOptions] = useState<OptionDraft[]>([{ label: '', price: '' }]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);

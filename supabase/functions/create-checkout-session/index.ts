@@ -330,6 +330,11 @@ serve(async (req: Request) => {
       if (tournament ? !options : (dbEvent.price_table != null && !table)) {
         throw new Error("El precio de este evento no está bien configurado.");
       }
+      // Con tabla, como mucho un asistente por fila
+      if (!tournament && table && numAttendees > table.prices.length) {
+        const rows = table.prices.length;
+        throw new Error(`En este ${eventNoun} cada inscripción puede llevar como mucho ${rows} ${rows === 1 ? 'asistente' : 'asistentes'}.`);
+      }
 
       // Días de cada asistente. Con precio por evento completo (y en torneos) se va a todos.
       const eventDates: string[] = [...(dbEvent.dates || [])].sort();

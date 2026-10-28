@@ -40,8 +40,8 @@ Con una cuenta de administrador, sin tocar código:
 - **Campus, torneos y viajes** (en su pestaña): crear, editar, ocultar y borrar.
   - Las fechas se añaden por rango ("del 22 al 30") o de una en una.
   - **Tabla de precios**: una fila por número de asistentes y una columna por
-    número de días; en cada casilla va el precio **total**. Debajo, lo que se suma
-    por cada asistente de más a partir de la última fila. También se puede cobrar
+    número de días; en cada casilla va el precio **total**. Cada inscripción lleva
+    como mucho tantos asistentes como filas tiene la tabla. También se puede cobrar
     por evento completo (sin elegir días). Se rellena rápido con "X € por asistente
     y día" o copiando la tabla de otro evento, y se puede comprobar cualquier
     combinación antes de guardar.

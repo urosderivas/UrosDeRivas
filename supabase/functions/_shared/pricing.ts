@@ -8,13 +8,12 @@
  * Tabla de precios de un evento.
  * - prices[a][d]: precio TOTAL para a+1 asistentes y d+1 días (con byDays),
  *   o prices[a][0]: precio total del evento completo para a+1 asistentes (sin byDays).
- * - extraAttendee: a partir de la última fila, lo que se suma por cada asistente
- *   de más (por día si byDays, por evento si no), sobre el precio de la última fila.
+ * Una inscripción lleva como mucho tantos asistentes como filas tiene la tabla.
+ * (Las tablas guardadas llevan también "extraAttendee", que ya no se usa.)
  */
 export interface PriceTable {
   byDays: boolean;
   prices: number[][];
-  extraAttendee: number;
 }
 
 /** Sistema anterior (precio por día con tramos y % por asistentes); solo para eventos sin tabla. */
@@ -60,23 +59,29 @@ export function tableColumns(byDays: boolean, numDates: number): number {
 export function parsePriceTable(raw: unknown, numDates: number): PriceTable | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const t = raw as Record<string, unknown>;
-  if (typeof t.byDays !== 'boolean' || !isPrice(t.extraAttendee) || !Array.isArray(t.prices)) return null;
+  if (typeof t.byDays !== 'boolean' || !Array.isArray(t.prices)) return null;
   const cols = tableColumns(t.byDays, numDates);
   if (cols < 1 || cols > MAX_TABLE_DAYS) return null;
   if (t.prices.length < 1 || t.prices.length > MAX_TABLE_ROWS) return null;
   for (const row of t.prices) {
     if (!Array.isArray(row) || row.length !== cols || !row.every(isPrice)) return null;
   }
-  return { byDays: t.byDays, prices: t.prices as number[][], extraAttendee: t.extraAttendee };
+  return { byDays: t.byDays, prices: t.prices as number[][] };
 }
 
 /** Precio total con la tabla. numDays se ignora si el evento se paga completo. */
 export function tablePrice(table: PriceTable, numAttendees: number, numDays: number): number {
   const col = table.byDays ? numDays - 1 : 0;
   const rows = table.prices.length;
-  if (numAttendees <= rows) return roundCents(table.prices[numAttendees - 1][col]);
-  const units = table.byDays ? numDays : 1;
-  return roundCents(table.prices[rows - 1][col] + table.extraAttendee * (numAttendees - rows) * units);
+  if (numAttendees > rows) {
+    throw new Error(`Como máximo ${rows} ${rows === 1 ? 'asistente' : 'asistentes'} por inscripción.`);
+  }
+  return roundCents(table.prices[numAttendees - 1][col]);
+}
+
+/** Asistentes que puede llevar una inscripción según la tabla; null si el evento no tiene tabla. */
+export function maxTableAttendees(ev: PricedEvent): number | null {
+  return eventTable(ev)?.prices.length ?? null;
 }
 
 /** Precio con el sistema anterior: precio por día según tramo de días, menos % por nº de asistentes. */
@@ -177,6 +182,6 @@ export function startingPrice(ev: PricedEvent): number {
 export function isFreeEvent(ev: PricedEvent): boolean {
   if (isTournament(ev)) return eventOptions(ev)?.every(o => o.price === 0) ?? false;
   const table = eventTable(ev);
-  if (table) return table.extraAttendee === 0 && table.prices.every(row => row.every(p => p === 0));
+  if (table) return table.prices.every(row => row.every(p => p === 0));
   return (Number(ev.price_per_day) || 0) === 0 && (ev.price_tiers || []).every(t => Number(t.pricePerDay) === 0);
 }

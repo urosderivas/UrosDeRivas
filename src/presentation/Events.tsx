@@ -6,7 +6,7 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { EventModal } from './EventModal';
 import { Event, CustomField, EventType, OwnRegistration } from '../domain/entities';
-import { choosesDays, eventOptions, eventTable, isFreeEvent, registrationPrice, registrationTiers, startingPrice, PriceTable } from '../domain/pricing';
+import { choosesDays, eventOptions, eventTable, isFreeEvent, maxTableAttendees, registrationPrice, registrationTiers, startingPrice, PriceTable } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
 import { CouponsModal } from './components/CouponsModal';
 import { EVENT_PAGES, eventPath } from '../utils/eventLinks';
@@ -58,11 +58,9 @@ function PriceTableView({ table, numDates }: { table: PriceTable; numDates: numb
           </tbody>
         </table>
       </div>
-      {table.extraAttendee > 0 && (
-        <p className="price-table-note">
-          A partir de {rows + 1} asistentes: +{euros(table.extraAttendee)} por cada asistente más{table.byDays ? ' y día' : ''}.
-        </p>
-      )}
+      <p className="price-table-note">
+        Como máximo {rows} {rows === 1 ? 'asistente' : 'asistentes'} por inscripción.
+      </p>
     </div>
   );
 }
@@ -296,7 +294,8 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const myPlayers = options ? myRegs.filter(r => r.status !== 'cancelled') : [];
               const spotsLeft = ev.max_capacity ? Math.max(0, ev.max_capacity - (occupancy[ev.id] || 0)) : null;
               const isFull = spotsLeft === 0;
-              const maxAttendees = spotsLeft === null ? MAX_ATTENDEES : Math.min(MAX_ATTENDEES, spotsLeft);
+              // Con tabla de precios, como mucho un asistente por fila
+              const maxAttendees = Math.min(MAX_ATTENDEES, spotsLeft ?? MAX_ATTENDEES, maxTableAttendees(ev) ?? MAX_ATTENDEES);
               const isFree = isFreeEvent(ev);
               const table = eventTable(ev);
               const pickDays = choosesDays(ev);
@@ -305,7 +304,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const regDays = Array.from({ length: regNumAttendees }, (_, i) =>
                 pickDays ? (regAttendeeDays[i] || []).filter(d => ev.dates.includes(d)) : ev.dates);
               const daysReady = regDays.every(days => days.length > 0);
-              const tiers = daysReady ? registrationTiers(ev, regDays.map(d => d.length)) : [];
+              const tiers = isExpanded && daysReady && regNumAttendees <= maxAttendees ? registrationTiers(ev, regDays.map(d => d.length)) : [];
               const myPending = myRegs.find(r => r.status === 'pending' && r.stripe_session_id?.startsWith('UROS-'));
               const dateRange = ev.dates.length > 0
                 ? `${formatDateRanges(ev.dates, { weekday: false })} ${ev.dates[ev.dates.length - 1].slice(0, 4)}`
@@ -550,7 +549,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                               ) : (
                                 <p className="price-hint">Elige una opción para ver el precio.</p>
                               )
-                            ) : daysReady ? (
+                            ) : tiers.length > 0 ? (
                               <div className="price-breakdown-box">
                                 {!isFree && tiers.length > 1 ? tiers.map((t, i) => (
                                   <div key={i} className="price-row">
