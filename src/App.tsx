@@ -14,6 +14,7 @@ import { PrivacyPolicy } from './presentation/PrivacyPolicy';
 import { LegalNotice } from './presentation/LegalNotice';
 import { CookiesPolicy } from './presentation/CookiesPolicy';
 import { CookieBanner } from './presentation/CookieBanner';
+import { ContactPrompt } from './presentation/components/ContactPrompt';
 import { NotFound } from './presentation/NotFound';
 import { consumeExpiredEmailLink, consumePasswordRecovery, PASSWORD_RECOVERY_EVENT } from './utils/supabase';
 import { takeLoginNext } from './utils/loginRedirect';
@@ -101,6 +102,7 @@ function App() {
         <SponsorsStrip />
         <Footer />
         <CookieBanner />
+        <ContactPrompt />
       </div>
     </BrowserRouter>
   );

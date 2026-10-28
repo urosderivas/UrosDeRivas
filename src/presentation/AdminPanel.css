@@ -119,6 +119,21 @@
   overflow-x: auto;
 }
 
+.btn-icon.info {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-icon.info:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+  transform: scale(1.1);
+}
+
 .btn-icon.delete {
   background: none;
   border: none;

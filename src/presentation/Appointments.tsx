@@ -93,7 +93,7 @@ export function Appointments() {
 }
 
 function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider; onBack: () => void; onBooked: () => void }) {
-  const { user } = useStore();
+  const { user, ensureContact } = useStore();
   const today = madridToday();
   const lastDay = addDays(today, provider.max_days_ahead);
   const [month, setMonth] = useState(monthStart(today));
@@ -146,7 +146,7 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
 
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!slot) return;
+    if (!slot || !(await ensureContact())) return;
     setSaving(true); setError('');
     try {
       if (provider.price > 0) {

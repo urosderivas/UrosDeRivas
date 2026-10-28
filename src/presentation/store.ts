@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, MarketItem, Event, CartItem } from '../domain/entities';
+import { User, UserProfile, MarketItem, Event, CartItem } from '../domain/entities';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 
 const adapter = new SupabaseAdapter();
@@ -26,6 +26,10 @@ interface AppState {
   events: Event[];
   loading: boolean;
   cart: CartItem[];
+  /** Nombre, apellidos y teléfono del usuario (null hasta que se cargan) */
+  profile: UserProfile | null;
+  /** Hay un recuadro abierto pidiendo los datos de contacto antes de pagar */
+  contactRequest: ((ok: boolean) => void) | null;
   
   // Actions
   initAuth: () => Promise<void>;
@@ -38,6 +42,13 @@ interface AppState {
   fetchItems: () => Promise<void>;
   fetchEvents: () => Promise<void>;
   logActivity: (actionType: string, metadata?: any) => Promise<void>;
+  loadProfile: () => Promise<UserProfile | null>;
+  saveProfile: (profile: UserProfile) => Promise<void>;
+  /** Antes de comprar, inscribirse o reservar: pide nombre y teléfono si faltan. false si se cierra sin ponerlos. */
+  ensureContact: () => Promise<boolean>;
+  answerContact: (ok: boolean) => void;
+  /** Borra la cuenta propia y cierra la sesión */
+  deleteAccount: () => Promise<void>;
 
   // Cart Operations
   addToCart: (item: CartItem) => void;
@@ -46,17 +57,22 @@ interface AppState {
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
 }
 
-export const useStore = create<AppState>()((set) => ({
+export const isProfileComplete = (p: UserProfile | null) =>
+  !!p && !!p.first_name.trim() && !!p.last_name.trim() && !!p.phone.trim();
+
+export const useStore = create<AppState>()((set, get) => ({
   user: null,
   items: [],
   events: [],
   cart: loadCart(),
   loading: false,
+  profile: null,
+  contactRequest: null,
 
   initAuth: async () => {
     try {
       const user = await adapter.getUser();
-      set({ user });
+      set({ user, profile: null });
     } catch (e) {
       console.error(e);
       set({ user: null });
@@ -65,7 +81,7 @@ export const useStore = create<AppState>()((set) => ({
 
   signIn: async (email, pass) => {
     const user = await adapter.signIn(email, pass);
-    set({ user });
+    set({ user, profile: null });
   },
 
   signUp: async (email, pass) => {
@@ -86,7 +102,7 @@ export const useStore = create<AppState>()((set) => ({
 
   signOut: async () => {
     await adapter.signOut();
-    set({ user: null });
+    set({ user: null, profile: null });
   },
 
   fetchItems: async () => {
@@ -125,6 +141,49 @@ export const useStore = create<AppState>()((set) => ({
     } catch (e) {
       // Intentionally swallow errors
     }
+  },
+
+  loadProfile: async () => {
+    const user = get().user;
+    if (!user) return null;
+    const profile = await adapter.getMyProfile(user.id);
+    // Si mientras tanto se ha cambiado de cuenta, no se mezclan los datos
+    if (get().user?.id === user.id) set({ profile });
+    return profile;
+  },
+
+  saveProfile: async (profile) => {
+    const user = get().user;
+    if (!user) throw new Error('Inicia sesión para guardar tus datos.');
+    await adapter.saveMyProfile(user.id, profile);
+    set({ profile });
+  },
+
+  ensureContact: async () => {
+    if (!get().user) return true;
+    let profile = get().profile;
+    if (!profile) {
+      try { profile = await get().loadProfile(); }
+      catch (e) {
+        // Sin poder leer los datos no se bloquea la compra: el club tiene el email
+        console.error('No se pudieron cargar los datos de contacto', e);
+        return true;
+      }
+    }
+    if (isProfileComplete(profile)) return true;
+    get().contactRequest?.(false);
+    return new Promise<boolean>(resolve => set({ contactRequest: resolve }));
+  },
+
+  answerContact: (ok) => {
+    const resolve = get().contactRequest;
+    set({ contactRequest: null });
+    resolve?.(ok);
+  },
+
+  deleteAccount: async () => {
+    await adapter.deleteOwnAccount();
+    set({ user: null, profile: null, cart: [] });
   },
 
   addToCart: (item) => {

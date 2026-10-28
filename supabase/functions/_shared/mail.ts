@@ -109,6 +109,8 @@ export interface TransferDetails {
   note: string;
   /** Días para hacer la transferencia */
   deadlineDays: number;
+  /** Nombre del comprador para saludarle, si lo ha puesto en "Mi cuenta" */
+  name?: string;
 }
 
 export const formatEuros = (v: number) =>
@@ -122,8 +124,9 @@ export function transferMail(to: string, d: TransferDetails): Mail {
     ['Titular', d.holder],
     ['Concepto', d.reference],
   ];
+  const hello = d.name?.trim() ? `Hola, ${d.name.trim()}:` : 'Hola:';
   const text = [
-    'Hola:',
+    hello,
     '',
     'Gracias por tu reserva en Uros de Rivas. Para completarla, haz una transferencia con estos datos:',
     '',
@@ -144,7 +147,7 @@ export function transferMail(to: string, d: TransferDetails): Mail {
     `<tr><td style="padding:10px 0;border-bottom:1px solid #e8e2cf;font-size:13px;color:#6b6b6b;width:90px;vertical-align:top">${label}</td>` +
     `<td style="padding:10px 0;border-bottom:1px solid #e8e2cf;font-size:15px;font-weight:bold;color:#0d0d0d;overflow-wrap:break-word;${valueStyle}">${value}</td></tr>`;
   const body = [
-    p('Hola:'),
+    p(escapeHtml(hello)),
     p('Gracias por tu reserva en <b>Uros de Rivas</b>. Para completarla, haz una transferencia con estos datos:'),
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf7ee;border:1px solid #e8e2cf;border-radius:10px;margin:0 0 20px">
 <tr><td style="padding:6px 20px 10px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">

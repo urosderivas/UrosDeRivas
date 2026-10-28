@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useStore } from './store';
-import { Menu, X, User, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { Menu, X, User, UserRound, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
-import { MyOrdersModal } from './MyOrdersModal';
+import { AccountModal } from './AccountModal';
 import './Navbar.css';
 import { clubLogoUrl } from '../utils/media';
 import { isStaff, ROLE_LABELS } from '../domain/roles';
@@ -13,7 +13,7 @@ export function Navbar() {
   const { user, signOut, cart } = useStore();
   const cartCount = cart.reduce((n, c) => n + c.quantity, 0);
   const [isOpen, setIsOpen] = useState(false);
-  const [ordersOpen, setOrdersOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   return (
     <>
@@ -42,8 +42,8 @@ export function Navbar() {
                   {ROLE_LABELS[user.role]}
                 </span>
               )}
-              <button onClick={() => setOrdersOpen(true)} className="btn-cart" title="Mis Pedidos">
-                <ShoppingBag size={18} />
+              <button onClick={() => { setAccountOpen(true); setIsOpen(false); }} className="btn-cart" title="Mi cuenta" aria-label="Mi cuenta">
+                <UserRound size={18} />
               </button>
               <button onClick={() => { signOut(); setIsOpen(false); }} className="btn-logout">Salir</button>
             </div>
@@ -67,7 +67,7 @@ export function Navbar() {
         </button>
       </div>
     </nav>
-    {ordersOpen && <MyOrdersModal onClose={() => setOrdersOpen(false)} />}
+    {accountOpen && <AccountModal onClose={() => setAccountOpen(false)} />}
     </>
   );
 }

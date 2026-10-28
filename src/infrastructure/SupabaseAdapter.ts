@@ -2,7 +2,7 @@ import { supabase } from '../utils/supabase';
 import { registrationDetail } from '../utils/registrations';
 import { AuthPort, MarketPort, EventPort, SystemLogPort, OrderPort } from '../application/ports';
 import type { Role } from '../domain/roles';
-import { User, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
+import { User, UserProfile, MarketItem, Event, SystemLog, Order, Sponsor, NewsPost, OwnRegistration, EventCoupon } from '../domain/entities';
 
 /** Registros de actividad que enseña el panel (los más recientes) */
 const LOGS_SHOWN = 500;
@@ -476,6 +476,48 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   async deleteUser(id: string): Promise<void> {
     const { error } = await supabase.rpc('delete_user_account', { target_user_id: id });
     if (error) throw error;
+  }
+
+  // ============================================
+  // MI CUENTA (nombre, apellidos y teléfono)
+  // ============================================
+  async getMyProfile(userId: string): Promise<UserProfile> {
+    const { data, error } = await supabase.from('user_profiles')
+      .select('first_name, last_name, phone').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return data || { first_name: '', last_name: '', phone: '' };
+  }
+
+  async saveMyProfile(userId: string, profile: UserProfile): Promise<void> {
+    const { error } = await supabase.from('user_profiles').upsert({ user_id: userId, ...profile });
+    if (error) throw error;
+  }
+
+  /**
+   * Datos de contacto por id de usuario. La base de datos solo devuelve los que puede ver
+   * quien llama: el admin, todos; tienda, entrenador o fisio, los de sus clientes.
+   */
+  async getProfiles(userIds?: string[]): Promise<Record<string, UserProfile>> {
+    const ids = userIds ? [...new Set(userIds.filter(Boolean))] : undefined;
+    if (ids && ids.length === 0) return {};
+    const out: Record<string, UserProfile> = {};
+    // En trozos, para que la URL de la consulta no se haga demasiado larga
+    const chunks = ids ? Array.from({ length: Math.ceil(ids.length / 100) }, (_, i) => ids.slice(i * 100, i * 100 + 100)) : [undefined];
+    for (const chunk of chunks) {
+      let query = supabase.from('user_profiles').select('user_id, first_name, last_name, phone');
+      if (chunk) query = query.in('user_id', chunk);
+      const { data, error } = await query;
+      if (error) { console.error('No se pudieron cargar los datos de contacto', error); return out; }
+      for (const p of data || []) out[p.user_id] = { first_name: p.first_name, last_name: p.last_name, phone: p.phone };
+    }
+    return out;
+  }
+
+  /** Borra la cuenta de quien la usa (la base de datos no deja si tiene algo en curso). */
+  async deleteOwnAccount(): Promise<void> {
+    const { error } = await supabase.rpc('delete_own_account');
+    if (error) throw error;
+    await supabase.auth.signOut();
   }
 
   async getLogs(): Promise<SystemLog[]> {

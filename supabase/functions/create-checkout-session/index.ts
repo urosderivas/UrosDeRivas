@@ -52,12 +52,18 @@ async function paymentSettings(admin: any): Promise<PaymentSettings> {
  * web enseña, y el aviso de si se ha mandado el email con ellos.
  */
 async function transferResponse(
-  email: string | undefined, reference: string, amount: number, items: string[], settings: PaymentSettings,
+  admin: any, user: { id: string; email?: string }, reference: string, amount: number, items: string[], settings: PaymentSettings,
 ): Promise<Response> {
-  const emailSent = email
-    ? await sendMail(transferMail(email, { items, amount, reference, ...settings }))
+  const emailSent = user.email
+    ? await sendMail(transferMail(user.email, { items, amount, reference, name: (await contactOf(admin, user.id))?.first_name, ...settings }))
     : false;
   return json({ transfer: { reference, amount, ...settings }, emailSent });
+}
+
+/** Nombre y apellidos que el usuario puso en "Mi cuenta" (null si no ha puesto nada). */
+async function contactOf(admin: any, userId: string): Promise<{ first_name: string; last_name: string } | null> {
+  const { data } = await admin.from('user_profiles').select('first_name, last_name').eq('user_id', userId).maybeSingle();
+  return data?.first_name || data?.last_name ? data : null;
 }
 
 function isPositiveInt(value: unknown, max: number): value is number {
@@ -235,7 +241,7 @@ async function appointmentCheckout(body: any, user: { id: string; email?: string
   }
   const amount = roundCents(Number(row.amount));
   const item = `Cita: ${row.provider.service} con ${row.provider.name}, ${madridWhen.format(new Date(row.starts_at))} (${row.patient_name})`;
-  return await transferResponse(user.email, reference, amount, [item], settings);
+  return await transferResponse(admin, user, reference, amount, [item], settings);
 }
 
 serve(async (req: Request) => {
@@ -431,7 +437,7 @@ serve(async (req: Request) => {
       const who = tournament
         ? [attendeeNames[0].trim(), option?.label].filter(Boolean).join(', ')
         : attendeeNames.map((n: string, i: number) => wholeEvent ? n.trim() : `${n.trim()} (${attendeeDays[i].length} ${attendeeDays[i].length === 1 ? 'día' : 'días'})`).join(', ');
-      return await transferResponse(userEmail, reference, safeTotalAmount, [`Inscripción a ${dbEvent.title}: ${who}`], settings!);
+      return await transferResponse(supabaseAdminClient, user, reference, safeTotalAmount, [`Inscripción a ${dbEvent.title}: ${who}`], settings!);
     }
 
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
@@ -459,6 +465,9 @@ serve(async (req: Request) => {
     const dbItemsMap = new Map<string, DbItem>(dbItems.map((i: DbItem) => [i.id, i]));
 
     const orderInserts: any[] = [];
+    // El nombre de "Mi cuenta"; si no lo ha puesto, la parte del email antes de la @
+    const contact = await contactOf(supabaseAdminClient, user.id);
+    const buyerName = (contact ? `${contact.first_name} ${contact.last_name}`.trim() : '') || user.email?.split('@')[0] || 'Unknown';
     const lines: string[] = [];
 
     for (const cartItem of cartItems as CartItemPayload[]) {
@@ -479,7 +488,7 @@ serve(async (req: Request) => {
       // DB order row — only columns that exist in the orders table schema
       orderInserts.push({
         user_id: user.id,
-        buyer_name: user?.email?.split('@')[0] || 'Unknown',
+        buyer_name: buyerName,
         buyer_email: userEmail || '',
         item_id: dbItem.id,
         size: textOptionsStr || null,
@@ -505,7 +514,7 @@ serve(async (req: Request) => {
     }
 
     if (free) return json({ free: true });
-    return await transferResponse(userEmail, reference, total, lines, settings!);
+    return await transferResponse(supabaseAdminClient, user, reference, total, lines, settings!);
   } catch (error: any) {
     console.error("Edge Function Exception:", error);
     // Return a 400 status with JSON so the frontend `invoke` parser can read the exact error message
