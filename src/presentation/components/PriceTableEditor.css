@@ -10,7 +10,7 @@
 .pte-table thead th { color: var(--accent-text); font-weight: 700; white-space: nowrap; padding: 4px 8px; }
 .pte-table tbody th { color: var(--text-secondary); font-weight: 700; padding: 4px 10px; }
 .pte-table input,
-.pte-extra input,
+
 .pte-tool input,
 .pte-test input {
   width: 72px;
@@ -36,7 +36,7 @@
   font-size: 0.8rem;
 }
 
-.pte-extra, .pte-tool, .pte-test {
+.pte-tool, .pte-test {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

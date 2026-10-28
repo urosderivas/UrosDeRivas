@@ -9,7 +9,6 @@ export type Cell = number | '';
 export interface PriceTableDraft {
   byDays: boolean;
   rows: Cell[][];
-  extra: Cell;
 }
 
 /** Ajusta cada fila al nº de columnas: añade casillas vacías o quita las de más. */
@@ -18,14 +17,11 @@ export function fitRows(rows: Cell[][], cols: number): Cell[][] {
 }
 
 /** La tabla lista para guardar, o null si falta alguna casilla. */
-export function draftToTable(draft: PriceTableDraft, numDates: number): PriceTable | null {
+export function draftToTable(draft: PriceTableDraft, numDates: number): (PriceTable & { extraAttendee: number }) | null {
   const cols = draft.byDays ? numDates : 1;
-  const table = {
-    byDays: draft.byDays,
-    prices: fitRows(draft.rows, cols),
-    extraAttendee: draft.extra,
-  };
-  return parsePriceTable(table, numDates);
+  const table = parsePriceTable({ byDays: draft.byDays, prices: fitRows(draft.rows, cols) }, numDates);
+  // La base de datos sigue pidiendo extraAttendee en la tabla, aunque ya no se usa
+  return table && { ...table, extraAttendee: 0 };
 }
 
 interface Props {
@@ -40,11 +36,11 @@ const parseCell = (value: string): Cell => (value === '' ? '' : Math.max(0, Numb
 
 /**
  * Editor de la tabla de precios: precio TOTAL por nº de asistentes (filas) y nº de días
- * (columnas), más una regla fija para cuando vienen más asistentes que filas tiene la tabla.
+ * (columnas). Cada inscripción lleva como mucho tantos asistentes como filas.
  */
 export function PriceTableEditor({ draft, onChange, numDates, copySources }: Props) {
   const [quickPrice, setQuickPrice] = useState<Cell>('');
-  const [testAttendees, setTestAttendees] = useState(3);
+  const [testAttendees, setTestAttendees] = useState(1);
   const [testDays, setTestDays] = useState(1);
   // Lo que había en el otro modo, para recuperarlo si el admin vuelve a él
   const [otherMode, setOtherMode] = useState<PriceTableDraft | null>(null);
@@ -65,7 +61,6 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
     const p = Number(quickPrice);
     set({
       rows: rows.map((_, a) => Array.from({ length: cols }, (_, d) => p * (a + 1) * (draft.byDays ? d + 1 : 1))),
-      extra: p,
     });
   };
 
@@ -76,13 +71,13 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
     setOtherMode(draft);
     onChange(otherMode && otherMode.byDays === byDays
       ? otherMode
-      : { byDays, rows: draft.rows.map(() => []), extra: '' });
+      : { byDays, rows: draft.rows.map(() => []) });
   };
 
   const copyFrom = (id: string) => {
     const source = copySources.find(s => s.id === id);
     if (!source) return;
-    onChange({ byDays: source.table.byDays, rows: source.table.prices, extra: source.table.extraAttendee });
+    onChange({ byDays: source.table.byDays, rows: source.table.prices });
   };
 
   const table = draftToTable({ ...draft, rows }, numDates);
@@ -151,13 +146,10 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
         </button>
       )}
 
-      <div className="pte-extra">
-        A partir de {lastRow + 1} asistentes: precio de {lastRow} {lastRow === 1 ? 'asistente' : 'asistentes'} +
-        <input type="number" min="0" step="0.01" inputMode="decimal" value={draft.extra}
-          className={draft.extra === '' ? 'pte-empty' : ''}
-          onChange={e => set({ extra: parseCell(e.target.value) })} />
-        € por cada asistente más{draft.byDays ? ' y día' : ''}
-      </div>
+      <p className="pte-hint">
+        Cada inscripción puede llevar como máximo {lastRow} {lastRow === 1 ? 'asistente' : 'asistentes'}, uno por fila.
+        Para grupos más grandes, añade filas.
+      </p>
 
       <div className="pte-tools">
         <div className="pte-tool">
@@ -180,8 +172,8 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
 
       <div className="pte-test">
         <span>Comprobar:</span>
-        <input type="number" min="1" max="20" value={testAttendees}
-          onChange={e => setTestAttendees(Math.min(20, Math.max(1, Number(e.target.value) || 1)))} />
+        <input type="number" min="1" max={lastRow} value={Math.min(testAttendees, lastRow)}
+          onChange={e => setTestAttendees(Math.min(lastRow, Math.max(1, Number(e.target.value) || 1)))} />
         <span>asistentes</span>
         {draft.byDays && (
           <>
@@ -190,7 +182,7 @@ export function PriceTableEditor({ draft, onChange, numDates, copySources }: Pro
             <span>días</span>
           </>
         )}
-        <b>= {table ? `${tablePrice(table, testAttendees, Math.min(testDays, cols))} €` : 'rellena todas las casillas'}</b>
+        <b>= {table ? `${tablePrice(table, Math.min(testAttendees, lastRow), Math.min(testDays, cols))} €` : 'rellena todas las casillas'}</b>
       </div>
     </div>
   );
