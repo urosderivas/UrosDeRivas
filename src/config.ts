@@ -22,6 +22,9 @@ export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCod
 export const FEATURES = {
   /** Citas de fisioterapia (página /citas, menú y pestaña del panel). Ponlo a false para ocultarlas sin borrar nada. */
   appointments: true,
+  /** Botón "Borrar mi cuenta" en Mi cuenta. Antes de activarlo hay que aplicar en Supabase
+   * supabase/pendiente/20261028120001_keep_records_on_account_delete.sql */
+  accountDeletion: false,
 };
 
 /** Avisos fijos de la barra superior. Se suman a los campus con inscripciones abiertas. */

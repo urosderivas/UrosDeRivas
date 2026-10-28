@@ -30,7 +30,7 @@ export function PrivacyPolicy() {
           El caso de que usted haya facilitado los datos personales, bien en su calidad de cliente, socio o de proveedor, {CLUB.legalName} los utilizará para el mantenimiento de la relación contractual existente.
         </p>
         <p>
-          Con tu cuenta de la web guardamos tu email y tu nombre, apellidos y teléfono, que te pedimos en «Mi cuenta» o antes de tu primera compra, inscripción o cita. El club los usa solo para contactarte por ellas. Puedes cambiarlos o borrar tu cuenta cuando quieras desde «Mi cuenta»; el club conserva los pedidos e inscripciones ya hechos mientras lo exija la ley.
+          Con tu cuenta de la web guardamos tu email y tu nombre, apellidos y teléfono, que te pedimos en «Mi cuenta» o antes de tu primera compra, inscripción o cita. El club los usa solo para contactarte por ellas. Puedes cambiarlos cuando quieras desde «Mi cuenta» y pedir al club que borre tu cuenta; el club conserva los pedidos e inscripciones ya hechos mientras lo exija la ley.
         </p>
 
         <h2>Marketing y publicidad</h2>

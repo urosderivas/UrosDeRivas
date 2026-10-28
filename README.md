@@ -27,8 +27,7 @@ dominio del club).
 - **Cuenta de usuario**: registro, inicio de sesión (también con Google) y
   recuperar contraseña. En **Mi cuenta** (icono de persona arriba) cada uno pone su
   nombre, apellidos y teléfono, ve "Mis pedidos" con el justificante de cada pago y,
-  en lo pendiente, los datos para hacer la transferencia, y puede borrar su cuenta
-  (si no tiene nada en curso). Antes de la primera compra, inscripción o cita se le
+  en lo pendiente, los datos para hacer la transferencia. Antes de la primera compra, inscripción o cita se le
   piden el nombre y el teléfono si faltan.
 - **Textos legales**: aviso legal, privacidad y cookies, con los datos del club.
 
@@ -60,8 +59,11 @@ Con una cuenta de administrador, sin tocar código:
   - Productos de la tienda: crear, editar y borrar.
   - Escáner del QR de los justificantes, exportación a Excel (con el nombre y el
     teléfono de cada cuenta), lista de usuarios (sus datos con el icono ⓘ, su rol y
-    borrar cuentas) y registro de actividad. Al borrar una cuenta se guardan sus
-    pedidos e inscripciones, ya sin la cuenta.
+    borrar cuentas) y registro de actividad.
+  - Pendiente: que cada usuario borre su propia cuenta desde Mi cuenta. El código ya
+    está; para activarlo se aplica en Supabase
+    `supabase/pendiente/20261028120001_keep_records_on_account_delete.sql` y se pone
+    `accountDeletion: true` en `src/config.ts`.
 
 Las imágenes se suben al almacenamiento de Supabase (carpeta pública `media`) o se
 pega el enlace de una imagen ya publicada.

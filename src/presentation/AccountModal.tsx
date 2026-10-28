@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserRound, ShoppingBag, Trash2 } from 'lucide-react';
 import { useStore } from './store';
+import { FEATURES } from '../config';
 import { Modal } from './components/Modal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ContactForm } from './components/ContactForm';
@@ -73,7 +74,7 @@ export function AccountModal({ onClose, initialTab = 'datos' }: { onClose: () =>
             : profile ? <ContactForm key={user.id} initial={profile} submitLabel="Guardar" onSubmit={saveProfile} />
             : <p className="text-secondary">Cargando tus datos...</p>}
 
-          <div className="account-danger">
+          {FEATURES.accountDeletion && <div className="account-danger">
             <div>
               <h3>Borrar mi cuenta</h3>
               <p>Se borran tu cuenta y tus datos de contacto. El club guarda tus pedidos e inscripciones ya terminados para sus cuentas.</p>
@@ -82,7 +83,7 @@ export function AccountModal({ onClose, initialTab = 'datos' }: { onClose: () =>
               <Trash2 size={16} /> {deleting ? 'Borrando...' : 'Borrar mi cuenta'}
             </button>
             {deleteError && <p className="modal-error">{deleteError}</p>}
-          </div>
+          </div>}
         </>
       )}
 
