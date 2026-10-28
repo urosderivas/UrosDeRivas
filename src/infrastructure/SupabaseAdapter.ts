@@ -489,8 +489,13 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
   }
 
   async saveMyProfile(userId: string, profile: UserProfile): Promise<void> {
-    const { error } = await supabase.from('user_profiles').upsert({ user_id: userId, ...profile });
+    // Sin upsert: el usuario solo puede cambiar nombre, apellidos y teléfono, y un upsert
+    // también reescribe user_id, así que la base de datos lo rechaza
+    const { data, error } = await supabase.from('user_profiles').update(profile).eq('user_id', userId).select('user_id');
     if (error) throw error;
+    if (data.length > 0) return;
+    const { error: insertError } = await supabase.from('user_profiles').insert({ user_id: userId, ...profile });
+    if (insertError) throw insertError;
   }
 
   /**
