@@ -136,6 +136,16 @@ emails (la web enseña los mismos datos). El servidor de correo es el de Arsys
 (`smtp.serviciodecorreo.es`, puerto 465); se puede cambiar con `SMTP_HOST` y
 `SMTP_PORT` (Supabase no deja usar los puertos 25 ni 587).
 
+Los emails de la cuenta (confirmar el email al registrarse y recuperar la
+contraseña) los manda Supabase con el mismo buzón: Authentication → Emails →
+SMTP Settings (servidor y usuario de arriba). Su diseño está en
+`supabase/templates/` (`confirmation.html` y `recovery.html`): se pega el HTML en
+Authentication → Emails → Templates, en "Confirm signup" y "Reset password", con
+los asuntos "Confirma tu email - Uros de Rivas" y "Cambia tu contraseña - Uros de
+Rivas". El email de la transferencia (`_shared/mail.ts`) usa el mismo diseño; el
+escudo va dentro del email (`_shared/email-logo.ts`, copia de
+`public/assets/email-logo.png`).
+
 El proyecto de producción se creó antes de versionar el esquema:
 `20261017000000_baseline.sql` es una copia de lo que ya tenía y está marcada como
 aplicada, así que `npx supabase db push` solo aplica las migraciones nuevas.
