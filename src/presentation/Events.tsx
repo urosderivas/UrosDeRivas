@@ -391,7 +391,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                           </div>
                         ) : isClosed ? (
                           <div className="campus-full-box">
-                            <p>Las inscripciones de este {page.noun} están cerradas: sus fechas ya han pasado.</p>
+                            <p>Las inscripciones de este {page.noun} están cerradas.</p>
                           </div>
                         ) : !user ? (
                           <div className="campus-login-box">

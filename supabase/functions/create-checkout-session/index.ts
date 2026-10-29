@@ -291,7 +291,7 @@ serve(async (req: Request) => {
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('title, type, active, date, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
+        .select('title, type, active, registration_open, date, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
 
@@ -303,7 +303,7 @@ serve(async (req: Request) => {
       if (dbEvent.active === false) throw new Error(`Este ${eventNoun} ya no admite inscripciones.`);
       const madridToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
       if (registrationClosed(dbEvent, madridToday)) {
-        throw new Error(`Las inscripciones de este ${eventNoun} ya están cerradas: sus fechas han pasado.`);
+        throw new Error(`Las inscripciones de este ${eventNoun} están cerradas.`);
       }
 
       // 2. Validate the registration against the event before pricing it

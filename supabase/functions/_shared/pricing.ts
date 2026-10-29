@@ -142,10 +142,14 @@ export function lastEventDay(ev: { dates?: string[] | null; date?: string | null
 }
 
 /**
- * Inscripciones cerradas porque ya ha pasado el último día del evento. `today` es el día
- * de hoy en Madrid ("2026-10-29"). El evento se sigue viendo, pero ya no admite inscripciones.
+ * Inscripciones cerradas: las ha cerrado el club o ya ha pasado el último día del evento.
+ * `today` es el día de hoy en Madrid ("2026-10-29"). El evento se sigue viendo, pero ya no
+ * admite inscripciones.
  */
-export function registrationClosed(ev: { dates?: string[] | null; date?: string | null }, today: string): boolean {
+export function registrationClosed(
+  ev: { dates?: string[] | null; date?: string | null; registration_open?: boolean | null }, today: string,
+): boolean {
+  if (ev.registration_open === false) return true;
   const last = lastEventDay(ev);
   return last !== null && last < today;
 }
