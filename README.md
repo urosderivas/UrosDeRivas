@@ -39,8 +39,8 @@ Con una cuenta de administrador, sin tocar código:
   enlaces en el texto (`[texto](https://...)`) y enlazar a un campus, torneo o viaje.
 - **Campus, torneos y viajes** (en su pestaña): crear, editar, ocultar y borrar.
   - Inscripciones cerradas: se cierran solas cuando pasa su último día, o antes
-    desmarcando «Inscripciones abiertas» en el editor. El evento se sigue viendo
-    (al final de la lista, con «Inscripciones cerradas»); «Visible» lo oculta del todo.
+    marcando «Cerrar inscripciones» en el editor. El evento se sigue viendo
+    (al final de la lista, con «Inscripciones cerradas»); «Ocultar» lo quita del todo.
   - Las fechas se añaden por rango ("del 22 al 30") o de una en una.
   - **Tabla de precios**: una fila por número de asistentes y una columna por
     número de días; en cada casilla va el precio **total**. Cada inscripción lleva

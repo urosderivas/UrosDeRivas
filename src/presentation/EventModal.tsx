@@ -340,18 +340,18 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
             placeholder="Información adicional, niveles, materiales necesarios..." />
         </div>
 
-        {/* Active toggle */}
+        {/* Ocultar / cerrar inscripciones */}
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-          Visible para los usuarios
+          <input type="checkbox" checked={!active} onChange={e => setActive(!e.target.checked)} />
+          Ocultar
         </label>
         <div>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-            <input type="checkbox" checked={registrationOpen} onChange={e => setRegistrationOpen(e.target.checked)} />
-            Inscripciones abiertas
+            <input type="checkbox" checked={!registrationOpen} onChange={e => setRegistrationOpen(!e.target.checked)} />
+            Cerrar inscripciones
           </label>
           <p style={{ margin: '4px 0 0 24px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-            Si lo desmarcas, se sigue viendo pero nadie puede inscribirse. Se cierran solas cuando pasan sus fechas.
+            Se sigue viendo pero nadie puede inscribirse. Se cierran solas cuando pasan sus fechas.
           </p>
         </div>
 

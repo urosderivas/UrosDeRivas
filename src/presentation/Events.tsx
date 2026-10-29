@@ -340,7 +340,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                   <div className="event-card-clickable" onClick={() => handleExpand(ev)} style={{ cursor: 'pointer' }}>
                     <div className="event-image" style={campusBackground(ev.imageUrl)}>
                       <div className={`event-type-badge badge-${kind}`}>{page.badge}</div>
-                      {!ev.active && <div className="event-hidden-badge" title="Los usuarios no lo ven. Edítalo y marca «Visible para los usuarios» para mostrarlo.">Oculto</div>}
+                      {!ev.active && <div className="event-hidden-badge" title="Los usuarios no lo ven. Edítalo y desmarca «Ocultar» para mostrarlo.">Oculto</div>}
                       {renderBadge()}
                     </div>
                     <div className="event-info">
