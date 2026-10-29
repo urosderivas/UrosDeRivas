@@ -6,8 +6,9 @@ import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { EventModal } from './EventModal';
 import { Event, CustomField, EventType, OwnRegistration } from '../domain/entities';
-import { choosesDays, eventOptions, eventTable, isFreeEvent, maxTableAttendees, registrationPrice, registrationTiers, startingPrice, PriceTable } from '../domain/pricing';
+import { choosesDays, eventOptions, eventTable, isFreeEvent, maxTableAttendees, registrationClosed, registrationPrice, registrationTiers, startingPrice, PriceTable } from '../domain/pricing';
 import { formatDateRanges } from '../utils/dates';
+import { madridToday } from '../utils/madrid';
 import { CouponsModal } from './components/CouponsModal';
 import { EVENT_PAGES, eventPath } from '../utils/eventLinks';
 import { MessageModal } from './components/MessageModal';
@@ -132,7 +133,10 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
     navigate(location.pathname, { replace: true });
   }, [linkedCampusId, loading, events, kind]);
 
-  const visibleEvents = events.filter(e => e.type === kind);
+  // Primero los que admiten inscripciones; los que ya han pasado se siguen viendo, al final
+  const today = madridToday();
+  const visibleEvents = events.filter(e => e.type === kind)
+    .sort((a, b) => Number(registrationClosed(a, today)) - Number(registrationClosed(b, today)));
 
   const handleSaveEvent = async (eventData: Omit<Event, 'id'>) => {
     if (editEvent) await adapter.updateEvent(editEvent.id, eventData);
@@ -294,6 +298,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
               const myPlayers = options ? myRegs.filter(r => r.status !== 'cancelled') : [];
               const spotsLeft = ev.max_capacity ? Math.max(0, ev.max_capacity - (occupancy[ev.id] || 0)) : null;
               const isFull = spotsLeft === 0;
+              const isClosed = registrationClosed(ev, today);
               // Con tabla de precios, como mucho un asistente por fila
               const maxAttendees = Math.min(MAX_ATTENDEES, spotsLeft ?? MAX_ATTENDEES, maxTableAttendees(ev) ?? MAX_ATTENDEES);
               const isFree = isFreeEvent(ev);
@@ -351,7 +356,9 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                               : table ? (table.byDays ? `Desde ${euros(fromPrice)}` : euros(fromPrice)) : `Desde ${euros(fromPrice)}/día`}
                           </span>
                         )}
-                        {spotsLeft !== null && (
+                        {isClosed ? (
+                          <span className="event-spots full">🔒 Inscripciones cerradas</span>
+                        ) : spotsLeft !== null && (
                           <span className={`event-spots ${isFull ? 'full' : ''}`}>
                             👥 {isFull ? 'Completo' : `Quedan ${spotsLeft} ${spotsLeft === 1 ? 'plaza' : 'plazas'}`}
                           </span>
@@ -381,6 +388,10 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
                                 {myPending && <> <button type="button" className="btn-inline-link" onClick={() => showTransfer(myPending.stripe_session_id!, myPending.amount)}>Ver cómo pagar</button></>}
                               </p>
                             )}
+                          </div>
+                        ) : isClosed ? (
+                          <div className="campus-full-box">
+                            <p>Las inscripciones de este {page.noun} están cerradas: sus fechas ya han pasado.</p>
                           </div>
                         ) : !user ? (
                           <div className="campus-login-box">

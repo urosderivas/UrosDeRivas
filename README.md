@@ -38,6 +38,8 @@ Con una cuenta de administrador, sin tocar código:
 - **Noticias** (en Inicio): crear, editar, ocultar y borrar. Pueden llevar imagen,
   enlaces en el texto (`[texto](https://...)`) y enlazar a un campus, torneo o viaje.
 - **Campus, torneos y viajes** (en su pestaña): crear, editar, ocultar y borrar.
+  - Cuando pasa su último día, las inscripciones se cierran solas: el evento se
+    sigue viendo (al final de la lista, con «Inscripciones cerradas»).
   - Las fechas se añaden por rango ("del 22 al 30") o de una en una.
   - **Tabla de precios**: una fila por número de asistentes y una columna por
     número de días; en cada casilla va el precio **total**. Cada inscripción lleva

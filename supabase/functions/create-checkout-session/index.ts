@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.33.1";
-import { eventOptions, eventTable, isTournament, registrationPrice, roundCents } from "../_shared/pricing.ts";
+import { eventOptions, eventTable, isTournament, registrationClosed, registrationPrice, roundCents } from "../_shared/pricing.ts";
 import { formatEuros, sendMail, transferMail } from "../_shared/mail.ts";
 
 // Crea los pedidos de la tienda, las inscripciones a campus, torneos y viajes y las citas
@@ -291,7 +291,7 @@ serve(async (req: Request) => {
       // 1. Fetch Event securely from DB
       const { data: dbEvent, error: eventError } = await supabaseAdminClient
         .from('events')
-        .select('title, type, active, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
+        .select('title, type, active, date, dates, price_per_day, price_tiers, attendee_discounts, price_table, price_options, custom_fields, max_capacity')
         .eq('id', campusRegistration.eventId)
         .single();
 
@@ -301,6 +301,10 @@ serve(async (req: Request) => {
       const tournament = isTournament(dbEvent);
       const eventNoun = tournament ? 'evento' : 'campus';
       if (dbEvent.active === false) throw new Error(`Este ${eventNoun} ya no admite inscripciones.`);
+      const madridToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+      if (registrationClosed(dbEvent, madridToday)) {
+        throw new Error(`Las inscripciones de este ${eventNoun} ya están cerradas: sus fechas han pasado.`);
+      }
 
       // 2. Validate the registration against the event before pricing it
       const numAttendees = campusRegistration.numAttendees;

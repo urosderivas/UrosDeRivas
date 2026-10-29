@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { SupabaseAdapter } from '../../infrastructure/SupabaseAdapter';
 import { PROMO_MESSAGES } from '../../config';
 import { eventPath } from '../../utils/eventLinks';
+import { registrationClosed } from '../../domain/pricing';
+import { madridToday } from '../../utils/madrid';
 import './PromoBar.css';
 
 const adapter = new SupabaseAdapter();
@@ -15,12 +17,12 @@ export function PromoBar() {
 
   useEffect(() => {
     // Solo eventos que aún no han terminado y con plazas libres
-    const today = new Date().toLocaleDateString('sv-SE');
+    const today = madridToday();
     Promise.all([adapter.getEvents(), adapter.getCampusOccupancy().catch(() => ({} as Record<string, number>))])
       .then(([events, occupancy]) => {
         const open = events
           .filter(e => e.active)
-          .filter(e => [...(e.dates || []), e.date].some(d => d && d >= today))
+          .filter(e => !registrationClosed(e, today))
           .filter(e => !e.max_capacity || (occupancy[e.id] || 0) < e.max_capacity)
           .map(e => ({ text: `Inscripciones abiertas: ${e.title}`, to: eventPath(e) }));
         setMessages([...open, ...PROMO_MESSAGES]);
