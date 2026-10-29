@@ -59,6 +59,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [maxCapacity, setMaxCapacity] = useState<number | ''>('');
   const [active, setActive] = useState(true);
+  const [registrationOpen, setRegistrationOpen] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [newDateInput, setNewDateInput] = useState('');
@@ -81,10 +82,11 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
       setCustomFields(initial.custom_fields || []);
       setMaxCapacity(initial.max_capacity || '');
       setActive(initial.active !== false);
+      setRegistrationOpen(initial.registration_open !== false);
     } else {
       setTitle(''); setDates([]); setLocation(''); setSchedule('');
       setImageUrl(''); setDescription(''); setType(defaultType);
-      setCustomFields([]); setMaxCapacity(''); setActive(true);
+      setCustomFields([]); setMaxCapacity(''); setActive(true); setRegistrationOpen(true);
     }
     setError(''); setNewDateInput(''); setRangeFrom(''); setRangeTo('');
   }, [initial, isOpen, defaultType]);
@@ -147,7 +149,7 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
         price_per_day: options ? Math.min(...options.map(o => o.price)) : priceTable!.prices[0][0],
         price_tiers: [], attendee_discounts: [],
         custom_fields: customFields, max_capacity: maxCapacity === '' ? null : maxCapacity,
-        active,
+        active, registration_open: registrationOpen,
       });
       onClose();
     } catch (e: any) { setError(e.message); }
@@ -338,11 +340,20 @@ export function EventModal({ isOpen, onClose, onSave, initial, defaultType = 'ca
             placeholder="Información adicional, niveles, materiales necesarios..." />
         </div>
 
-        {/* Active toggle */}
+        {/* Ocultar / cerrar inscripciones */}
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
-          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-          Visible para los usuarios
+          <input type="checkbox" checked={!active} onChange={e => setActive(!e.target.checked)} />
+          Ocultar
         </label>
+        <div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+            <input type="checkbox" checked={!registrationOpen} onChange={e => setRegistrationOpen(!e.target.checked)} />
+            Cerrar inscripciones
+          </label>
+          <p style={{ margin: '4px 0 0 24px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+            Se sigue viendo pero nadie puede inscribirse. Se cierran solas cuando pasan sus fechas.
+          </p>
+        </div>
 
         {error && <p className="modal-error">{error}</p>}
 

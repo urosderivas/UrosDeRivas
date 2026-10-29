@@ -135,6 +135,25 @@ export function eventOptions(ev: PricedEvent): PriceOption[] | null {
   return table ? [{ label: '', price: roundCents(table.prices[0][0]) }] : null;
 }
 
+/** Último día del evento ("2026-07-31"), o null si no tiene fechas. */
+export function lastEventDay(ev: { dates?: string[] | null; date?: string | null }): string | null {
+  const days = [...(ev.dates || []), ev.date || ''].map(d => d.slice(0, 10)).filter(Boolean).sort();
+  return days.length ? days[days.length - 1] : null;
+}
+
+/**
+ * Inscripciones cerradas: las ha cerrado el club o ya ha pasado el último día del evento.
+ * `today` es el día de hoy en Madrid ("2026-10-29"). El evento se sigue viendo, pero ya no
+ * admite inscripciones.
+ */
+export function registrationClosed(
+  ev: { dates?: string[] | null; date?: string | null; registration_open?: boolean | null }, today: string,
+): boolean {
+  if (ev.registration_open === false) return true;
+  const last = lastEventDay(ev);
+  return last !== null && last < today;
+}
+
 /** Si el evento se paga completo, no se eligen días: se va a todos. */
 export function choosesDays(ev: PricedEvent): boolean {
   if (isTournament(ev)) return false;

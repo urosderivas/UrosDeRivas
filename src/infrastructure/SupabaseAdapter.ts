@@ -215,6 +215,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       custom_fields: event.custom_fields || [],
       max_capacity: event.max_capacity,
       active: event.active !== false,
+      registration_open: event.registration_open !== false,
       created_by: user?.id,
     }).select().single();
     if (error) throw eventSaveError(error);
@@ -238,6 +239,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
     if (event.custom_fields !== undefined) payload.custom_fields = event.custom_fields;
     if (event.max_capacity !== undefined) payload.max_capacity = event.max_capacity;
     if (event.active !== undefined) payload.active = event.active;
+    if (event.registration_open !== undefined) payload.registration_open = event.registration_open;
     if (event.type !== undefined) payload.type = event.type;
 
     const { data, error } = await supabase.from('events').update(payload).eq('id', id).select();
@@ -257,6 +259,7 @@ export class SupabaseAdapter implements AuthPort, MarketPort, EventPort, SystemL
       price_options: e.price_options ?? null,
       custom_fields: e.custom_fields || [],
       max_capacity: e.max_capacity, active: e.active !== false,
+      registration_open: e.registration_open !== false,
     };
   }
 

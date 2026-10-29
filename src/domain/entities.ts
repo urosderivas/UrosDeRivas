@@ -66,6 +66,8 @@ export interface Event {
   /** Plazas (asistentes) en total; null o vacío = sin límite */
   max_capacity?: number | null;
   active: boolean;
+  /** false = se sigue viendo pero no admite inscripciones (también se cierran solas al pasar sus fechas) */
+  registration_open: boolean;
 }
 
 export interface CampusRegistration {
