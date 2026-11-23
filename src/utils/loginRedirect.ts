@@ -3,7 +3,9 @@ const KEY = 'login_next';
 
 /** Solo rutas internas de la web ("/events?campus=..."), nunca otra web. */
 export function safeNextPath(path: string | null): string | null {
-  if (!path || !path.startsWith('/') || path.startsWith('//')) return null;
+  // Solo rutas de esta web: "/algo". Fuera "//otra-web", "/\otra-web" (el navegador lo
+  // lee como "//") y tabuladores o saltos de línea, que el navegador también se salta.
+  if (!path || !path.startsWith('/') || path.startsWith('//') || /[\\\x00-\x1f]/.test(path)) return null;
   return path;
 }
 
