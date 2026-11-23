@@ -6,11 +6,16 @@
 //   SMTP_HOST  opcional (por defecto smtp.serviciodecorreo.es, el de Arsys)
 //   SMTP_PORT  opcional (por defecto 465)
 //   MAIL_REPLY_TO  opcional: a dónde van las respuestas si no es el mismo buzón
+//   SHOP_SMTP_USER y SHOP_SMTP_PASS  opcionales: buzón de la tienda (tienda@urosderivas.com)
+//                  para los emails de los pedidos de ropa. Sin ellos, esos emails salen
+//                  del buzón principal y las respuestas van a tienda@.
 // Sin SMTP_USER o SMTP_PASS no se envía nada: la web enseña los mismos datos.
 import nodemailer from "npm:nodemailer@6.9.16";
 import { EMAIL_LOGO_PNG_BASE64 } from "./email-logo.ts";
 
 export interface Mail {
+  /** 'shop' = pedido de la tienda: sale de tienda@ (o se responde a tienda@) */
+  mailbox?: 'main' | 'shop';
   to: string;
   subject: string;
   text: string;
@@ -25,9 +30,15 @@ export function mailConfigured(): boolean {
 
 /** Envía el email; devuelve false (sin lanzar) si no está configurado o falla. */
 export async function sendMail(mail: Mail): Promise<boolean> {
-  const user = Deno.env.get('SMTP_USER');
-  const pass = Deno.env.get('SMTP_PASS');
+  const shop = mail.mailbox === 'shop';
+  const shopUser = Deno.env.get('SHOP_SMTP_USER');
+  const shopPass = Deno.env.get('SHOP_SMTP_PASS');
+  const ownShopBox = shop && !!shopUser && !!shopPass;
+  const user = ownShopBox ? shopUser : Deno.env.get('SMTP_USER');
+  const pass = ownShopBox ? shopPass : Deno.env.get('SMTP_PASS');
   if (!user || !pass || !mail.to) return false;
+  // Las respuestas a un pedido de la tienda van siempre a tienda@
+  const replyTo = shop ? (ownShopBox ? undefined : SHOP_EMAIL) : Deno.env.get('MAIL_REPLY_TO') || undefined;
   const port = Number(Deno.env.get('SMTP_PORT') || 465);
   try {
     const transport = nodemailer.createTransport({
@@ -41,7 +52,7 @@ export async function sendMail(mail: Mail): Promise<boolean> {
     });
     await transport.sendMail({
       from: { name: 'Uros de Rivas', address: user },
-      replyTo: Deno.env.get('MAIL_REPLY_TO') || undefined,
+      replyTo,
       to: mail.to,
       subject: mail.subject,
       text: mail.text,
@@ -63,6 +74,8 @@ const LOGO_CID = 'logo@urosderivas';
 const CLUB_NAME = 'Club Deportivo Elemental Uros de Rivas';
 const CLUB_ADDRESS = 'Calle de Aigües Tortes, 28522 Rivas-Vaciamadrid (Madrid)';
 const CONTACT_EMAIL = 'administracion@urosderivas.com';
+/** A dónde mandan el justificante los pedidos de la tienda (lo demás, a CONTACT_EMAIL) */
+export const SHOP_EMAIL = 'tienda@urosderivas.com';
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://urosderivas.github.io/UrosDeRivas/';
 
 /**
@@ -70,7 +83,8 @@ const SITE_URL = Deno.env.get('SITE_URL') || 'https://urosderivas.github.io/Uros
  * los datos del club. Tablas y estilos en línea, que es lo que entienden todos los correos.
  * Las plantillas de Supabase (supabase/templates) copian este mismo diseño.
  */
-function emailLayout(opts: { preheader: string; title: string; body: string }): string {
+function emailLayout(opts: { preheader: string; title: string; body: string; contact?: string }): string {
+  const contact = opts.contact || CONTACT_EMAIL;
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><title>${escapeHtml(opts.title)}</title></head>
@@ -89,7 +103,7 @@ ${opts.body}
 </td></tr>
 <tr><td style="padding:24px 28px 28px;border-top:1px solid #ececec;font-size:12px;line-height:1.6;color:#777777">
 ${CLUB_NAME}<br>${CLUB_ADDRESS}<br>
-<a href="mailto:${CONTACT_EMAIL}" style="color:#9a7b1c">${CONTACT_EMAIL}</a> · <a href="${SITE_URL}" style="color:#9a7b1c">Web del club</a>
+<a href="mailto:${contact}" style="color:#9a7b1c">${contact}</a> · <a href="${SITE_URL}" style="color:#9a7b1c">Web del club</a>
 </td></tr>
 </table>
 </td></tr></table>
@@ -111,6 +125,8 @@ export interface TransferDetails {
   deadlineDays: number;
   /** Nombre del comprador para saludarle, si lo ha puesto en "Mi cuenta" */
   name?: string;
+  /** Pedido de la tienda: el justificante va a tienda@ en vez de a administracion@ */
+  shop?: boolean;
 }
 
 export const formatEuros = (v: number) =>
@@ -125,6 +141,7 @@ export function transferMail(to: string, d: TransferDetails): Mail {
     ['Concepto', d.reference],
   ];
   const hello = d.name?.trim() ? `Hola, ${d.name.trim()}:` : 'Hola:';
+  const receiptEmail = d.shop ? SHOP_EMAIL : CONTACT_EMAIL;
   const text = [
     hello,
     '',
@@ -133,6 +150,8 @@ export function transferMail(to: string, d: TransferDetails): Mail {
     ...rows.map(([k, v]) => `${k}: ${v}`),
     '',
     `Tienes ${d.deadlineDays} días para hacer la transferencia. Pon el concepto tal cual: así el club sabe a qué corresponde tu pago.`,
+    '',
+    `Cuando la hagas, envía el justificante a ${receiptEmail} (o responde a este email).`,
     ...(d.note ? ['', d.note] : []),
     '',
     'Lo que has reservado:',
@@ -160,6 +179,7 @@ ${row('Concepto', `<span style="display:inline-block;background:#0d0d0d;color:#d
 <td style="border-left:4px solid #d4af37;background:#fffbea;padding:12px 16px;font-size:14px;line-height:1.5;color:#3d3420">
 Tienes <b>${d.deadlineDays} días</b> para hacer la transferencia. Pon el concepto <b>tal cual</b>: así el club sabe a qué corresponde tu pago.
 </td></tr></table>`,
+    p(`Cuando la hagas, envía el justificante a <a href="mailto:${receiptEmail}" style="color:#9a7b1c;font-weight:bold">${receiptEmail}</a> (o responde a este email).`),
     d.note ? p(escapeHtml(d.note), 'color:#444444') : '',
     p('<b>Lo que has reservado</b>', 'margin-bottom:6px'),
     `<ul style="margin:0 0 20px;padding-left:20px;font-size:15px;line-height:1.6">${d.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`,
@@ -169,7 +189,8 @@ Tienes <b>${d.deadlineDays} días</b> para hacer la transferencia. Pon el concep
     preheader: `Importe ${formatEuros(d.amount)} · concepto ${d.reference}`,
     title: 'Datos para tu transferencia',
     body,
+    contact: receiptEmail,
   });
 
-  return { to, subject: `Uros de Rivas: datos para la transferencia (${d.reference})`, text, html };
+  return { mailbox: d.shop ? 'shop' : 'main', to, subject: `Uros de Rivas: datos para la transferencia (${d.reference})`, text, html };
 }

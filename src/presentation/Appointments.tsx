@@ -6,6 +6,7 @@ import { Appointment, AppointmentProvider } from '../domain/entities';
 import { AppointmentsAdapter } from '../infrastructure/AppointmentsAdapter';
 import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { TransferModal } from './components/TransferDetails';
+import { CLUB } from '../config';
 import { addDays, formatDayLong, formatMonth, isoWeekday, madridDay, madridTime, madridToday } from '../utils/madrid';
 import './Appointments.css';
 
@@ -178,7 +179,7 @@ function Booking({ provider, onBack, onBooked }: { provider: AppointmentProvider
             : `La verás abajo en "Mis citas". Puedes cancelarla hasta ${provider.cancel_hours} horas antes.`}
         </p>
         <button className="appt-btn" onClick={onBack}>Volver</button>
-        <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" />
+        <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" receiptEmail={CLUB.contactEmail} />
       </div>
     );
   }
@@ -301,7 +302,7 @@ function MyAppointments({ appointments, onChange }: { appointments: Appointment[
     <section className="appt-mine">
       <h2>Mis citas</h2>
       {error && <p className="appt-error">{error}</p>}
-      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" />
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="cita" receiptEmail={CLUB.contactEmail} />
       {upcoming.length > 0 ? <ul>{upcoming.map(a => row(a, true))}</ul> : <p className="appt-muted">No tienes citas pendientes.</p>}
       {past.length > 0 && (
         <details>

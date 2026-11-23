@@ -40,6 +40,11 @@ export function TransferDetails({ info }: { info: TransferInfo }) {
           {copyable && <CopyButton text={value.replace(/\s/g, '')} />}
         </div>
       ))}
+      {info.receiptEmail && (
+        <p className="transfer-note">
+          Cuando la hagas, envía el justificante a <a href={`mailto:${info.receiptEmail}`}>{info.receiptEmail}</a>.
+        </p>
+      )}
       {info.note && <p className="transfer-note">{info.note}</p>}
     </div>
   );
@@ -50,10 +55,12 @@ interface ModalProps {
   onClose: () => void;
   /** Qué se ha reservado, para el título: "pedido", "inscripción", "cita" */
   what: string;
+  /** A dónde mandar el justificante de la transferencia */
+  receiptEmail: string;
 }
 
 /** Aviso al terminar una compra, inscripción o cita de pago: cómo completar la transferencia. */
-export function TransferModal({ result, onClose, what }: ModalProps) {
+export function TransferModal({ result, onClose, what, receiptEmail }: ModalProps) {
   return (
     <Modal isOpen={result !== null} onClose={onClose} title={`Completa tu ${what}`} icon={<Landmark size={22} />} maxWidth="520px">
       {result && (
@@ -62,7 +69,7 @@ export function TransferModal({ result, onClose, what }: ModalProps) {
             Haz una transferencia con estos datos en los próximos <strong>{result.transfer.deadlineDays || 3} días</strong>.
             Pon el concepto tal cual, así el club sabe a qué corresponde tu pago.
           </p>
-          <TransferDetails info={result.transfer} />
+          <TransferDetails info={{ ...result.transfer, receiptEmail }} />
           <p className="transfer-intro">
             {result.emailSent ? 'También te lo hemos enviado por email. ' : ''}
             Tu {what} queda pendiente hasta que el club reciba la transferencia. Puedes volver a ver estos datos en «Mi cuenta», en «Mis pedidos».

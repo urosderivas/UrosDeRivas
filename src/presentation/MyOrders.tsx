@@ -6,6 +6,7 @@ import { FileText, Landmark } from 'lucide-react';
 import type { InvoiceData } from '../application/services/InvoiceGenerator';
 import { PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { TransferModal } from './components/TransferDetails';
+import { CLUB } from '../config';
 import './Market.css';
 
 const adapter = new SupabaseAdapter();
@@ -18,11 +19,14 @@ export function MyOrdersList() {
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<{ transfer: TransferInfo; emailSent: boolean } | null>(null);
+  const [receiptEmail, setReceiptEmail] = useState(CLUB.contactEmail);
 
-  // Datos de la cuenta del club, para volver a ver cómo pagar lo pendiente
-  const showTransfer = async (reference: string, amount: number) => {
+  // Datos de la cuenta del club, para volver a ver cómo pagar lo pendiente.
+  // El justificante de un pedido de la tienda va a tienda@; el de una inscripción, a administracion@.
+  const showTransfer = async (reference: string, amount: number, shop: boolean) => {
     try {
       const settings = await payments.getSettings();
+      setReceiptEmail(shop ? CLUB.shopEmail : CLUB.contactEmail);
       setTransfer({ transfer: { ...settings, reference, amount }, emailSent: false });
     } catch (e) {
       console.error('No se pudieron cargar los datos de pago', e);
@@ -166,7 +170,7 @@ export function MyOrdersList() {
                     Total: €{groupTotal.toFixed(2)}
                   </span>
                   {worstStatus === 'pending' && groupId.startsWith('UROS-') && (
-                    <button onClick={() => showTransfer(groupId, groupTotal)} className="btn-transfer-info">
+                    <button onClick={() => showTransfer(groupId, groupTotal, !groupOrders.some(o => (o as { type?: string }).type === 'campus'))} className="btn-transfer-info">
                       <Landmark size={14} /> Cómo pagar
                     </button>
                   )}
@@ -189,7 +193,7 @@ export function MyOrdersList() {
           })}
         </ul>
       )}
-      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="reserva" />
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="reserva" receiptEmail={receiptEmail} />
     </div>
   );
 }

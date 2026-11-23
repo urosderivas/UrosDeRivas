@@ -13,6 +13,7 @@ import { CouponsModal } from './components/CouponsModal';
 import { EVENT_PAGES, eventPath } from '../utils/eventLinks';
 import { MessageModal } from './components/MessageModal';
 import { TransferModal } from './components/TransferDetails';
+import { CLUB } from '../config';
 import { ConfirmModal } from './components/ConfirmModal';
 import { fallbackImageUrl, resolveImageUrl } from '../utils/media';
 import './Events.css';
@@ -616,7 +617,7 @@ export function Events({ kind = 'campus' }: { kind?: EventType }) {
       {couponsEvent && <CouponsModal event={couponsEvent} onClose={() => setCouponsEvent(null)} />}
       {modalOpen && <EventModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveEvent}
         initial={editEvent} defaultType={kind} otherEvents={events.filter(e => e.id !== editEvent?.id)} />}
-      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="inscripción" />
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="inscripción" receiptEmail={CLUB.contactEmail} />
       <MessageModal isOpen={messageAlert.open} onClose={() => setMessageAlert(prev => ({ ...prev, open: false }))} title={messageAlert.title} message={messageAlert.message} />
       <ConfirmModal isOpen={confirmPrompt.open} title="Confirmar Acción" message={confirmPrompt.message}
         onConfirm={() => { if (confirmPrompt.action) confirmPrompt.action(); setConfirmPrompt(prev => ({ ...prev, open: false, action: null })); }}
