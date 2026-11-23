@@ -15,6 +15,8 @@ export interface TransferInfo extends PaymentSettings {
   /** Concepto de la transferencia, p. ej. UROS-4F7K2Q */
   reference: string;
   amount: number;
+  /** A dónde mandar el justificante (tienda@ para la ropa, administracion@ para lo demás) */
+  receiptEmail?: string;
 }
 
 /** Gratis (ya confirmado) o pendiente de transferencia, con sus datos y si se ha mandado el email. */

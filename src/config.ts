@@ -14,6 +14,8 @@ export const CLUB = {
     province: 'Madrid',
   },
   contactEmail: 'administracion@urosderivas.com',
+  /** A dónde mandan el justificante de la transferencia los pedidos de la tienda */
+  shopEmail: 'tienda@urosderivas.com',
 };
 
 export const clubAddressLine = `${CLUB.address.street}, ${CLUB.address.postalCode} - ${CLUB.address.city}, ${CLUB.address.province}`;

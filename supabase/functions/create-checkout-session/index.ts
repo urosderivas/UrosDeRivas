@@ -53,9 +53,10 @@ async function paymentSettings(admin: any): Promise<PaymentSettings> {
  */
 async function transferResponse(
   admin: any, user: { id: string; email?: string }, reference: string, amount: number, items: string[], settings: PaymentSettings,
+  shop = false,
 ): Promise<Response> {
   const emailSent = user.email
-    ? await sendMail(transferMail(user.email, { items, amount, reference, name: (await contactOf(admin, user.id))?.first_name, ...settings }))
+    ? await sendMail(transferMail(user.email, { items, amount, reference, name: (await contactOf(admin, user.id))?.first_name, shop, ...settings }))
     : false;
   return json({ transfer: { reference, amount, ...settings }, emailSent });
 }
@@ -523,7 +524,7 @@ serve(async (req: Request) => {
     }
 
     if (free) return json({ free: true });
-    return await transferResponse(supabaseAdminClient, user, reference, total, lines, settings!);
+    return await transferResponse(supabaseAdminClient, user, reference, total, lines, settings!, true);
   } catch (error: any) {
     console.error("Edge Function Exception:", error);
     // Return a 400 status with JSON so the frontend `invoke` parser can read the exact error message

@@ -5,6 +5,7 @@ import { AdminGuard } from './AdminGuard';
 import { SupabaseAdapter } from '../infrastructure/SupabaseAdapter';
 import { CheckoutResult, PaymentAdapter, TransferInfo } from '../infrastructure/PaymentAdapter';
 import { TransferModal } from './components/TransferDetails';
+import { CLUB } from '../config';
 import { MarketItemModal } from './MarketItemModal';
 import { AccountModal } from './AccountModal';
 import { MessageModal } from './components/MessageModal';
@@ -197,7 +198,7 @@ export function Market() {
         onBuyNow={handleBuyNow}
       />
       <CartSidebar isOpen={cartOpen} onClose={() => setCartOpen(false)} showMessage={showMessage} onOrdered={handleOrdered} />
-      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="pedido" />
+      <TransferModal result={transfer} onClose={() => setTransfer(null)} what="pedido" receiptEmail={CLUB.shopEmail} />
       <MarketItemModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSaveItem} initial={editItem} />
       {ordersModalOpen && <AccountModal initialTab="pedidos" onClose={() => setOrdersModalOpen(false)} />}
       <MessageModal
